@@ -1,0 +1,17 @@
+# pnpm workspace configuration (pnpm 11+ canonical settings location)
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Keep dependency resolution predictable (spec §3.6, §26.4)
+strictPeerDependencies: false
+autoInstallPeers: false
+
+# Explicitly approve dependency build scripts (pnpm 11+ `allowBuilds` map).
+# - electron: downloads the Electron runtime binary
+# - electron-winstaller: selects the correct 7z arch (needed by maker-squirrel)
+# - esbuild: installs its platform binary (if present in the tree)
+allowBuilds:
+  electron: true
+  electron-winstaller: true
+  esbuild: true
