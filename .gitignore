@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+out/
+build/
+.vite/
+*.tsbuildinfo
+
+# Electron Forge packaging artifacts
+.pnp/
+.pnp.js
+
+# Environment / secrets (never commit credentials)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Databases (added in later milestones)
+*.db
+*.sqlite
