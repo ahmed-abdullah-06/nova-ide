@@ -1,0 +1,92 @@
+/**
+ * NOVA IDE design tokens (spec §6.2).
+ * Dark theme is the default; light theme overrides the same variables.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --color-background: #111318;
+  --color-sidebar: #171a21;
+  --color-panel: #1c2029;
+  --color-activitybar: #14171d;
+  --color-input: #22262f;
+
+  /* Lines */
+  --color-border: #2b303b;
+  --color-border-strong: #3a4050;
+
+  /* Text */
+  --color-text: #e5e7eb;
+  --color-muted: #9299a6;
+  --color-faint: #6b7280;
+
+  /* Accent */
+  --color-accent: #7c6cff;
+  --color-accent-soft: rgba(124, 108, 255, 0.16);
+  --color-accent-text: #b9b1ff;
+
+  /* Semantic */
+  --color-danger: #e5484d;
+  --color-warning: #e2a336;
+  --color-success: #46a758;
+
+  /* Tab / list states */
+  --color-tab-active: #1c2029;
+  --color-tab-inactive: transparent;
+  --color-hover: rgba(255, 255, 255, 0.05);
+  --color-active: rgba(255, 255, 255, 0.09);
+
+  /* Layout metrics */
+  --sidebar-width: 260px;
+  --activitybar-width: 52px;
+  --statusbar-height: 24px;
+  --ai-panel-width: 320px;
+  --bottompanel-height: 200px;
+  --tab-height: 36px;
+
+  /* Typography */
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-mono:
+    'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  --font-size-base: 13px;
+  --font-size-small: 12px;
+  --line-height-base: 1.5;
+
+  /* Effects (restrained, spec §6.2) */
+  --radius: 4px;
+  --transition: 120ms ease;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-background: #f4f5f7;
+  --color-sidebar: #eceef1;
+  --color-panel: #ffffff;
+  --color-activitybar: #e7e9ed;
+  --color-input: #ffffff;
+
+  --color-border: #d5d8dd;
+  --color-border-strong: #b9bec7;
+
+  --color-text: #1f2328;
+  --color-muted: #5b6270;
+  --color-faint: #808795;
+
+  --color-accent: #5b4fd6;
+  --color-accent-soft: rgba(91, 79, 214, 0.12);
+  --color-accent-text: #4b3fc4;
+
+  --color-danger: #cd2b31;
+  --color-warning: #8f6416;
+  --color-success: #2f7d3c;
+
+  --color-tab-active: #ffffff;
+  --color-tab-inactive: transparent;
+  --color-hover: rgba(0, 0, 0, 0.05);
+  --color-active: rgba(0, 0, 0, 0.09);
+}
