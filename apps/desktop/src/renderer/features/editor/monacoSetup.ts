@@ -1,9 +1,11 @@
 import type * as Monaco from 'monaco-editor';
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import JsonWorker from 'monaco-editor/esm/vs/languages/features/json/json.worker?worker';
-import CssWorker from 'monaco-editor/esm/vs/languages/features/css/css.worker?worker';
-import HtmlWorker from 'monaco-editor/esm/vs/languages/features/html/html.worker?worker';
-import TsWorker from 'monaco-editor/esm/vs/languages/features/typescript/ts.worker?worker';
+// monaco-editor's export map rewrites bare subpaths to ./esm/vs/*.js,
+// so imports must NOT include the "esm/vs/" prefix.
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
+import JsonWorker from 'monaco-editor/languages/features/json/json.worker?worker';
+import CssWorker from 'monaco-editor/languages/features/css/css.worker?worker';
+import HtmlWorker from 'monaco-editor/languages/features/html/html.worker?worker';
+import TsWorker from 'monaco-editor/languages/features/typescript/ts.worker?worker';
 
 type MonacoModule = typeof Monaco;
 

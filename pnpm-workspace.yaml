@@ -7,6 +7,10 @@ packages:
 strictPeerDependencies: false
 autoInstallPeers: false
 
+# Electron Forge 8 requires a hoisted node_modules layout for packaging
+# (its system check enforces this for pnpm projects).
+nodeLinker: hoisted
+
 # Explicitly approve dependency build scripts (pnpm 11+ `allowBuilds` map).
 # - electron: downloads the Electron runtime binary
 # - electron-winstaller: selects the correct 7z arch (needed by maker-squirrel)

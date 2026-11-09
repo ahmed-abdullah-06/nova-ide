@@ -8,11 +8,16 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Display name comes from package.json `productName` ("NOVA IDE");
+    // the executable must be a filesystem-safe name without spaces.
+    executableName: 'NOVAIDE',
   },
   rebuildConfig: {},
   makers: [
     // Windows installers (initial development platform is Windows, spec §22)
-    new MakerSquirrel({}),
+    // `name` must be a valid NuGet package id — the scoped workspace name
+    // "@nova/desktop" is rejected by nuget.exe (it also becomes a path).
+    new MakerSquirrel({ name: 'NOVAIDE' }),
     // Portable zip archives
     new MakerZIP({}, ['win32', 'darwin']),
   ],
@@ -20,12 +25,14 @@ const config: ForgeConfig = {
     new VitePlugin({
       build: [
         {
-          entry: 'src/main/index.ts',
+          // Named entries map to the emitted bundle names (main.cjs,
+          // preload.cjs) — Vite's [name] comes from the entry key.
+          entry: { main: 'src/main/index.ts' },
           config: 'vite.main.config.mts',
           target: 'main',
         },
         {
-          entry: 'src/preload/index.ts',
+          entry: { preload: 'src/preload/index.ts' },
           config: 'vite.preload.config.mts',
           target: 'preload',
         },

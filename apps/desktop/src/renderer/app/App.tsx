@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { AppInfo } from '../../shared/ipc-types';
+import type { AppInfo, NovaApi } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
@@ -27,8 +27,14 @@ function Workspace(): ReactNode {
 
   // Exercise the typed preload bridge once on startup.
   useEffect(() => {
+    const bridge: NovaApi | undefined = window.nova;
+    if (!bridge) {
+      // Preload unavailable (e.g. page opened outside the Electron shell):
+      // the status bar simply omits the version.
+      return;
+    }
     let cancelled = false;
-    window.nova
+    bridge
       .getAppInfo()
       .then((info) => {
         if (!cancelled) {

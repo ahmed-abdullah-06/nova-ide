@@ -1,8 +1,10 @@
 {
   "name": "@nova/desktop",
+  "productName": "NOVA IDE",
   "version": "0.1.0",
   "private": true,
   "description": "NOVA IDE desktop application (Electron main, preload, and renderer)",
+  "author": "NOVA IDE Project",
   "main": ".vite/build/main.cjs",
   "scripts": {
     "dev": "electron-forge start",
