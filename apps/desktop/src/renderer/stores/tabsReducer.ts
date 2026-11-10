@@ -8,9 +8,13 @@ export interface EditorTab {
   name: string;
   /** Monaco language id (e.g. "typescript", "plaintext"). */
   language: string;
-  /** In-memory buffer content. Real file I/O arrives in Milestone 2. */
+  /** In-memory buffer content (loaded from disk for file-backed tabs). */
   content: string;
   isDirty: boolean;
+  /** Absolute file path for file-backed tabs; null for untitled buffers. */
+  filePath: string | null;
+  /** Disk modification time from the last read/save; null for untitled. */
+  mtimeMs: number | null;
 }
 
 export interface TabsState {
@@ -21,7 +25,15 @@ export interface TabsState {
 }
 
 export type TabsAction =
-  | { type: 'open'; id: string; name: string; language: string; content: string }
+  | {
+      type: 'open';
+      id: string;
+      name: string;
+      language: string;
+      content: string;
+      filePath?: string | null;
+      mtimeMs?: number | null;
+    }
   | { type: 'new-untitled'; language: string }
   | { type: 'close'; id: string }
   | { type: 'activate'; id: string }
@@ -53,6 +65,8 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         language: action.language,
         content: action.content,
         isDirty: false,
+        filePath: action.filePath ?? null,
+        mtimeMs: action.mtimeMs ?? null,
       };
       return {
         ...state,
@@ -69,6 +83,8 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         language: action.language,
         content: '',
         isDirty: false,
+        filePath: null,
+        mtimeMs: null,
       };
       return {
         tabs: [...state.tabs, newTab],
@@ -98,14 +114,19 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
     }
 
     case 'update-content': {
-      return {
-        ...state,
-        tabs: state.tabs.map((tab) =>
-          tab.id === action.id
-            ? { ...tab, content: action.content, isDirty: true }
-            : tab,
-        ),
-      };
+      const index = state.tabs.findIndex((tab) => tab.id === action.id);
+      if (index === -1) {
+        return state;
+      }
+      const current = state.tabs[index] as EditorTab;
+      // Ignore no-op change events (e.g. model re-attach with same text):
+      // a tab only becomes dirty when its buffer really differs.
+      if (current.content === action.content) {
+        return state;
+      }
+      const tabs = state.tabs.slice();
+      tabs[index] = { ...current, content: action.content, isDirty: true };
+      return { ...state, tabs };
     }
 
     case 'set-language': {

@@ -25,6 +25,8 @@ function createInitialTabsState(): TabsState {
     language: 'plaintext',
     content: '',
     isDirty: false,
+    filePath: null,
+    mtimeMs: null,
   };
   return {
     tabs: [firstTab],

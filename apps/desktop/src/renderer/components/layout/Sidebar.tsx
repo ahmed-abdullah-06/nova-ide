@@ -2,30 +2,18 @@ import type { ReactNode } from 'react';
 import type { ActivityId } from './ActivityBar';
 import { PlaceholderView } from './PlaceholderView';
 import type { Theme } from '../../hooks/useTheme';
+import { Explorer } from '../../features/explorer/components/Explorer';
 
 interface SidebarProps {
   activity: ActivityId;
   theme: Theme;
   onToggleTheme: () => void;
+  /** Bumped by Ctrl+Shift+E to focus the explorer tree. */
+  focusSignal: number;
 }
 
 function bodyFor(activity: ActivityId, theme: Theme, onToggleTheme: () => void): ReactNode {
   switch (activity) {
-    case 'explorer':
-      return (
-        <>
-          <div className="sidebar__section">
-            <button type="button" className="sidebar__row sidebar__row--muted" disabled>
-              No folder open
-            </button>
-          </div>
-          <PlaceholderView
-            title="File Explorer"
-            note="Open a project folder to browse, create, rename, and delete files and directories."
-            milestone="Milestone 2"
-          />
-        </>
-      );
     case 'search':
       return (
         <PlaceholderView
@@ -90,7 +78,16 @@ export function Sidebar({
   activity,
   theme,
   onToggleTheme,
+  focusSignal,
 }: SidebarProps): ReactNode {
+  // The explorer renders its own header (title + refresh/close actions).
+  if (activity === 'explorer') {
+    return (
+      <aside className="sidebar" aria-label="Explorer sidebar">
+        <Explorer focusSignal={focusSignal} />
+      </aside>
+    );
+  }
   return (
     <aside className="sidebar" aria-label={`${TITLES[activity]} sidebar`}>
       <div className="sidebar__header">{TITLES[activity]}</div>

@@ -15,6 +15,10 @@ interface StatusBarProps {
   theme: Theme;
   onToggleTheme: () => void;
   appInfo: AppInfo | null;
+  /** Display name of the active workspace (null when no folder is open). */
+  workspaceName: string | null;
+  /** Canonical root of the active workspace (for the tooltip). */
+  workspaceRoot: string | null;
 }
 
 export function StatusBar({
@@ -24,11 +28,16 @@ export function StatusBar({
   theme,
   onToggleTheme,
   appInfo,
+  workspaceName,
+  workspaceRoot,
 }: StatusBarProps): ReactNode {
   return (
     <footer className="status-bar" aria-label="Status bar">
-      <span className="status-bar__item" title="Workspace (Milestone 2)">
-        No folder open
+      <span
+        className="status-bar__item"
+        title={workspaceRoot ?? 'No folder open'}
+      >
+        {workspaceName ?? 'No folder open'}
       </span>
       <span className="status-bar__item" title="Git integration (Milestone 3)">
         Git: —

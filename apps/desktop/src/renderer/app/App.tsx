@@ -2,6 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { AppInfo, NovaApi } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
+import { WorkspaceProvider, useWorkspace } from '../stores/workspace';
+import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
+import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
 import { AiPanel } from '../components/layout/AiPanel';
 import { Sidebar } from '../components/layout/Sidebar';
@@ -21,9 +24,35 @@ interface CursorPosition {
 function Workspace(): ReactNode {
   const { theme, toggleTheme } = useTheme();
   const { state, dispatch } = useTabs();
+  const { state: workspaceState } = useWorkspace();
+  const workspaceActions = useWorkspaceActions();
   const [activity, setActivity] = useState<ActivityId>('explorer');
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
+  const { openFolder } = workspaceActions;
+
+  // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
+  // Ctrl/Cmd+Shift+O opens a folder. Ctrl+S arrives with file saving.
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent): void => {
+      const modifier = event.ctrlKey || event.metaKey;
+      if (!modifier || !event.shiftKey) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === 'e') {
+        event.preventDefault();
+        setActivity('explorer');
+        setExplorerFocusSignal((signal) => signal + 1);
+      } else if (key === 'o') {
+        event.preventDefault();
+        void openFolder();
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [openFolder]);
 
   // Exercise the typed preload bridge once on startup.
   useEffect(() => {
@@ -65,6 +94,7 @@ function Workspace(): ReactNode {
         activity={activity}
         theme={theme}
         onToggleTheme={toggleTheme}
+        focusSignal={explorerFocusSignal}
       />
       <div className="main-column">
         <EditorArea theme={theme} onCursorChange={setCursor} />
@@ -78,7 +108,10 @@ function Workspace(): ReactNode {
         theme={theme}
         onToggleTheme={toggleTheme}
         appInfo={appInfo}
+        workspaceName={workspaceState.workspace?.name ?? null}
+        workspaceRoot={workspaceState.workspace?.rootPath ?? null}
       />
+      <NotificationHost />
     </div>
   );
 }
@@ -86,7 +119,9 @@ function Workspace(): ReactNode {
 export function App(): ReactNode {
   return (
     <TabsProvider>
-      <Workspace />
+      <WorkspaceProvider>
+        <Workspace />
+      </WorkspaceProvider>
     </TabsProvider>
   );
 }
