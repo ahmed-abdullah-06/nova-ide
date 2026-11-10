@@ -116,4 +116,206 @@ describe('tabsReducer', () => {
     const after = tabsReducer(before, { type: 'close', id: 'missing' });
     expect(after).toBe(before);
   });
+
+  // --- save / dirty tracking (M2) ---
+
+  it('mark-saved clears the dirty flag and records the new mtime', () => {
+    const dirty = tabsReducer(stateWithTabs(1), {
+      type: 'update-content',
+      id: 'file-1',
+      content: 'edited',
+    });
+    const saved = tabsReducer(dirty, {
+      type: 'mark-saved',
+      id: 'file-1',
+      mtimeMs: 4242,
+    });
+    expect(saved.tabs[0]?.isDirty).toBe(false);
+    expect(saved.tabs[0]?.mtimeMs).toBe(4242);
+  });
+
+  it('mark-saved on an unknown tab returns the same state', () => {
+    const before = stateWithTabs(1);
+    const after = tabsReducer(before, {
+      type: 'mark-saved',
+      id: 'missing',
+      mtimeMs: 1,
+    });
+    expect(after).toBe(before);
+  });
+
+  it('set-file-path binds an untitled buffer to the saved file', () => {
+    const untitled = tabsReducer(initialTabsState, {
+      type: 'new-untitled',
+      language: 'plaintext',
+    });
+    const bound = tabsReducer(untitled, {
+      type: 'set-file-path',
+      id: 'untitled-1',
+      filePath: '/w/hello.ts',
+      name: 'hello.ts',
+      language: 'typescript',
+      mtimeMs: 99,
+    });
+    expect(bound.tabs[0]?.filePath).toBe('/w/hello.ts');
+    expect(bound.tabs[0]?.name).toBe('hello.ts');
+    expect(bound.tabs[0]?.language).toBe('typescript');
+    expect(bound.tabs[0]?.mtimeMs).toBe(99);
+    expect(bound.tabs[0]?.isDirty).toBe(false);
+  });
+
+  // --- external change handling (M2) ---
+
+  it('reload-content adopts disk content on a clean buffer', () => {
+    const reloaded = tabsReducer(stateWithTabs(1), {
+      type: 'reload-content',
+      id: 'file-1',
+      content: 'from disk',
+      mtimeMs: 7,
+    });
+    expect(reloaded.tabs[0]?.content).toBe('from disk');
+    expect(reloaded.tabs[0]?.mtimeMs).toBe(7);
+    expect(reloaded.tabs[0]?.isDirty).toBe(false);
+  });
+
+  it('reload-content never clobbers a dirty buffer by default', () => {
+    const dirty = tabsReducer(stateWithTabs(1), {
+      type: 'update-content',
+      id: 'file-1',
+      content: 'my edits',
+    });
+    const after = tabsReducer(dirty, {
+      type: 'reload-content',
+      id: 'file-1',
+      content: 'from disk',
+      mtimeMs: 7,
+    });
+    expect(after).toBe(dirty);
+    expect(after.tabs[0]?.content).toBe('my edits');
+  });
+
+  it('reload-content with force replaces a dirty buffer after confirmation', () => {
+    const dirty = tabsReducer(stateWithTabs(1), {
+      type: 'update-content',
+      id: 'file-1',
+      content: 'my edits',
+    });
+    const after = tabsReducer(dirty, {
+      type: 'reload-content',
+      id: 'file-1',
+      content: 'from disk',
+      mtimeMs: 7,
+      force: true,
+    });
+    expect(after.tabs[0]?.content).toBe('from disk');
+    expect(after.tabs[0]?.isDirty).toBe(false);
+  });
+
+  // --- rename / delete bookkeeping (M2) ---
+
+  function fileBackedState(): TabsState {
+    // Start from an empty tab list (the provider's scratch buffer is
+    // covered by its own test) so path assertions can be exact.
+    let state: TabsState = {
+      ...initialTabsState,
+      tabs: [],
+      activeTabId: null,
+    };
+    for (const p of ['/w/a.ts', '/w/src/b.ts', '/w/src/deep/c.ts']) {
+      state = tabsReducer(state, {
+        type: 'open',
+        id: p,
+        name: p.slice(p.lastIndexOf('/') + 1),
+        language: 'typescript',
+        content: '',
+        filePath: p,
+        mtimeMs: 1,
+      });
+    }
+    return state;
+  }
+
+  it('rename-file re-keys the renamed file tab (id = path)', () => {
+    const active = tabsReducer(fileBackedState(), {
+      type: 'activate',
+      id: '/w/a.ts',
+    });
+    const state = tabsReducer(active, {
+      type: 'rename-file',
+      path: '/w/a.ts',
+      newPath: '/w/z.ts',
+      isDirectory: false,
+    });
+    const renamed = state.tabs.find((tab) => tab.filePath === '/w/z.ts');
+    expect(renamed).toBeDefined();
+    expect(renamed?.id).toBe('/w/z.ts');
+    expect(renamed?.name).toBe('z.ts');
+    expect(state.activeTabId).toBe('/w/z.ts');
+  });
+
+  it('rename-file re-keys every tab inside a renamed folder', () => {
+    const state = tabsReducer(fileBackedState(), {
+      type: 'rename-file',
+      path: '/w/src',
+      newPath: '/w/lib',
+      isDirectory: true,
+    });
+    expect(state.tabs.map((tab) => tab.filePath)).toEqual([
+      '/w/a.ts',
+      '/w/lib/b.ts',
+      '/w/lib/deep/c.ts',
+    ]);
+    expect(state.tabs.map((tab) => tab.id)).toEqual([
+      '/w/a.ts',
+      '/w/lib/b.ts',
+      '/w/lib/deep/c.ts',
+    ]);
+  });
+
+  it('rename-file leaves unrelated tabs untouched', () => {
+    const before = fileBackedState();
+    const after = tabsReducer(before, {
+      type: 'rename-file',
+      path: '/w/nope.ts',
+      newPath: '/w/other.ts',
+      isDirectory: false,
+    });
+    expect(after).toBe(before);
+  });
+
+  it('close-by-path closes exactly the matching file tab', () => {
+    const state = tabsReducer(fileBackedState(), {
+      type: 'close-by-path',
+      path: '/w/src/b.ts',
+      isDirectory: false,
+    });
+    expect(state.tabs.map((tab) => tab.filePath)).toEqual([
+      '/w/a.ts',
+      '/w/src/deep/c.ts',
+    ]);
+  });
+
+  it('close-by-path closes every tab inside a deleted folder', () => {
+    let state = fileBackedState();
+    state = tabsReducer(state, { type: 'activate', id: '/w/src/b.ts' });
+    state = tabsReducer(state, {
+      type: 'close-by-path',
+      path: '/w/src',
+      isDirectory: true,
+    });
+    expect(state.tabs.map((tab) => tab.filePath)).toEqual(['/w/a.ts']);
+    // Active tab was deleted → a neighbour takes over.
+    expect(state.activeTabId).toBe('/w/a.ts');
+  });
+
+  it('close-by-path keeps untitled scratch buffers', () => {
+    let state = fileBackedState();
+    state = tabsReducer(state, { type: 'new-untitled', language: 'plaintext' });
+    state = tabsReducer(state, {
+      type: 'close-by-path',
+      path: '/w/src',
+      isDirectory: true,
+    });
+    expect(state.tabs.some((tab) => tab.filePath === null)).toBe(true);
+  });
 });

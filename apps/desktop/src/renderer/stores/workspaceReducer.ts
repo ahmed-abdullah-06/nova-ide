@@ -29,6 +29,15 @@ export interface DirectoryState {
 
 export type WorkspaceStatus = 'idle' | 'opening' | 'ready';
 
+/** An in-tree inline input is active (spec §7.1 create/rename UX). */
+export interface PendingInput {
+  kind: 'create-file' | 'create-folder' | 'rename';
+  /** Directory that receives the new entry, or parent of the renamed item. */
+  parentPath: string;
+  /** Path being renamed (null for create). */
+  targetPath: string | null;
+}
+
 export interface WorkspaceState {
   workspace: Workspace | null;
   status: WorkspaceStatus;
@@ -40,6 +49,8 @@ export interface WorkspaceState {
   recent: RecentWorkspace[];
   notifications: Notification[];
   nextNotificationId: number;
+  /** Active inline create/rename input, if any. */
+  pendingInput: PendingInput | null;
 }
 
 export const initialWorkspaceState: WorkspaceState = {
@@ -51,6 +62,7 @@ export const initialWorkspaceState: WorkspaceState = {
   recent: [],
   notifications: [],
   nextNotificationId: 1,
+  pendingInput: null,
 };
 
 /** Only the newest notifications stay on screen. */
@@ -96,7 +108,15 @@ export type WorkspaceAction =
   /** Drops every cached directory (contents are re-read lazily). */
   | { type: 'refresh' }
   | { type: 'notify'; kind: NotificationKind; message: string }
-  | { type: 'dismiss-notification'; id: number };
+  | { type: 'dismiss-notification'; id: number }
+  /** Opens the inline create/rename input (only one at a time). */
+  | { type: 'start-input'; input: PendingInput }
+  /** Cancels the inline input without touching the filesystem. */
+  | { type: 'cancel-input' }
+  /** A directory/file was renamed: re-key cached state to the new path. */
+  | { type: 'path-renamed'; path: string; newPath: string; isDirectory: boolean }
+  /** A directory/file was deleted: drop its cached state. */
+  | { type: 'path-removed'; path: string; isDirectory: boolean };
 
 function notify(
   state: WorkspaceState,
@@ -250,5 +270,99 @@ export function workspaceReducer(
         ...state,
         notifications: state.notifications.filter((n) => n.id !== action.id),
       };
+
+    case 'start-input':
+      return { ...state, pendingInput: action.input };
+
+    case 'cancel-input':
+      return state.pendingInput === null
+        ? state
+        : { ...state, pendingInput: null };
+
+    case 'path-renamed': {
+      const remap = (p: string): string => {
+        if (pathsEqual(p, action.path)) {
+          return action.newPath;
+        }
+        if (action.isDirectory && isInside(p, action.path)) {
+          return action.newPath + p.slice(action.path.length);
+        }
+        return p;
+      };
+      const directories: Record<string, DirectoryState> = {};
+      for (const [key, value] of Object.entries(state.directories)) {
+        // Contents of the renamed subtree are stale (child paths changed) —
+        // drop them; visible branches re-read lazily through the effect.
+        if (
+          pathsEqual(key, action.path) ||
+          (action.isDirectory && isInside(key, action.path))
+        ) {
+          continue;
+        }
+        directories[key] = value;
+      }
+      return {
+        ...state,
+        directories,
+        expandedPaths: [...new Set(state.expandedPaths.map(remap))],
+        selectedPath:
+          state.selectedPath === null ? null : remap(state.selectedPath),
+        pendingInput: null,
+      };
+    }
+
+    case 'path-removed': {
+      const gone = (p: string): boolean =>
+        pathsEqual(p, action.path) ||
+        (action.isDirectory && isInside(p, action.path));
+      const directories: Record<string, DirectoryState> = {};
+      let changed = false;
+      for (const [key, value] of Object.entries(state.directories)) {
+        if (gone(key)) {
+          changed = true;
+        } else {
+          directories[key] = value;
+        }
+      }
+      const expandedPaths = state.expandedPaths.filter((p) => {
+        if (gone(p)) {
+          changed = true;
+          return false;
+        }
+        return true;
+      });
+      const selectedGone =
+        state.selectedPath !== null && gone(state.selectedPath);
+      if (selectedGone) {
+        changed = true;
+      }
+      if (state.pendingInput !== null) {
+        changed = true;
+      }
+      if (!changed) {
+        return state;
+      }
+      return {
+        ...state,
+        directories,
+        expandedPaths,
+        selectedPath: selectedGone ? null : state.selectedPath,
+        pendingInput: null,
+      };
+    }
   }
+}
+
+/** Case-insensitive absolute-path equality (win32 drives are case-insensitive). */
+function pathsEqual(a: string, b: string): boolean {
+  return a === b || a.toLowerCase() === b.toLowerCase();
+}
+
+/** True when `child` lives strictly below `parent`. */
+function isInside(child: string, parent: string): boolean {
+  const separator = parent.includes('\\') && !parent.includes('/') ? '\\' : '/';
+  const base = parent.endsWith(separator) ? parent : parent + separator;
+  return (
+    child.startsWith(base) || child.toLowerCase().startsWith(base.toLowerCase())
+  );
 }

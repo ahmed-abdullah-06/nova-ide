@@ -41,6 +41,24 @@ export function disposeModel(tabId: string): void {
   models.delete(tabId);
 }
 
+/**
+ * Re-keys a model when its owning tab is renamed (file-backed tab ids are
+ * file paths). Keeps buffer content, cursor, and undo history intact.
+ */
+export function renameModelKey(oldId: string, newId: string): void {
+  if (oldId === newId) {
+    return;
+  }
+  const model = models.get(oldId);
+  if (model === undefined) {
+    return;
+  }
+  models.delete(oldId);
+  if (!model.isDisposed()) {
+    models.set(newId, model);
+  }
+}
+
 export function disposeAllModels(): void {
   for (const tabId of [...models.keys()]) {
     disposeModel(tabId);

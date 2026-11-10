@@ -198,4 +198,134 @@ describe('workspaceReducer', () => {
     }
     expect(JSON.stringify(before)).toBe(snapshot);
   });
+
+  // --- inline create/rename input (M2) ---
+
+  it('tracks a single pending inline input', () => {
+    const started = workspaceReducer(openRoot(ROOT_A), {
+      type: 'start-input',
+      input: {
+        kind: 'create-file',
+        parentPath: ROOT_A,
+        targetPath: null,
+      },
+    });
+    expect(started.pendingInput?.kind).toBe('create-file');
+
+    // Starting another input replaces the previous one (only one at a time).
+    const replaced = workspaceReducer(started, {
+      type: 'start-input',
+      input: {
+        kind: 'rename',
+        parentPath: ROOT_A,
+        targetPath: `${ROOT_A}\\a.ts`,
+      },
+    });
+    expect(replaced.pendingInput?.kind).toBe('rename');
+    expect(replaced.pendingInput?.targetPath).toBe(`${ROOT_A}\\a.ts`);
+
+    const cancelled = workspaceReducer(replaced, { type: 'cancel-input' });
+    expect(cancelled.pendingInput).toBeNull();
+
+    // Cancelling with nothing pending is a no-op (same reference).
+    expect(workspaceReducer(cancelled, { type: 'cancel-input' })).toBe(
+      cancelled,
+    );
+  });
+
+  it('never leaves a pending input behind after a rename or delete', () => {
+    const input = workspaceReducer(openRoot(ROOT_A), {
+      type: 'start-input',
+      input: { kind: 'rename', parentPath: ROOT_A, targetPath: ROOT_A },
+    });
+    expect(
+      workspaceReducer(input, {
+        type: 'path-renamed',
+        path: ROOT_A,
+        newPath: ROOT_B,
+        isDirectory: true,
+      }).pendingInput,
+    ).toBeNull();
+    expect(
+      workspaceReducer(input, {
+        type: 'path-removed',
+        path: ROOT_A,
+        isDirectory: true,
+      }).pendingInput,
+    ).toBeNull();
+  });
+
+  // --- rename/delete cache bookkeeping (M2) ---
+
+  function loadedTree(): WorkspaceState {
+    let state = workspaceReducer(openRoot(ROOT_A), {
+      type: 'expand',
+      path: `${ROOT_A}\\src`,
+    });
+    state = workspaceReducer(state, {
+      type: 'load-success',
+      path: ROOT_A,
+      entries: [{ name: 'src', path: `${ROOT_A}\\src`, kind: 'directory' }],
+      truncated: false,
+    });
+    state = workspaceReducer(state, {
+      type: 'load-success',
+      path: `${ROOT_A}\\src`,
+      entries: [{ name: 'b.ts', path: `${ROOT_A}\\src\\b.ts`, kind: 'file' }],
+      truncated: false,
+    });
+    return workspaceReducer(state, {
+      type: 'select',
+      path: `${ROOT_A}\\src\\b.ts`,
+    });
+  }
+
+  it('path-renamed re-keys expanded/selected paths and drops stale children', () => {
+    const state = workspaceReducer(loadedTree(), {
+      type: 'path-renamed',
+      path: `${ROOT_A}\\src`,
+      newPath: `${ROOT_A}\\lib`,
+      isDirectory: true,
+    });
+    expect(state.expandedPaths).toEqual([ROOT_A, `${ROOT_A}\\lib`]);
+    expect(state.selectedPath).toBe(`${ROOT_A}\\lib\\b.ts`);
+    // The renamed folder's cached listing contains old child paths → dropped.
+    expect(state.directories[`${ROOT_A}\\src`]).toBeUndefined();
+    expect(state.directories[`${ROOT_A}\\lib`]).toBeUndefined();
+    // Unrelated cached listings survive.
+    expect(state.directories[ROOT_A]).toBeDefined();
+  });
+
+  it('path-renamed with a file keeps its directory cache (parent reloads)', () => {
+    const state = workspaceReducer(loadedTree(), {
+      type: 'path-renamed',
+      path: `${ROOT_A}\\src\\b.ts`,
+      newPath: `${ROOT_A}\\src\\c.ts`,
+      isDirectory: false,
+    });
+    expect(state.directories[`${ROOT_A}\\src`]).toBeDefined();
+    expect(state.selectedPath).toBe(`${ROOT_A}\\src\\c.ts`);
+  });
+
+  it('path-removed drops the subtree, expansion, and selection', () => {
+    const state = workspaceReducer(loadedTree(), {
+      type: 'path-removed',
+      path: `${ROOT_A}\\src`,
+      isDirectory: true,
+    });
+    expect(state.expandedPaths).toEqual([ROOT_A]);
+    expect(state.selectedPath).toBeNull();
+    expect(state.directories[`${ROOT_A}\\src`]).toBeUndefined();
+    expect(state.directories[ROOT_A]).toBeDefined();
+  });
+
+  it('path-removed for an unrelated path changes nothing', () => {
+    const before = loadedTree();
+    const after = workspaceReducer(before, {
+      type: 'path-removed',
+      path: `${ROOT_A}\\other`,
+      isDirectory: false,
+    });
+    expect(after).toBe(before);
+  });
 });

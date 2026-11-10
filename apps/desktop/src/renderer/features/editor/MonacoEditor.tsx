@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { EditorTab } from '../../stores/tabsReducer';
-import { disposeAllModels, getOrCreateModel } from './modelRegistry';
+import { disposeAllModels, getModel, getOrCreateModel } from './modelRegistry';
 import { loadMonaco } from './monacoSetup';
 
 interface MonacoEditorProps {
@@ -111,6 +111,24 @@ export function MonacoEditor({
       }
     });
   }, [ready, activeTabId, activeLanguage]);
+
+  // Push externally reloaded content into the Monaco model (spec §7.1).
+  // The model is addressed by TAB ID (not by what the editor currently
+  // shows), so background buffers reload too. No-ops during normal typing:
+  // `update-content` keeps state and model equal, and a dirty buffer is
+  // never reloaded by the reducer in the first place.
+  useEffect(() => {
+    if (!ready || tab === null) {
+      return;
+    }
+    const model = getModel(tab.id);
+    if (model === undefined || model.isDisposed()) {
+      return;
+    }
+    if (model.getValue() !== tab.content) {
+      model.setValue(tab.content);
+    }
+  }, [ready, tab]);
 
   // Follow the application theme (spec §6.2).
   useEffect(() => {

@@ -1,7 +1,8 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import type { FileEntry } from '../../../../shared/ipc-types';
+import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
 import type { WorkspaceState } from '../../../stores/workspaceReducer';
 import { FileIcon } from '../fileIcons';
+import { InlineInput } from './InlineInput';
 
 interface FileTreeNodeProps {
   entry: FileEntry;
@@ -13,6 +14,12 @@ interface FileTreeNodeProps {
   onOpenFile: (entry: FileEntry) => void;
   onRetry: (path: string) => void;
   onContextMenu?: (event: ReactMouseEvent, entry: FileEntry) => void;
+  /** Submits the inline create input for this directory. */
+  onCreateSubmit: (parentPath: string, kind: FileKind, name: string) => void;
+  /** Submits the inline rename input for this entry. */
+  onRenameSubmit: (entry: FileEntry, name: string) => void;
+  /** Cancels the active inline input (Escape/blur). */
+  onCancelInput: () => void;
 }
 
 /**
@@ -29,12 +36,26 @@ export function FileTreeNode({
   onOpenFile,
   onRetry,
   onContextMenu,
+  onCreateSubmit,
+  onRenameSubmit,
+  onCancelInput,
 }: FileTreeNodeProps): ReactNode {
   const isDirectory = entry.kind === 'directory';
   const expanded = isDirectory && state.expandedPaths.includes(entry.path);
   const selected = state.selectedPath === entry.path;
   const directoryState = state.directories[entry.path];
   const indent = 6 + depth * 14;
+
+  const pending = state.pendingInput;
+  const renamingHere =
+    pending !== null &&
+    pending.kind === 'rename' &&
+    pending.targetPath === entry.path;
+  const creatingHere =
+    pending !== null &&
+    isDirectory &&
+    (pending.kind === 'create-file' || pending.kind === 'create-folder') &&
+    pending.parentPath === entry.path;
 
   const handleClick = (): void => {
     onSelect(entry.path);
@@ -83,7 +104,17 @@ export function FileTreeNode({
           ) : null}
         </span>
         <FileIcon name={entry.name} kind={entry.kind} expanded={expanded} />
-        <span className="tree-node__label">{entry.name}</span>
+        {renamingHere ? (
+          <InlineInput
+            ariaLabel={`Rename ${entry.name}`}
+            defaultValue={entry.name}
+            indent={0}
+            onSubmit={(name) => onRenameSubmit(entry, name)}
+            onCancel={onCancelInput}
+          />
+        ) : (
+          <span className="tree-node__label">{entry.name}</span>
+        )}
         {directoryState?.loading ? (
           <span className="tree-node__spinner" aria-label="Loading" />
         ) : null}
@@ -91,6 +122,22 @@ export function FileTreeNode({
 
       {isDirectory && expanded ? (
         <div className="tree-node__children" role="group">
+          {creatingHere && pending !== null ? (
+            <InlineInput
+              ariaLabel={
+                pending.kind === 'create-file' ? 'New file name' : 'New folder name'
+              }
+              indent={indent + 22}
+              onSubmit={(name) =>
+                onCreateSubmit(
+                  entry.path,
+                  pending.kind === 'create-folder' ? 'directory' : 'file',
+                  name,
+                )
+              }
+              onCancel={onCancelInput}
+            />
+          ) : null}
           {directoryState === undefined ? (
             <div className="tree-node__hint" style={{ paddingLeft: indent + 22 }}>
               Loading…
@@ -131,6 +178,9 @@ export function FileTreeNode({
                 onOpenFile={onOpenFile}
                 onRetry={onRetry}
                 onContextMenu={onContextMenu}
+                onCreateSubmit={onCreateSubmit}
+                onRenameSubmit={onRenameSubmit}
+                onCancelInput={onCancelInput}
               />
             ))
           )}

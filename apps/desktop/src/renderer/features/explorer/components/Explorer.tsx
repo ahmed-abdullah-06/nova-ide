@@ -2,16 +2,22 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
-import type { FileEntry } from '../../../../shared/ipc-types';
+import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
 import { detectLanguage } from '../../../utils/language';
-import { isVisibleExpanded } from '../../../utils/path';
+import { isVisibleExpanded, pathParent } from '../../../utils/path';
 import { useWorkspaceActions } from '../../workspace/hooks/useWorkspaceActions';
+import { useFileOperations } from '../../workspace/hooks/useFileOperations';
 import { disposeModel } from '../../editor/modelRegistry';
+import {
+  ExplorerContextMenu,
+  type ExplorerMenuState,
+} from './ExplorerContextMenu';
 import { FileTreeNode } from './FileTreeNode';
 
 interface ExplorerProps {
@@ -34,9 +40,16 @@ function isMacPlatform(): boolean {
 export function Explorer({ focusSignal }: ExplorerProps): ReactNode {
   const { state, dispatch } = useWorkspace();
   const actions = useWorkspaceActions();
+  const fileOps = useFileOperations();
   const tabs = useTabs();
   const treeRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef<Set<string>>(new Set());
+  const [menu, setMenu] = useState<ExplorerMenuState | null>(null);
+
+  // A stale menu must not survive a workspace switch.
+  useEffect(() => {
+    setMenu(null);
+  }, [state.workspace?.rootPath]);
 
   // Ctrl+Shift+E moves focus into the tree.
   useEffect(() => {
@@ -176,13 +189,64 @@ export function Explorer({ focusSignal }: ExplorerProps): ReactNode {
     await actions.closeWorkspace();
   }, [actions, tabs]);
 
+  /** Right-click: select the entry and open the actions menu next to it. */
   const handleContextMenu = useCallback(
-    (_event: ReactMouseEvent, _entry: FileEntry): void => {
-      // Context-menu actions (new/rename/delete) arrive with the file
-      // operations phase; suppress the browser menu meanwhile.
+    (event: ReactMouseEvent, entry: FileEntry): void => {
+      actions.select(entry.path);
+      setMenu({ x: event.clientX, y: event.clientY, entry });
     },
-    [],
+    [actions],
   );
+
+  /** Starts the inline "New …" input inside the entry's target folder. */
+  const beginCreate = useCallback(
+    (entry: FileEntry, kind: FileKind): void => {
+      const parentPath =
+        entry.kind === 'directory' ? entry.path : pathParent(entry.path);
+      // The input lives inside the folder's children, so make sure the
+      // folder is expanded (and therefore lazily loaded) first.
+      if (!state.expandedPaths.includes(parentPath)) {
+        dispatch({ type: 'expand', path: parentPath });
+      }
+      dispatch({
+        type: 'start-input',
+        input: { kind: kind === 'directory' ? 'create-folder' : 'create-file', parentPath, targetPath: null },
+      });
+    },
+    [dispatch, state.expandedPaths],
+  );
+
+  const beginRename = useCallback(
+    (entry: FileEntry): void => {
+      dispatch({
+        type: 'start-input',
+        input: {
+          kind: 'rename',
+          parentPath: pathParent(entry.path),
+          targetPath: entry.path,
+        },
+      });
+    },
+    [dispatch],
+  );
+
+  const handleCreateSubmit = useCallback(
+    (parentPath: string, kind: FileKind, name: string): void => {
+      void fileOps.createEntry(parentPath, kind, name);
+    },
+    [fileOps],
+  );
+
+  const handleRenameSubmit = useCallback(
+    (entry: FileEntry, name: string): void => {
+      void fileOps.renameEntry(entry, name);
+    },
+    [fileOps],
+  );
+
+  const handleCancelInput = useCallback((): void => {
+    dispatch({ type: 'cancel-input' });
+  }, [dispatch]);
 
   const workspace = state.workspace;
   const shortcutHint = isMacPlatform() ? '⌘⇧O' : 'Ctrl+Shift+O';
@@ -296,9 +360,24 @@ export function Explorer({ focusSignal }: ExplorerProps): ReactNode {
             onOpenFile={(entry) => void openFile(entry)}
             onRetry={actions.retryDirectory}
             onContextMenu={handleContextMenu}
+            onCreateSubmit={handleCreateSubmit}
+            onRenameSubmit={handleRenameSubmit}
+            onCancelInput={handleCancelInput}
           />
         </div>
       )}
+
+      {menu !== null && workspace !== null ? (
+        <ExplorerContextMenu
+          menu={menu}
+          isRoot={menu.entry.path === workspace.rootPath}
+          onClose={() => setMenu(null)}
+          onNewFile={() => beginCreate(menu.entry, 'file')}
+          onNewFolder={() => beginCreate(menu.entry, 'directory')}
+          onRename={() => beginRename(menu.entry)}
+          onDelete={() => void fileOps.deleteEntry(menu.entry)}
+        />
+      ) : null}
     </div>
   );
 }

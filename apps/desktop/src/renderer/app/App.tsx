@@ -4,6 +4,8 @@ import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
 import { WorkspaceProvider, useWorkspace } from '../stores/workspace';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
+import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
+import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
 import { AiPanel } from '../components/layout/AiPanel';
@@ -31,28 +33,38 @@ function Workspace(): ReactNode {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
   const { openFolder } = workspaceActions;
+  const { saveActive } = useFileOperations();
+  useExternalFileChanges();
 
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
-  // Ctrl/Cmd+Shift+O opens a folder. Ctrl+S arrives with file saving.
+  // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
+  // There is no native menu accelerator, so no conflict can occur.
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent): void => {
       const modifier = event.ctrlKey || event.metaKey;
-      if (!modifier || !event.shiftKey) {
+      if (!modifier) {
         return;
       }
       const key = event.key.toLowerCase();
-      if (key === 'e') {
+      if (event.shiftKey) {
+        if (key === 'e') {
+          event.preventDefault();
+          setActivity('explorer');
+          setExplorerFocusSignal((signal) => signal + 1);
+        } else if (key === 'o') {
+          event.preventDefault();
+          void openFolder();
+        }
+        return;
+      }
+      if (key === 's' && !event.altKey) {
         event.preventDefault();
-        setActivity('explorer');
-        setExplorerFocusSignal((signal) => signal + 1);
-      } else if (key === 'o') {
-        event.preventDefault();
-        void openFolder();
+        void saveActive();
       }
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [openFolder]);
+  }, [openFolder, saveActive]);
 
   // Exercise the typed preload bridge once on startup.
   useEffect(() => {
