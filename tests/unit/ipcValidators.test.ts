@@ -12,6 +12,7 @@ import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
+  assertPathAndBoolean,
   assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
@@ -64,6 +65,12 @@ describe('IPC argument validators', () => {
     expect(() => assertSearchQuery(['r1', 'unknown-mode', 'needle'])).toThrow();
     expect(() => assertSearchQuery(['r1', 'files'])).toThrow();
     expect(() => assertSearchQuery(['r1', 'files', 42])).toThrow();
+  });
+
+  it('validates the git diff arguments', () => {
+    expect(() => assertPathAndBoolean(['C:\\a', false])).not.toThrow();
+    expect(() => assertPathAndBoolean(['C:\\a'])).toThrow();
+    expect(() => assertPathAndBoolean(['C:\\a', 'yes'])).toThrow();
   });
 
   it('validates an array of strings', () => {

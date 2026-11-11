@@ -87,6 +87,15 @@ const novaApi: NovaApi = {
       subscribe<SearchResults>(IpcPushChannels.searchResults, listener),
   },
 
+  git: {
+    status: () => invoke(IpcChannels.gitStatus),
+    stage: (path) => invoke(IpcChannels.gitStage, path),
+    unstage: (path) => invoke(IpcChannels.gitUnstage, path),
+    discard: (path) => invoke(IpcChannels.gitDiscard, path),
+    commit: (message) => invoke(IpcChannels.gitCommit, message),
+    diff: (path, staged) => invoke(IpcChannels.gitDiff, path, staged),
+  },
+
   terminal: {
     create: (cwd) => invoke(IpcChannels.terminalCreate, cwd),
     write: (sessionId, data) =>

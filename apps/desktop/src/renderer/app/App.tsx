@@ -44,6 +44,10 @@ function Workspace(): ReactNode {
     void openFile(match.path, { line: match.line, column: match.column });
   };
 
+  const handleOpenFile = (path: string): void => {
+    void openFile(path);
+  };
+
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
   // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
   // There is no native menu accelerator, so no conflict can occur.
@@ -127,6 +131,7 @@ function Workspace(): ReactNode {
         focusSignal={explorerFocusSignal}
         hasWorkspace={hasWorkspace}
         onOpenSearchResult={handleOpenSearchResult}
+        onOpenFile={handleOpenFile}
       />
       <div className="main-column">
         <EditorArea theme={theme} onCursorChange={setCursor} />

@@ -55,6 +55,12 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.terminalKill,
       IpcChannels.searchQuery,
       IpcChannels.searchCancel,
+      IpcChannels.gitStatus,
+      IpcChannels.gitStage,
+      IpcChannels.gitUnstage,
+      IpcChannels.gitDiscard,
+      IpcChannels.gitCommit,
+      IpcChannels.gitDiff,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

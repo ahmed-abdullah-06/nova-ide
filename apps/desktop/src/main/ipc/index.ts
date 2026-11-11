@@ -14,12 +14,14 @@ import { createFileHandlers } from './files';
 import { createWorkspaceHandlers } from './workspace';
 import { createTerminalHandlers } from './terminal';
 import { createSearchHandlers } from './search';
+import { createGitHandlers } from './git';
 import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
   assertOptionalString,
   assertSaveAsArgs,
+  assertPathAndBoolean,
   assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
@@ -30,6 +32,7 @@ import {
 } from './validators';
 import { TerminalService } from '../services/terminalService';
 import { SearchService } from '../services/searchService';
+import { GitService } from '../services/gitService';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -101,6 +104,11 @@ export function registerIpcHandlers(): () => void {
     },
   });
   const searchHandlers = createSearchHandlers(searchService);
+
+  const gitService = new GitService({
+    getRoot: () => workspaceService.getActiveRoot(),
+  });
+  const gitHandlers = createGitHandlers(gitService);
 
 
 
@@ -196,6 +204,34 @@ export function registerIpcHandlers(): () => void {
     IpcChannels.searchCancel,
     assertOneStringArg,
     searchHandlers.cancel,
+  );
+
+  // Git
+  registerChannel(IpcChannels.gitStatus, assertNoArgs, gitHandlers.status);
+  registerChannel(
+    IpcChannels.gitStage,
+    assertOneStringArg,
+    gitHandlers.stage,
+  );
+  registerChannel(
+    IpcChannels.gitUnstage,
+    assertOneStringArg,
+    gitHandlers.unstage,
+  );
+  registerChannel(
+    IpcChannels.gitDiscard,
+    assertOneStringArg,
+    gitHandlers.discard,
+  );
+  registerChannel(
+    IpcChannels.gitCommit,
+    assertOneStringArg,
+    gitHandlers.commit,
+  );
+  registerChannel(
+    IpcChannels.gitDiff,
+    assertPathAndBoolean,
+    gitHandlers.diff,
   );
 
 

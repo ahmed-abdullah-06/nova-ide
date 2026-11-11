@@ -19,7 +19,7 @@
  *   node tools/verify/runtime.mjs --dev          # development build
  *   node tools/verify/runtime.mjs --keep-open    # leave the app running
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -111,6 +111,17 @@ function createFixture() {
     'const needle = 1;\nconsole.log(needle);\n',
     'utf8',
   );
+  // The fixture is a real git repository with one commit and one untracked
+  // file, so the source control panel is verified against real git output.
+  const git = (...args) =>
+    spawnSync('git', args, { cwd: root, stdio: 'ignore', shell: false });
+  git('init', '--initial-branch=main');
+  git('config', 'user.email', 'verify@example.com');
+  git('config', 'user.name', 'NOVA Verify');
+  git('config', 'commit.gpgsign', 'false');
+  git('add', 'index.js', 'hello.js');
+  git('commit', '-m', 'initial commit');
+  writeFileSync(path.join(root, 'untracked.txt'), 'untracked\n', 'utf8');
   return root;
 }
 
@@ -348,6 +359,130 @@ async function main() {
     );
 
 
+
+    // The source control panel must report the repository state.
+    const scmReachable = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.activity-bar__item')];
+        const scm = buttons.find((b) => b.getAttribute('aria-label') === 'Source Control');
+        if (scm === undefined) return false;
+        scm.click();
+        return true;
+      })()`,
+    );
+    check('source control view is reachable', scmReachable === true);
+
+    const scmState = await waitFor(
+      session,
+      `(() => {
+        const empty = document.querySelector('.source-control__empty');
+        if (empty !== null) return empty.textContent.trim();
+        const branch = document.querySelector('.source-control__branch');
+        if (branch === null) return false;
+        const text = branch.textContent.trim();
+        // The panel shows a placeholder while the status is loading.
+        return text === '…' ? false : text;
+      })()`,
+      15000,
+    );
+    check(
+      'source control reports the repository state',
+      typeof scmState === 'string' && scmState.length > 0,
+      String(scmState),
+    );
+
+    // The source control panel must show the branch of the repository.
+    const branch = await waitFor(
+      session,
+      `(() => {
+        const element = document.querySelector('.source-control__branch');
+        if (element === null) return false;
+        const text = element.textContent.trim();
+        // The panel shows a placeholder while the status is loading.
+        return text === '…' ? false : text;
+      })()`,
+      15000,
+    );
+    check(
+      'source control shows the current branch',
+      branch === 'main',
+      String(branch),
+    );
+
+    // The untracked file of the fixture must be listed.
+    const untracked = await waitFor(
+      session,
+      `(() => {
+        const names = [...document.querySelectorAll('.source-control__name')]
+          .map((n) => n.textContent);
+        return names.length > 0 ? names.join(',') : false;
+      })()`,
+      15000,
+    );
+    check(
+      'source control lists the untracked files',
+      typeof untracked === 'string' && untracked.includes('untracked.txt'),
+      String(untracked),
+    );
+
+    // Staging the file must move it into the staged group.
+    const staged = await session.evaluate(
+      `(() => {
+        const items = [...document.querySelectorAll('.source-control__item')];
+        const item = items.find((i) => i.textContent.includes('untracked.txt'));
+        if (item === undefined) return false;
+        const button = [...item.querySelectorAll('button')]
+          .find((b) => b.textContent.trim() === 'Stage');
+        if (button === undefined) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('source control can stage a file', staged === true);
+
+    const stagedGroup = await waitFor(
+      session,
+      `(() => {
+        const titles = [...document.querySelectorAll('.source-control__group-title')]
+          .map((t) => t.textContent);
+        const names = [...document.querySelectorAll('.source-control__name')]
+          .map((n) => n.textContent);
+        return titles.some((t) => t.includes('Staged')) &&
+          names.includes('untracked.txt')
+          ? 'staged'
+          : false;
+      })()`,
+      15000,
+    );
+    check('the staged file appears in the staged group', stagedGroup === 'staged');
+
+    // The commit must succeed and empty the staged group.
+    const committed = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.source-control__message');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'NOVA verify commit');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const button = document.querySelector('.source-control__commit-button');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the commit can be started', committed === true);
+
+    const committedState = await waitFor(
+      session,
+      `(() => {
+        const titles = [...document.querySelectorAll('.source-control__group-title')]
+          .map((t) => t.textContent);
+        return titles.some((t) => t.includes('Staged')) ? false : 'clean';
+      })()`,
+      20000,
+    );
+    check('the commit empties the staged group', committedState === 'clean');
 
     // The renderer must not log any error.
     check(

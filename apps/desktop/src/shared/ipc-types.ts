@@ -32,6 +32,12 @@ export const IpcChannels = {
   terminalKill: 'terminal:kill',
   searchQuery: 'search:query',
   searchCancel: 'search:cancel',
+  gitStatus: 'git:status',
+  gitStage: 'git:stage',
+  gitUnstage: 'git:unstage',
+  gitDiscard: 'git:discard',
+  gitCommit: 'git:commit',
+  gitDiff: 'git:diff',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -202,6 +208,42 @@ export interface SearchResults {
 export type SearchMode = 'files' | 'content';
 
 // ---------------------------------------------------------------------------
+// Git (spec §16)
+// ---------------------------------------------------------------------------
+
+/** One changed file of the repository. */
+export interface GitFileChange {
+  /** Absolute path inside the workspace. */
+  path: string;
+  /** Path relative to the repository root (for display). */
+  relativePath: string;
+  /** True when the change is staged (in the index). */
+  staged: boolean;
+  /** The porcelain status code of the change (M, A, D, R, ?, ...). */
+  status: string;
+}
+
+/** The state of the repository of the active workspace. */
+export interface GitStatus {
+  /** False when the workspace is not inside a git repository. */
+  isRepository: boolean;
+  /** The current branch, or null (detached HEAD / no repository). */
+  branch: string | null;
+  /** The upstream branch, or null when there is none. */
+  upstream: string | null;
+  /** Number of commits that are ahead of the upstream. */
+  ahead: number;
+  /** Number of commits that are behind the upstream. */
+  behind: number;
+  /** The staged changes. */
+  staged: GitFileChange[];
+  /** The changes in the working tree that are not staged. */
+  unstaged: GitFileChange[];
+  /** The files that git does not track yet. */
+  untracked: GitFileChange[];
+}
+
+// ---------------------------------------------------------------------------
 // Terminal (spec §6.1, §17)
 // ---------------------------------------------------------------------------
 
@@ -301,6 +343,21 @@ export interface IpcInvokeMap {
     args: [requestId: string];
     result: FsResult<void>;
   };
+  /** Reads the repository status of the workspace. */
+  'git:status': { args: []; result: FsResult<GitStatus> };
+  /** Stages a path. */
+  'git:stage': { args: [path: string]; result: FsResult<GitStatus> };
+  /** Unstages a path. */
+  'git:unstage': { args: [path: string]; result: FsResult<GitStatus> };
+  /** Discards the local changes of a path. */
+  'git:discard': { args: [path: string]; result: FsResult<GitStatus> };
+  /** Creates a commit from the staged changes. */
+  'git:commit': { args: [message: string]; result: FsResult<GitStatus> };
+  /** Reads the textual diff of a path. */
+  'git:diff': {
+    args: [path: string, staged: boolean];
+    result: FsResult<{ diff: string }>;
+  };
 }
 
 /**
@@ -372,6 +429,22 @@ export interface NovaSearchApi {
   onResults(listener: (results: SearchResults) => void): () => void;
 }
 
+/** Git integration (spec §16). */
+export interface NovaGitApi {
+  /** Reads the repository status. */
+  status(): Promise<FsResult<GitStatus>>;
+  /** Stages a path. */
+  stage(path: string): Promise<FsResult<GitStatus>>;
+  /** Unstages a path. */
+  unstage(path: string): Promise<FsResult<GitStatus>>;
+  /** Discards the local changes of a path. */
+  discard(path: string): Promise<FsResult<GitStatus>>;
+  /** Creates a commit from the staged changes. */
+  commit(message: string): Promise<FsResult<GitStatus>>;
+  /** Reads the textual diff of a path. */
+  diff(path: string, staged: boolean): Promise<FsResult<{ diff: string }>>;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
@@ -379,6 +452,7 @@ export interface NovaApi {
   fs: NovaFsApi;
   terminal: NovaTerminalApi;
   search: NovaSearchApi;
+  git: NovaGitApi;
 }
 
 /**
