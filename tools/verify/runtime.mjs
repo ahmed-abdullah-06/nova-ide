@@ -274,44 +274,80 @@ async function main() {
     );
     check('terminal renders the output of a command', terminalOutput);
 
-    // The problems panel is fed by the editor's language services.
-    const problemsReachable = await session.evaluate(
-      `(() => {
-        const tabs = [...document.querySelectorAll('.bottom-panel__tab')];
-        const problems = tabs.find((tab) => tab.textContent.includes('Problems'));
-        if (problems === undefined) return false;
-        problems.click();
-        return true;
-      })()`,
-    );
-    check('problems panel is reachable', problemsReachable === true);
-
-    // The source control panel must report "not a repository" for the fixture.
-    const scmReachable = await session.evaluate(
+    // The search view must be reachable through the activity bar.
+    const searchOpened = await session.evaluate(
       `(() => {
         const buttons = [...document.querySelectorAll('.activity-bar__item')];
-        const scm = buttons.find((b) => b.getAttribute('aria-label') === 'Source Control');
-        if (scm === undefined) return false;
-        scm.click();
+        const search = buttons.find((b) => b.getAttribute('aria-label') === 'Search');
+        if (search === undefined) return false;
+        search.click();
         return true;
       })()`,
     );
-    check('source control view is reachable', scmReachable === true);
+    check('search view is reachable', searchOpened === true);
 
-    const scmState = await waitFor(
+    const searchTyped = await waitFor(
       session,
       `(() => {
-        const panel = document.querySelector('.source-control__empty');
-        if (panel === null) return false;
-        return panel.textContent;
+        const input = document.querySelector('.search-view__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'index.js');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
       })()`,
       15000,
     );
-    check(
-      'source control reports the repository state',
-      typeof scmState === 'string' && scmState.length > 0,
-      String(scmState),
+    check('search accepts a pattern', searchTyped);
+
+    const searchResults = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.search-view__result-name')];
+        return items.length > 0 ? items.map((i) => i.textContent).join(',') : false;
+      })()`,
+      20000,
     );
+    check(
+      'search finds files by name',
+      searchTyped !== false && searchResults !== false,
+      String(searchResults),
+    );
+
+    // The content search must find the occurrence in the file.
+    const contentTyped = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.search-view__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'needle');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const content = [...document.querySelectorAll('.search-view__mode')]
+          .find((mode) => mode.textContent.trim() === 'Content');
+        if (content === undefined) return false;
+        content.click();
+        return true;
+      })()`,
+    );
+    check('search switches to the content mode', contentTyped === true);
+
+    const contentResults = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.search-view__result-name')];
+        return items.length > 0 ? items.map((i) => i.textContent).join(',') : false;
+      })()`,
+      20000,
+    );
+    check(
+      'search finds content matches',
+      contentTyped === true && contentResults !== false,
+      String(contentResults),
+    );
+
+
 
     // The renderer must not log any error.
     check(

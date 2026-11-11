@@ -23,6 +23,10 @@ import type {
   SaveReceipt,
 } from '../../shared/ipc-types';
 import type { OpenFileWatcher } from './fileWatcher';
+import {
+  MAX_TEXT_FILE_BYTES,
+  looksBinary,
+} from './fileLimits';
 import { isValidEntryName, relateToRoot, resolveInWorkspace } from './pathSecurity';
 import { errnoOf, fsFail, fsOk, mapFsError } from './results';
 
@@ -30,12 +34,8 @@ import { errnoOf, fsFail, fsOk, mapFsError } from './results';
 const MAX_DIR_ENTRIES = 2000;
 /** Safety cap while collecting a pathological directory (100k+ entries). */
 const MAX_COLLECTED_ENTRIES = 20000;
-/** Largest file NOVA opens as text. */
-const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 /** Largest payload written through a save. */
 const MAX_WRITE_BYTES = 50 * 1024 * 1024;
-/** Bytes inspected for NUL characters when detecting binary files. */
-const BINARY_SNIFF_BYTES = 8000;
 /** Watched open files (bounded so a runaway renderer cannot pin the FS). */
 const MAX_WATCHED_FILES = 500;
 /** mtime tolerance when detecting external modifications. */
@@ -194,7 +194,7 @@ export class FileSystemService {
       return mapFsError(error, 'Cannot read file');
     }
 
-    if (buffer.subarray(0, BINARY_SNIFF_BYTES).includes(0)) {
+    if (looksBinary(buffer)) {
       return fsFail('BINARY_FILE', 'Cannot open file: it is a binary file');
     }
 

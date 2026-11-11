@@ -3,6 +3,8 @@ import type { ActivityId } from './ActivityBar';
 import { PlaceholderView } from './PlaceholderView';
 import type { Theme } from '../../hooks/useTheme';
 import { Explorer } from '../../features/explorer/components/Explorer';
+import { SearchView } from '../../features/search/SearchView';
+import type { SearchMatch } from '../../../shared/ipc-types';
 
 interface SidebarProps {
   activity: ActivityId;
@@ -10,14 +12,27 @@ interface SidebarProps {
   onToggleTheme: () => void;
   /** Bumped by Ctrl+Shift+E to focus the explorer tree. */
   focusSignal: number;
+  /** True when a workspace is open. */
+  hasWorkspace: boolean;
+  /** Opens a search result in the editor. */
+  onOpenSearchResult: (match: SearchMatch) => void;
 }
 
 function bodyFor(
   activity: ActivityId,
   theme: Theme,
   onToggleTheme: () => void,
+  hasWorkspace: boolean,
+  onOpenSearchResult: (match: SearchMatch) => void,
 ): ReactNode {
   switch (activity) {
+    case 'search':
+      return (
+        <SearchView
+          hasWorkspace={hasWorkspace}
+          onOpenResult={onOpenSearchResult}
+        />
+      );
     case 'agent':
       return (
         <PlaceholderView
@@ -67,6 +82,8 @@ export function Sidebar({
   theme,
   onToggleTheme,
   focusSignal,
+  hasWorkspace,
+  onOpenSearchResult,
 }: SidebarProps): ReactNode {
   // The explorer renders its own header (title + refresh/close actions).
   if (activity === 'explorer') {
@@ -79,7 +96,7 @@ export function Sidebar({
   return (
     <aside className="sidebar" aria-label={`${TITLES[activity]} sidebar`}>
       <div className="sidebar__header">{TITLES[activity]}</div>
-      {bodyFor(activity, theme, onToggleTheme)}
+      {bodyFor(activity, theme, onToggleTheme, hasWorkspace, onOpenSearchResult)}
     </aside>
   );
 }

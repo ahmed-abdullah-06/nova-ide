@@ -53,6 +53,8 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.terminalWrite,
       IpcChannels.terminalResize,
       IpcChannels.terminalKill,
+      IpcChannels.searchQuery,
+      IpcChannels.searchCancel,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

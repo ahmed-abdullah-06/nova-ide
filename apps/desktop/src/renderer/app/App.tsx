@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { AppInfo, NovaApi } from '../../shared/ipc-types';
+import type { AppInfo, NovaApi, SearchMatch } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
 import { WorkspaceProvider, useWorkspace } from '../stores/workspace';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
 import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
 import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
+import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
 import { AiPanel } from '../components/layout/AiPanel';
@@ -35,8 +36,13 @@ function Workspace(): ReactNode {
   const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
   const { openFolder } = workspaceActions;
   const { saveActive } = useFileOperations();
+  const { openFile } = useFileOpener();
   const hasWorkspace = workspaceState.workspace !== null;
   useExternalFileChanges();
+
+  const handleOpenSearchResult = (match: SearchMatch): void => {
+    void openFile(match.path, { line: match.line, column: match.column });
+  };
 
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
   // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
@@ -119,6 +125,8 @@ function Workspace(): ReactNode {
         theme={theme}
         onToggleTheme={toggleTheme}
         focusSignal={explorerFocusSignal}
+        hasWorkspace={hasWorkspace}
+        onOpenSearchResult={handleOpenSearchResult}
       />
       <div className="main-column">
         <EditorArea theme={theme} onCursorChange={setCursor} />

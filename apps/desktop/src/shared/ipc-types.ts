@@ -30,6 +30,8 @@ export const IpcChannels = {
   terminalWrite: 'terminal:write',
   terminalResize: 'terminal:resize',
   terminalKill: 'terminal:kill',
+  searchQuery: 'search:query',
+  searchCancel: 'search:cancel',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -43,6 +45,7 @@ export const IpcPushChannels = {
   fsExternalChange: 'fs:external-change',
   terminalData: 'terminal:data',
   terminalExit: 'terminal:exit',
+  searchResults: 'search:results',
 } as const;
 
 export type IpcPushChannel =
@@ -160,6 +163,45 @@ export interface ExternalChange {
 }
 
 // ---------------------------------------------------------------------------
+// Search (spec §7, §21)
+// ---------------------------------------------------------------------------
+
+/**
+ * One search result.
+ *
+ * A file-name match has `line === 0`; a content match points at the line
+ * and column of the occurrence.
+ */
+export interface SearchMatch {
+  /** Absolute path inside the workspace. */
+  path: string;
+  /** Path relative to the workspace root (for display). */
+  relativePath: string;
+  /** File name including extension. */
+  name: string;
+  /** 1-based line number, or 0 for a file-name match. */
+  line: number;
+  /** 1-based column of the match, or 0 for a file-name match. */
+  column: number;
+  /** The matched text (the file name, or the matching line). */
+  preview: string;
+}
+
+/** A batch of search results delivered incrementally to the renderer. */
+export interface SearchResults {
+  /** Correlates the batch with the request that produced it. */
+  requestId: string;
+  matches: SearchMatch[];
+  /** True when the search finished (the final batch). */
+  done: boolean;
+  /** True when the result cap was reached (results were truncated). */
+  truncated: boolean;
+}
+
+/** How a search should be performed. */
+export type SearchMode = 'files' | 'content';
+
+// ---------------------------------------------------------------------------
 // Terminal (spec §6.1, §17)
 // ---------------------------------------------------------------------------
 
@@ -248,6 +290,17 @@ export interface IpcInvokeMap {
     args: [sessionId: string];
     result: FsResult<void>;
   };
+  /** Starts a workspace-scoped search. Results are streamed back through the
+   *  `search:results` push channel. */
+  'search:query': {
+    args: [requestId: string, mode: SearchMode, pattern: string];
+    result: FsResult<{ requestId: string }>;
+  };
+  /** Cancels a running search by request id. */
+  'search:cancel': {
+    args: [requestId: string];
+    result: FsResult<void>;
+  };
 }
 
 /**
@@ -305,12 +358,27 @@ export interface NovaFsApi {
   syncOpenFiles(paths: string[]): Promise<FsResult<{ watching: number }>>;
 }
 
+/** Project / file search (spec §7, §21). */
+export interface NovaSearchApi {
+  /** Starts a search; results arrive through `onResults`. */
+  query(
+    requestId: string,
+    mode: SearchMode,
+    pattern: string,
+  ): Promise<FsResult<{ requestId: string }>>;
+  /** Cancels a running search. */
+  cancel(requestId: string): Promise<FsResult<void>>;
+  /** Subscribes to (incremental) search results. */
+  onResults(listener: (results: SearchResults) => void): () => void;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
   workspace: NovaWorkspaceApi;
   fs: NovaFsApi;
   terminal: NovaTerminalApi;
+  search: NovaSearchApi;
 }
 
 /**

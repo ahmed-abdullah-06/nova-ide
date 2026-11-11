@@ -12,6 +12,7 @@ import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
+  assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
   assertStringArray,
@@ -56,6 +57,14 @@ describe('IPC argument validators', () => {
   });
 
 
+
+  it('validates the search query arguments', () => {
+    expect(() => assertSearchQuery(['r1', 'files', 'needle'])).not.toThrow();
+    expect(() => assertSearchQuery(['r1', 'content', 'needle'])).not.toThrow();
+    expect(() => assertSearchQuery(['r1', 'unknown-mode', 'needle'])).toThrow();
+    expect(() => assertSearchQuery(['r1', 'files'])).toThrow();
+    expect(() => assertSearchQuery(['r1', 'files', 42])).toThrow();
+  });
 
   it('validates an array of strings', () => {
     expect(() => assertStringArray([['a', 'b']])).not.toThrow();

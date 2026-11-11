@@ -13,12 +13,14 @@ import { createAppInfoHandler } from './app-info';
 import { createFileHandlers } from './files';
 import { createWorkspaceHandlers } from './workspace';
 import { createTerminalHandlers } from './terminal';
+import { createSearchHandlers } from './search';
 import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
   assertOptionalString,
   assertSaveAsArgs,
+  assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
   assertStringArray,
@@ -27,6 +29,7 @@ import {
   type ArgsValidator,
 } from './validators';
 import { TerminalService } from '../services/terminalService';
+import { SearchService } from '../services/searchService';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -88,6 +91,16 @@ export function registerIpcHandlers(): () => void {
     },
   });
   const terminalHandlers = createTerminalHandlers(terminalService);
+
+  const searchService = new SearchService({
+    getRoot: () => workspaceService.getActiveRoot(),
+    onResults: (results) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.searchResults, results);
+      }
+    },
+  });
+  const searchHandlers = createSearchHandlers(searchService);
 
 
 
@@ -171,6 +184,18 @@ export function registerIpcHandlers(): () => void {
     IpcChannels.terminalKill,
     assertOneStringArg,
     terminalHandlers.kill,
+  );
+
+  // Search
+  registerChannel(
+    IpcChannels.searchQuery,
+    assertSearchQuery,
+    searchHandlers.query,
+  );
+  registerChannel(
+    IpcChannels.searchCancel,
+    assertOneStringArg,
+    searchHandlers.cancel,
   );
 
 

@@ -5,6 +5,7 @@ import {
   type ExternalChange,
   type IpcInvokeMap,
   type NovaApi,
+  type SearchResults,
   type TerminalData,
   type TerminalExit,
 } from '../shared/ipc-types';
@@ -76,6 +77,14 @@ const novaApi: NovaApi = {
       invoke(IpcChannels.fsRename, pathValue, newName),
     delete: (pathValue) => invoke(IpcChannels.fsDelete, pathValue),
     syncOpenFiles: (paths) => invoke(IpcChannels.fsSyncOpenFiles, paths),
+  },
+
+  search: {
+    query: (requestId, mode, pattern) =>
+      invoke(IpcChannels.searchQuery, requestId, mode, pattern),
+    cancel: (requestId) => invoke(IpcChannels.searchCancel, requestId),
+    onResults: (listener) =>
+      subscribe<SearchResults>(IpcPushChannels.searchResults, listener),
   },
 
   terminal: {
