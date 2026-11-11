@@ -46,6 +46,49 @@ A task may only be marked **Completed** after its acceptance criteria have passe
 (DOM geometry + screenshot + console), unit tests 21/21, fuses confirmed in the
 packaged executable.
 
-## Milestones 2–10
+## Milestone 2 — Workspace and File Explorer
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| A.1 | Shared IPC contract (`shared/ipc-types.ts`) | Completed | `IpcChannels`/`IpcInvokeMap` extended with compile-time `ChannelsCovered` guard; `FsResult<T>` discriminated union; `fsExternalChange` push channel |
+| A.2 | Structured results + error mapping (`results.ts`) | Completed | errno → `FsErrorCode` table; logs action+errno only, never contents/stacks (spec §25) |
+| A.3 | Path security (`pathSecurity.ts`) | Completed | `isValidEntryName`, `relateToRoot` (`path.relative`, no string-prefix), `resolveWorkspaceRoot`, `resolveInWorkspace` (NUL/input checks → lexical resolve → `realpath` of deepest existing ancestor → containment → `allowRoot`/`mustExist`); file-in-the-middle → `INVALID_PATH` on all platforms |
+| A.4 | External-change watcher (`fileWatcher.ts`) | Completed | Bounded watch set (500), 1 s `fs.watchFile` polling, mtime echo suppression, own-write detection |
+| B.1 | Filesystem service (`fileSystemService.ts`) | Completed | One-level `readDirectory` (2000-entry cap), text read (10 MB cap, NUL sniff + fatal UTF-8), conflict-aware save (50 MB cap), create/rename/delete with revalidation; delete resolves parent canonically and `lstat`s the leaf |
+| B.2 | Workspace service (`workspaceService.ts`) | Completed | Native folder dialog, canonical root, recent workspaces persisted as JSON in userData |
+| B.3 | IPC handlers (`ipc/workspace.ts`, `ipc/files.ts`) + preload bridge | Completed | Arg validation per channel; renderer sees only the narrow `NovaFsApi` |
+| C.1 | Renderer workspace state (`workspaceReducer`, store) | Completed | Root/expanded/selection/loading/error + `pendingInput` for inline create-rename |
+| C.2 | Explorer UI (`Explorer`, `FileTreeNode`, icons) | Completed | Auto-expands root, lazy per-level load, retry button, file-type icons, StrictMode-safe loading |
+| C.3 | Shell wiring (Sidebar, StatusBar, App, notifications) | Completed | `Ctrl+Shift+E` focus explorer, `Ctrl+Shift+O` open folder, notification host |
+| D.1 | CRUD hook (`useFileOperations.ts`) | Completed | Create/rename/delete with `window.confirm` on delete; rename re-keys tab ids + Monaco models and reloads the parent directory |
+| D.2 | Save flow (tabsReducer `mark-saved`, App `Ctrl+S`, Monaco content sync) | Completed | Dirty tracking, per-tab save, conflict prompts |
+| D.3 | External-change bridge (`useExternalFileChanges.ts`) | Completed | Clean → reload + toast; dirty → confirm before adopting disk; missing → warning, tab kept |
+| D.4 | Context menu + inline input (`ExplorerContextMenu`, `InlineInput`) | Completed | Right-click create/rename/delete, F2/Enter/Esc inline editing |
+| E.1 | Unit tests: path security (`pathSecurity.test.ts`) | Tested | 22 tests: name validation, root relation (incl. sibling-prefix trap), traversal/absolute escapes, symlink + dangling-symlink + file-in-the-middle cases (temp dirs only) |
+| E.2 | Unit tests: filesystem service (`fileOperations.test.ts`) | Tested | 23 tests against the real service with only the Electron dialog mocked: workspace guard, ordering, read/save/conflict/caps, CRUD refusals, symlink-leaf delete, watch sync |
+| E.3 | Typecheck + full test run | Tested | typecheck exit 0; **94/94 tests pass** (6 files) |
+| E.4 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
+| E.5 | Runtime verification (CDP, dev instance) | Tested | 69/69 checks: open workspace, lazy tree, open-in-Monaco, tab reuse, CRUD, save/dirty, external changes, boundary refusals, structured error messages |
+| E.6 | Documentation (README, CHANGELOG, this file) | Completed | |
+
+### Milestone 2 Definition of Done
+
+- [x] Users can open a real project folder (native dialog, recent workspaces)
+- [x] File tree lists one level lazily; folders expand/collapse
+- [x] Files open in Monaco; reopening reuses the existing tab/model
+- [x] Create/rename/delete files and folders with confirmation
+- [x] `Ctrl+S` saves; dirty indicators track unsaved changes
+- [x] External changes to open files are detected and handled (reload/confirm/warn)
+- [x] Binary and unsupported files show a structured message instead of opening
+- [x] All fs operations confined to the active workspace (realpath + containment,
+      no string-prefix checks; root and symlink-leaf protections)
+- [x] IPC remains validated; renderer still has no Node/fs access; M1 behavior intact
+- [x] Unit tests pass (94/94), typecheck clean, `pnpm package`/`pnpm make` succeed
+
+**M2 implemented — awaiting review.** Out of scope for M2 (planned): Guardian,
+Line Companions, Swarm Rebuild, multi-agent, Project Brain, Runtime Detective,
+voice, extension marketplace, cloud sync.
+
+## Milestones 3–10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).

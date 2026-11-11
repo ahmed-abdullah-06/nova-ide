@@ -132,6 +132,20 @@ async function canonicalize(absPath: string): Promise<CanonicalResult> {
   for (;;) {
     try {
       const real = await fs.realpath(current);
+      if (tail.length > 0) {
+        // We walked UP to `current`, so it is the deepest existing
+        // ancestor: it must be a directory for the remaining segments to
+        // be meaningful (a file in the middle → INVALID_PATH, consistently
+        // on every platform — Windows reports ENOENT here, POSIX ENOTDIR).
+        try {
+          const stat = await fs.stat(real);
+          if (!stat.isDirectory()) {
+            return fsFail('INVALID_PATH', 'Path component is not a directory');
+          }
+        } catch (error) {
+          return mapFsError(error, 'Cannot access path');
+        }
+      }
       return { ok: true, value: joinTail(real, tail) };
     } catch (error) {
       const errno = errnoOf(error);

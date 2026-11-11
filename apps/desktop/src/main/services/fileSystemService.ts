@@ -155,8 +155,10 @@ export class FileSystemService {
     if (!rootResult.ok) {
       return rootResult;
     }
+    // The root is allowed through resolution so that opening it reports
+    // IS_DIRECTORY ("cannot open a folder as a file") — it can never be
+    // read as content because the stat check below rejects directories.
     const resolved = await resolveInWorkspace(rootResult.value, filePath, {
-      allowRoot: false,
       mustExist: true,
     });
     if (!resolved.ok) {
@@ -300,20 +302,33 @@ export class FileSystemService {
       return fsFail('FILE_TOO_LARGE', 'Content is too large to save');
     }
 
-    if (expectedMtimeMs !== null) {
-      let current: Stats;
-      try {
-        current = await fs.stat(canonicalPath);
-      } catch (error) {
-        if (errnoOf(error) === 'ENOENT') {
+    // Stat unconditionally: saving over a folder must be refused whether or
+    // not the caller supplied an expected mtime (force saves included).
+    let current: Stats | null = null;
+    try {
+      current = await fs.stat(canonicalPath);
+    } catch (error) {
+      const errno = errnoOf(error);
+      if (errno === 'ENOENT') {
+        if (expectedMtimeMs !== null) {
           return fsFail('NOT_FOUND', 'The file no longer exists on disk');
         }
+        // Force save of a not-yet-existing file: fall through to the write.
+      } else if (errno === 'ENOTDIR') {
+        return fsFail('INVALID_PATH', 'Path component is not a directory');
+      } else {
         return mapFsError(error, 'Cannot save file');
       }
+    }
+
+    if (current !== null) {
       if (current.isDirectory()) {
         return fsFail('IS_DIRECTORY', 'Cannot save over a folder');
       }
-      if (Math.abs(current.mtimeMs - expectedMtimeMs) > MTIME_TOLERANCE_MS) {
+      if (
+        expectedMtimeMs !== null &&
+        Math.abs(current.mtimeMs - expectedMtimeMs) > MTIME_TOLERANCE_MS
+      ) {
         return fsFail(
           'CONFLICT',
           'The file changed on disk since it was opened',
@@ -516,9 +531,21 @@ export class FileSystemService {
     }
     const root = rootResult.value;
 
+    if (typeof itemPath !== 'string' || itemPath.length === 0 || itemPath.includes('\0')) {
+      return fsFail('INVALID_PATH', 'Path must be a non-empty string');
+    }
+
+    const absolute = path.resolve(itemPath);
+
+    // The root itself is protected: its PARENT is outside the workspace, so
+    // without this check the refusal would (technically correctly, but
+    // unhelpfully) read OUTSIDE_WORKSPACE instead of ROOT_PROTECTED.
+    if (relateToRoot(root, absolute) === 'root') {
+      return fsFail('ROOT_PROTECTED', 'The workspace root cannot be deleted');
+    }
+
     // Resolve only the PARENT canonically so a symlink leaf is deleted as a
     // link instead of resolving to (and removing) its target.
-    const absolute = path.resolve(itemPath);
     const parentResult = await resolveInWorkspace(root, path.dirname(absolute), {
       mustExist: true,
     });
