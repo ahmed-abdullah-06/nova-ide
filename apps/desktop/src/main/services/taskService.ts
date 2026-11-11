@@ -244,7 +244,7 @@ export class TaskService {
     task.cancelled = true;
     // The tree is terminated first; the task is only reported as cancelled
     // afterwards, so a "cancelled" status really means "no child is left".
-    this.killTree(task);
+    await this.killTree(task);
     this.finish(taskId, 'cancelled', null);
     return fsOk<void>(undefined);
   }
@@ -254,11 +254,16 @@ export class TaskService {
    * Safe to call more than once.
    */
   async killAll(): Promise<void> {
+    const pending: Promise<void>[] = [];
     for (const [taskId, task] of [...this.tasks.entries()]) {
       task.cancelled = true;
-      this.killTree(task);
-      this.finish(taskId, 'cancelled', null);
+      pending.push(
+        this.killTree(task).then(() => {
+          this.finish(taskId, 'cancelled', null);
+        }),
+      );
     }
+    await Promise.all(pending);
   }
 
   /**
@@ -271,8 +276,8 @@ export class TaskService {
    * `taskkill /T` resolves the descendants through the parent, so killing
    * the parent first would detach the children and leave them running.
    */
-  private killTree(task: RunningTask): void {
-    killProcessTree(task.child.pid);
+  private async killTree(task: RunningTask): Promise<void> {
+    await killProcessTree(task.child.pid);
     try {
       task.child.kill();
     } catch {

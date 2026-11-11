@@ -75,43 +75,6 @@ export function ptyUnavailable(): string | null {
 }
 
 /**
- * Best-effort cleanup of a process tree.
- *
- * `node-pty` kills the shell itself, but a shell can have spawned children
- * (a dev server, a watcher). On Windows the process tree is terminated with
- * `taskkill /T`; on POSIX the process group is signalled.
- *
- * The tree must be terminated BEFORE the shell itself, because `taskkill /T`
- * resolves the descendants through their parent.
- */
-export function killProcessTree(pid: number): void {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return;
-  }
-  if (process.platform === 'win32') {
-    try {
-      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-    } catch (error) {
-      console.error('[process] could not kill the process tree:', error);
-    }
-    return;
-  }
-  try {
-    // Negative pid = the whole process group of the shell.
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch (error) {
-      console.error('[process] could not kill the process group:', error);
-    }
-  }
-}
-
-/**
  * Terminates a process tree on Windows and waits for it.
  *
  * `taskkill` resolves the descendants through their parent, so the tree has
@@ -136,6 +99,36 @@ export async function killWindowsTree(pid: number): Promise<void> {
       resolve();
     }
   });
+}
+
+/**
+ * Best-effort cleanup of a process tree.
+ *
+ * `node-pty` kills the shell itself, but a shell can have spawned children
+ * (a dev server, a watcher). On Windows the process tree is terminated with
+ * `taskkill /T`; on POSIX the process group is signalled.
+ *
+ * The tree must be terminated BEFORE the shell itself, because `taskkill /T`
+ * resolves the descendants through their parent.
+ */
+export async function killProcessTree(pid: number): Promise<void> {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+  if (process.platform === 'win32') {
+    await killWindowsTree(pid);
+    return;
+  }
+  try {
+    // Negative pid = the whole process group of the shell.
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch (error) {
+      console.error('[process] could not kill the process group:', error);
+    }
+  }
 }
 
 /**

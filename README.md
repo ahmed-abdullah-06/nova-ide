@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 2 — Workspace and File Explorer (implemented, awaiting review).
+**Status:** Milestone 3 — Developer Tools (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -37,6 +37,16 @@ pnpm install        # installs all workspace dependencies (single pnpm-lock.yaml
 pnpm dev            # start the Electron app with Vite dev server + HMR
 pnpm typecheck      # TypeScript checks (tests + all workspaces)
 pnpm test           # run unit tests (Vitest)
+pnpm verify         # runtime verification of the packaged app (Chrome DevTools Protocol)
+```
+
+The runtime verification drives the real application: it starts the packaged
+build, opens a workspace, uses the terminal, the search, the source control, the
+problems panel and the task runner, and reports every check it performed.
+
+```bash
+pnpm package                # the verification needs the packaged build
+node tools/verify/quitcleanup.mjs   # no process survives a crash of the app
 ```
 
 ## Production build
@@ -46,7 +56,9 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 2)
+## Features (Milestone 3)
+
+Milestone 2 (workspace and file explorer) is still in place:
 
 - Open a workspace folder through the native folder picker; recent workspaces
   are remembered between launches.
@@ -63,8 +75,25 @@ pnpm make           # build distributable installers (Windows Squirrel, zip)
 - Structured, user-readable errors for binary files, oversized files, missing
   folders, permission problems, and save conflicts.
 
-Not yet implemented (planned for later milestones): project-wide search,
-integrated terminal, Git integration, AI features (see spec §23).
+Milestone 3 adds the developer tools:
+
+- **Integrated terminal** in the bottom panel: several sessions, a real
+  pseudo-terminal (Windows ConPTY), resize, copy, and a kill that terminates
+  the whole process tree.
+- **Project and file search** in the sidebar: by file name or by file content,
+  honouring `.gitignore`, skipping build output and binary files, with
+  incremental results and a bounded result count.
+- **Git integration** in the sidebar: branch, staged / unstaged / untracked
+  files, the diff of a file, stage, unstage, discard (behind a confirmation)
+  and commit.
+- **Problems panel** in the bottom panel: the diagnostics that the language
+  services report for the open files, with severity, position and source.
+- **Task runner** in the bottom panel: the scripts of the workspace
+  `package.json` can be started, their output and exit code are shown, and a
+  running task can be stopped together with its child processes.
+
+Not yet implemented (planned for later milestones): AI features, planning and
+permissions, local models, voice, the extension marketplace (see spec §23).
 
 ## Security model
 
@@ -78,6 +107,10 @@ integrated terminal, Git integration, AI features (see spec §23).
   re-lstat the target (a symlink leaf is unlinked, never its target).
 - Packaged builds use Electron fuses: `RunAsNode` off, ASAR integrity validation on,
   app loaded only from ASAR.
+- The terminal and the task runner start their processes outside the process
+  tree of the application. A watchdog terminates them (together with their
+  children) if the application dies unexpectedly, so no process outlives the
+  app.
 
 ## Documentation
 

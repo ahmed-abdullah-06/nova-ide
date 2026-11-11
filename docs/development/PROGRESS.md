@@ -89,6 +89,62 @@ packaged executable.
 Line Companions, Swarm Rebuild, multi-agent, Project Brain, Runtime Detective,
 voice, extension marketplace, cloud sync.
 
-## Milestones 3–10
+## Milestone 3 — Developer Tools
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| A.1 | Terminal contract + preload bridge | Completed | `terminal:create/write/resize/kill` plus the `terminal:data` / `terminal:exit` push channels; the renderer only ever gets a session id |
+| A.2 | Terminal service (`terminalService.ts`) | Completed | `node-pty` 1.1.0 (Microsoft) with prebuilt N-API binaries — no C++ toolchain, no Electron rebuild; the shell always starts inside the workspace, the requested working directory is re-validated; the process tree is terminated before the shell itself |
+| A.3 | Terminal panel (`TerminalPanel`, `TerminalView`, `useTerminalSessions`) | Completed | Several sessions, live output (buffered output is replayed to a late subscriber), resize, copy; a session starts automatically as soon as a workspace is open |
+| A.4 | Packaging of the native module | Completed | `node-pty` is `external` in the Vite main build and is copied unpacked next to the ASAR by a Forge `afterCopy` hook; verified in the packaged app |
+| B.1 | Search contract + preload bridge | Completed | `search:query` / `search:cancel` plus the `search:results` push channel |
+| B.2 | Search service (`searchService.ts`, `gitignore.ts`) | Completed | Runs in the main process, `.gitignore` honoured, build output and binary files skipped, incremental results, result cap (500), file cap (20000), cancellable |
+| B.3 | Search view (`SearchView`, `useSearch`) | Completed | File name / content mode, debounced input, the previous request is cancelled, results open in the editor at the matching line |
+| C.1 | Git contract + preload bridge | Completed | `git:status/stage/unstage/discard/commit/diff` |
+| C.2 | Git service (`gitService.ts`) | Completed | Argument arrays only (`shell: false`), `--` separator, commit message through stdin (`-F -`), 30 s timeout, 8 MB output cap, trimmed environment without interactive prompts |
+| C.3 | Source control view (`SourceControlView`, `useGit`) | Completed | Branch, staged / unstaged / untracked files, diff, stage / unstage / discard (confirmed) / commit |
+| D.1 | Problems panel (`ProblemsPanel`, `problemMarkers.ts`, `useProblems.ts`) | Completed | Only markers that the language services really reported; severity, position and source; the badge of the panel tab shares the same store |
+| E.1 | Task contract + preload bridge | Completed | `task:list/run/cancel` plus the `task:output` / `task:status` push channels |
+| E.2 | Task service (`taskService.ts`) | Completed | Only the scripts of the workspace `package.json` can be started (the renderer sends a name, never a command); the script runs in a pseudo-terminal; stopping terminates the whole process tree |
+| E.3 | Task panel (`TaskOutputPanel`, `useTasks`) | Completed | Script list, live output, status with the exit code, stop button |
+| F.1 | Process hygiene | Completed | The quit is delayed until the process trees are gone; a detached watchdog kills the children of an application that died unexpectedly (spec §19.6) |
+| G.1 | Unit tests: terminal | Tested | 14 tests: lifecycle, working-directory boundary, output, exit reporting, session cap |
+| G.2 | Unit tests: search | Tested | 20 tests: ignore rules, node_modules, binary files, result cap, cancellation, batched delivery |
+| G.3 | Unit tests: git | Tested | 16 tests against real repositories: clean, dirty, not-a-repository, git missing, option-like paths and messages, path confinement |
+| G.4 | Unit tests: tasks | Tested | 11 tests: script list, success / failure, cancellation, process-tree cleanup |
+| G.5 | Unit tests: IPC security | Tested | Per-channel validators and the rejection of messages from an untrusted sender |
+| G.6 | Typecheck + full test run | Tested | typecheck exit 0; **172/172 tests pass** (12 files) |
+| G.7 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
+| G.8 | Runtime verification (CDP, packaged app) | Tested | 36/36 checks: terminal (start, output, focus), search (files, content), source control (branch, stage, commit), problems (real TypeScript diagnostic), tasks (list, run, output, stop) — no console errors |
+| G.9 | Crash hygiene (`tools/verify/quitcleanup.mjs`) | Tested | The application is killed while a task runs: no process of the task is left behind |
+| G.10 | Documentation (README, CHANGELOG, this file) | Completed | |
+
+### Milestone 3 Definition of Done
+
+- [x] An integrated terminal runs real commands in the workspace
+- [x] Several terminal sessions can be open at the same time
+- [x] A terminal session and its children are terminated when it is closed,
+      when the workspace closes and when the application quits
+- [x] The workspace can be searched by file name and by file content
+- [x] The search respects `.gitignore`, skips build output and binary files,
+      and can be cancelled
+- [x] The repository state (branch, changes) is visible, and files can be
+      staged, unstaged, discarded and committed
+- [x] The problems panel lists the diagnostics of the open files
+- [x] The scripts of the workspace `package.json` can be started, their output
+      and exit code are shown, and they can be stopped with their children
+- [x] The renderer still has no Node/filesystem access; every new channel is
+      whitelisted and validated
+- [x] Unit tests pass (172/172), typecheck clean, `pnpm package`/`pnpm make`
+      succeed, 36/36 runtime checks pass in the packaged application
+- [x] No process outlives the application — not after a clean quit and not
+      after a crash
+
+**M3 implemented — awaiting review.** Out of scope for M3 (planned): AI
+provider integration, agent tools, planning and permissions, local models,
+voice, extensions (see spec §23).
+
+## Milestones 4–10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
+

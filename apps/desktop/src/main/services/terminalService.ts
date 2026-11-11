@@ -276,13 +276,19 @@ export class TerminalService {
 
   /**
    * Kills every session (workspace closed, app quitting).
+   *
+   * The promise resolves when the process trees are really gone, so the
+   * application can wait for it before it quits.
+   *
    * Safe to call more than once.
    */
-  killAll(): void {
+  async killAll(): Promise<void> {
+    const pending: Promise<void>[] = [];
     for (const id of [...this.sessions.keys()]) {
-      this.disposeSession(id);
+      pending.push(this.disposeSession(id));
       this.onExit({ sessionId: id, exitCode: TERMINAL_KILLED_EXIT_CODE });
     }
+    await Promise.all(pending);
   }
 
   /**
@@ -292,7 +298,7 @@ export class TerminalService {
    * itself (the shell may not report one when it is terminated), while a
    * session that ends on its own reports the exit code of the shell.
    */
-  private disposeSession(sessionId: string): void {
+  private async disposeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session === undefined) {
       return;
@@ -310,7 +316,7 @@ export class TerminalService {
     // The process tree is terminated BEFORE the shell itself: on Windows
     // `taskkill /T` resolves the descendants through their parent, so
     // killing the shell first would detach the children.
-    killProcessTree(session.process.pid);
+    await killProcessTree(session.process.pid);
     try {
       session.process.kill();
     } catch (error) {

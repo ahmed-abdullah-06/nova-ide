@@ -46,6 +46,37 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     channel coverage; preload exposes only the narrow `NovaFsApi` bridge.
   - Unit tests: `pathSecurity.test.ts` (22) and `fileOperations.test.ts` (23)
     against real temp directories — 94/94 tests passing in total.
+- **Milestone 3 — Developer Tools:**
+  - Integrated terminal in the bottom panel: several sessions on a real
+    pseudo-terminal (Windows ConPTY), live output, resize, copy, and a kill
+    that terminates the whole process tree.
+  - Project and file search in the sidebar: by file name or by file content,
+    honouring `.gitignore`, skipping build output and binary files, with
+    incremental results, a result cap (500) and cancellation.
+  - Git integration in the sidebar: branch, staged / unstaged / untracked
+    files, the diff of a file, stage, unstage, discard (behind a confirmation)
+    and commit.
+  - Problems panel in the bottom panel: the diagnostics that the language
+    services report for the open files (severity, position, source); the
+    panel only shows markers that the language services really produced.
+  - Task runner in the bottom panel: the scripts of the workspace
+    `package.json` can be started, their output and exit code are shown, and
+    a running task can be stopped together with its child processes.
+  - `node-pty` 1.1.0 (Microsoft) provides the pseudo-terminal. It ships
+    prebuilt N-API binaries, so no C++ toolchain and no Electron rebuild are
+    needed on the build machine; the native module is shipped unpacked next
+    to the ASAR.
+  - Process hygiene (spec §19.6): every child process is terminated when the
+    workspace closes or the application quits, and a watchdog terminates the
+    children of an application that died unexpectedly — no process outlives
+    the application.
+  - Reusable runtime verification harness (`tools/verify/`): it drives the
+    packaged application through the Chrome DevTools Protocol and checks the
+    terminal, the search, the source control, the problems panel and the task
+    runner (36/36 checks), plus a separate check that no process survives a
+    crash of the application.
+  - Unit tests for the terminal, the search, the git wrapper, the task runner
+    and the IPC security of the new channels — 172/172 tests passing in total.
 
 ### Fixed
 
@@ -72,7 +103,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 |---|---|
 | M1 — Desktop Foundation and Editor | Completed |
 | M2 — File Explorer and Workspace | Implemented (awaiting review) |
-| M3 — Tabs, Search, Terminal, and Git | Not Started |
+| M3 — Developer Tools (Terminal, Search, Git, Problems, Tasks) | Implemented (awaiting review) |
 | M4 — AI Provider Integration | Not Started |
 | M5 — AI Agent and Tools | Not Started |
 | M6 — Planning, Permissions, and Verification | Not Started |

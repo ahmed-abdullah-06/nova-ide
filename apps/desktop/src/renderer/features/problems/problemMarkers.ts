@@ -41,14 +41,16 @@ export interface ProblemEntry {
 const MODEL_URI_PREFIX = 'inmemory://model/';
 
 // The severity flags are copied from Monaco's documentation; a change of
-// Monaco would break the mapping, so the values are checked here.
+// Monaco would break the mapping, so the values are checked here. The
+// check reports the problem instead of throwing, because a throw at
+// module scope would take the whole renderer down.
 if (
   MarkerSeverity.Error !== MONACO_SEVERITY.Error ||
   MarkerSeverity.Warning !== MONACO_SEVERITY.Warning ||
   MarkerSeverity.Info !== MONACO_SEVERITY.Info ||
   MarkerSeverity.Hint !== MONACO_SEVERITY.Hint
 ) {
-  throw new Error(
+  console.error(
     'NOVA IDE: the severity flags of Monaco changed — update problemSeverity.ts',
   );
 }
