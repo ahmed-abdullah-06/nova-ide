@@ -3,6 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { EditorTab } from '../../stores/tabsReducer';
 import { disposeAllModels, getModel, getOrCreateModel } from './modelRegistry';
 import { loadMonaco } from './monacoSetup';
+import { onReveal } from './editorCommands';
 
 interface MonacoEditorProps {
   tab: EditorTab | null;
@@ -139,6 +140,26 @@ export function MonacoEditor({
       monaco.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
     });
   }, [ready, theme]);
+
+  // Reveal a position requested by another panel (search results, problems).
+  useEffect(() => {
+    return onReveal((position) => {
+      const editor = editorRef.current;
+      if (editor === null) {
+        return;
+      }
+      // The file must be the one the editor currently shows.
+      const currentTabId = activeTabIdRef.current;
+      if (currentTabId === null || currentTabId !== position.path) {
+        return;
+      }
+      const line = Math.max(1, position.line);
+      const column = Math.max(1, position.column);
+      editor.setPosition({ lineNumber: line, column });
+      editor.revealLineInCenter(line);
+      editor.focus();
+    });
+  }, [ready]);
 
   return (
     <div className="editor-content">

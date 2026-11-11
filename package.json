@@ -17,7 +17,8 @@
     "make": "pnpm --filter @nova/desktop make",
     "typecheck": "tsc --noEmit -p tsconfig.tests.json && pnpm -r typecheck",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "node tools/verify/runtime.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.0",

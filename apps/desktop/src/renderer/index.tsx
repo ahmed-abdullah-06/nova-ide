@@ -6,6 +6,7 @@ import './styles/global.css';
 import './styles/layout.css';
 import './styles/editor.css';
 import './styles/explorer.css';
+import './styles/panels.css';
 
 const container = document.getElementById('root');
 if (!container) {

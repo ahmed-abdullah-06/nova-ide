@@ -4,15 +4,29 @@ import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { copyNativeTerminalModule } from './forge/copyNativeModule';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      // The native `node-pty` module cannot be loaded from inside an ASAR
+      // archive, so it is unpacked next to `app.asar` (Electron's standard
+      // approach for native modules). Everything else stays packed, and the
+      // ASAR integrity fuse keeps the archive tamper-evident.
+      unpack: '**/node_modules/node-pty/**',
+    },
     // Display name comes from package.json `productName` ("NOVA IDE");
     // the executable must be a filesystem-safe name without spaces.
     executableName: 'NOVAIDE',
+    afterCopy: [copyNativeTerminalModule],
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    // `node-pty` ships prebuilt N-API binaries. N-API is ABI-stable, so the
+    // binaries work unchanged on every Node.js/Electron version and must
+    // NOT be recompiled (that would require a full C++ toolchain on every
+    // build machine).
+    ignoreModules: ['node-pty'],
+  },
   makers: [
     // Windows installers (initial development platform is Windows, spec §22)
     // `name` must be a valid NuGet package id — the scoped workspace name

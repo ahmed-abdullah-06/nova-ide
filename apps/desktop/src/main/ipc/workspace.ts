@@ -15,11 +15,22 @@ export interface WorkspaceHandlers {
   open: Handler<'workspace:open'>;
   close: Handler<'workspace:close'>;
   recent: Handler<'workspace:recent'>;
+  active: Handler<'workspace:active'>;
+}
+
+/**
+ * Callbacks invoked when the workspace is closed, so that every child
+ * process (terminal sessions, running tasks) is terminated (spec §19.6).
+ */
+export interface WorkspaceCloseHooks {
+  /** Called after the workspace has been closed. */
+  onClose?: () => void;
 }
 
 export function createWorkspaceHandlers(
   workspace: WorkspaceService,
   watcher: OpenFileWatcher,
+  hooks: WorkspaceCloseHooks = {},
 ): WorkspaceHandlers {
   return {
     open: async (pathValue?: string) => {
@@ -39,7 +50,9 @@ export function createWorkspaceHandlers(
     close: async () => {
       workspace.close();
       watcher.clear();
+      hooks.onClose?.();
     },
     recent: async () => workspace.recent(),
+    active: async () => workspace.getActiveWorkspace(),
   };
 }

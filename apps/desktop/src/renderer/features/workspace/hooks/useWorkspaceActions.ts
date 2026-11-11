@@ -18,6 +18,14 @@ export interface WorkspaceActions {
   closeWorkspace(): Promise<void>;
   /** Reloads the recent workspaces list from disk. */
   loadRecent(): Promise<void>;
+  /**
+   * Synchronises the renderer with the workspace of the main process.
+   *
+   * The workspace can also be changed from outside the renderer (for
+   * example by a second window), so the renderer asks the main process
+   * which workspace is open when it gains focus.
+   */
+  syncActiveWorkspace(): Promise<void>;
   /** Clears cached directory contents; expanded folders re-read lazily. */
   refresh(): void;
   toggleDirectory(path: string): void;
@@ -98,6 +106,32 @@ export function useWorkspaceActions(): WorkspaceActions {
     dispatch({ type: 'refresh' });
   }, [dispatch]);
 
+  const syncActiveWorkspace = useCallback(async (): Promise<void> => {
+    if (!window.nova) {
+      return;
+    }
+    try {
+      const result = await window.nova.workspace.active();
+      if (!result.ok) {
+        return;
+      }
+      const current = state.workspace;
+      const incoming = result.value;
+      if (incoming === null) {
+        if (current !== null) {
+          dispatch({ type: 'close' });
+        }
+        return;
+      }
+      if (current?.rootPath === incoming.rootPath) {
+        return;
+      }
+      dispatch({ type: 'open-succeeded', workspace: incoming });
+    } catch {
+      // The bridge is unavailable (e.g. outside the Electron shell).
+    }
+  }, [dispatch, state.workspace]);
+
   const toggleDirectory = useCallback(
     (path: string): void => {
       if (state.expandedPaths.includes(path)) {
@@ -136,6 +170,7 @@ export function useWorkspaceActions(): WorkspaceActions {
     openRecent,
     closeWorkspace,
     loadRecent,
+    syncActiveWorkspace,
     refresh,
     toggleDirectory,
     select,

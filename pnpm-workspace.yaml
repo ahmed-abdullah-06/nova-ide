@@ -19,3 +19,6 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
+  # node-pty ships prebuilt N-API binaries in its npm tarball; the install
+  # script only verifies that a matching prebuild exists (no compiler needed).
+  node-pty: true

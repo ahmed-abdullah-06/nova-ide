@@ -5,5 +5,9 @@
     "types": [],
     "noEmit": true
   },
-  "include": ["tests/**/*", "vitest.config.mts"]
+  "include": [
+    "tests/**/*",
+    "vitest.config.mts",
+    "apps/desktop/src/declarations.d.ts"
+  ]
 }

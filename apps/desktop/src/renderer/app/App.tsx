@@ -9,10 +9,11 @@ import { useExternalFileChanges } from '../features/workspace/hooks/useExternalF
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
 import { AiPanel } from '../components/layout/AiPanel';
+import { BottomPanel } from '../components/layout/BottomPanel';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
-import { TerminalPanel } from '../components/layout/TerminalPanel';
 import { EditorArea } from '../features/editor/EditorArea';
+import { TerminalPanel } from '../features/terminal/TerminalPanel';
 
 interface CursorPosition {
   line: number;
@@ -34,6 +35,7 @@ function Workspace(): ReactNode {
   const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
   const { openFolder } = workspaceActions;
   const { saveActive } = useFileOperations();
+  const hasWorkspace = workspaceState.workspace !== null;
   useExternalFileChanges();
 
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
@@ -65,6 +67,16 @@ function Workspace(): ReactNode {
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [openFolder, saveActive]);
+
+  // The workspace can be changed outside the renderer (another window, or
+  // the main process), so the renderer re-reads it when it gains focus.
+  useEffect(() => {
+    const handleFocus = (): void => {
+      void workspaceActions.syncActiveWorkspace();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [workspaceActions]);
 
   // Exercise the typed preload bridge once on startup.
   useEffect(() => {
@@ -110,7 +122,9 @@ function Workspace(): ReactNode {
       />
       <div className="main-column">
         <EditorArea theme={theme} onCursorChange={setCursor} />
-        <TerminalPanel />
+        <BottomPanel
+          renderTerminal={() => <TerminalPanel hasWorkspace={hasWorkspace} />}
+        />
       </div>
       <AiPanel />
       <StatusBar

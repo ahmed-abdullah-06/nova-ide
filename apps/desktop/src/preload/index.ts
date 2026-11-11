@@ -5,6 +5,8 @@ import {
   type ExternalChange,
   type IpcInvokeMap,
   type NovaApi,
+  type TerminalData,
+  type TerminalExit,
 } from '../shared/ipc-types';
 
 /** Typed `ipcRenderer.invoke` restricted to the shared channel contract. */
@@ -15,6 +17,25 @@ function invoke<C extends keyof IpcInvokeMap & string>(
   return ipcRenderer.invoke(channel, ...args) as Promise<
     IpcInvokeMap[C]['result']
   >;
+}
+
+/**
+ * Subscribes to a push channel and returns an unsubscribe function.
+ *
+ * The payload is passed through unchanged; the main process is the only
+ * producer, so no additional validation is required here.
+ */
+function subscribe<T>(
+  channel: string,
+  listener: (payload: T) => void,
+): () => void {
+  const handler = (_event: IpcRendererEvent, payload: T): void => {
+    listener(payload);
+  };
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
 }
 
 /**
@@ -34,14 +55,12 @@ const novaApi: NovaApi = {
         : invoke(IpcChannels.workspaceOpen, pathValue),
     close: () => invoke(IpcChannels.workspaceClose),
     recent: () => invoke(IpcChannels.workspaceRecent),
-    onExternalChange: (listener) => {
-      const handler = (_event: IpcRendererEvent, change: ExternalChange): void =>
-        listener(change);
-      ipcRenderer.on(IpcPushChannels.fsExternalChange, handler);
-      return () => {
-        ipcRenderer.removeListener(IpcPushChannels.fsExternalChange, handler);
-      };
-    },
+    active: () => invoke(IpcChannels.workspaceActive),
+    onExternalChange: (listener) =>
+      subscribe<ExternalChange>(
+        IpcPushChannels.fsExternalChange,
+        listener,
+      ),
   },
 
   fs: {
@@ -58,6 +77,18 @@ const novaApi: NovaApi = {
     delete: (pathValue) => invoke(IpcChannels.fsDelete, pathValue),
     syncOpenFiles: (paths) => invoke(IpcChannels.fsSyncOpenFiles, paths),
   },
+
+  terminal: {
+    create: (cwd) => invoke(IpcChannels.terminalCreate, cwd),
+    write: (sessionId, data) =>
+      invoke(IpcChannels.terminalWrite, sessionId, data),
+    resize: (sessionId, cols, rows) =>
+      invoke(IpcChannels.terminalResize, sessionId, cols, rows),
+    kill: (sessionId) => invoke(IpcChannels.terminalKill, sessionId),
+    onData: (listener) => subscribe<TerminalData>(IpcPushChannels.terminalData, listener),
+    onExit: (listener) => subscribe<TerminalExit>(IpcPushChannels.terminalExit, listener),
+  },
+
 };
 
 contextBridge.exposeInMainWorld('nova', novaApi);

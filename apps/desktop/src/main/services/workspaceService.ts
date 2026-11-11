@@ -101,6 +101,16 @@ export class WorkspaceService {
     return this.loadRecent();
   }
 
+  /**
+   * The workspace that is currently open.
+   *
+   * The renderer uses this to stay in sync with the main process (the
+   * workspace may also have been changed from another window).
+   */
+  getActiveWorkspace(): FsResult<Workspace | null> {
+    return fsOk<Workspace | null>(this.active);
+  }
+
   // -------------------------------------------------------------------------
   // Persistence
   // -------------------------------------------------------------------------

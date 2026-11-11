@@ -12,24 +12,12 @@ interface SidebarProps {
   focusSignal: number;
 }
 
-function bodyFor(activity: ActivityId, theme: Theme, onToggleTheme: () => void): ReactNode {
+function bodyFor(
+  activity: ActivityId,
+  theme: Theme,
+  onToggleTheme: () => void,
+): ReactNode {
   switch (activity) {
-    case 'search':
-      return (
-        <PlaceholderView
-          title="Search"
-          note="Search across every file in the open workspace with filters and replace."
-          milestone="Milestone 3"
-        />
-      );
-    case 'scm':
-      return (
-        <PlaceholderView
-          title="Source Control"
-          note="Inspect Git status and diffs, stage changes, and commit from NOVA IDE."
-          milestone="Milestone 3"
-        />
-      );
     case 'agent':
       return (
         <PlaceholderView

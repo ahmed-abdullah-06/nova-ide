@@ -13,7 +13,8 @@ if (started) {
 app.whenReady().then(() => {
   // Security measures must be in place before any renderer loads (spec §19).
   installContentSecurityPolicy();
-  registerIpcHandlers();
+  // The returned callback terminates every child process on quit.
+  const stopChildProcesses = registerIpcHandlers();
   installApplicationMenu();
   createMainWindow();
 
@@ -22,6 +23,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
+  });
+
+  app.on('will-quit', () => {
+    stopChildProcesses();
   });
 });
 
