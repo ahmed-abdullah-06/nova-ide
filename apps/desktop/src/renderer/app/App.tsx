@@ -15,6 +15,8 @@ import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
 import { TerminalPanel } from '../features/terminal/TerminalPanel';
+import { ProblemsPanel } from '../features/problems/ProblemsPanel';
+import { useProblems } from '../features/problems/useProblems';
 
 interface CursorPosition {
   line: number;
@@ -47,6 +49,10 @@ function Workspace(): ReactNode {
   const handleOpenFile = (path: string): void => {
     void openFile(path);
   };
+
+  // The badge of the problems tab shows how many diagnostics the language
+  // services reported for the open files.
+  const problems = useProblems();
 
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
   // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
@@ -137,6 +143,21 @@ function Workspace(): ReactNode {
         <EditorArea theme={theme} onCursorChange={setCursor} />
         <BottomPanel
           renderTerminal={() => <TerminalPanel hasWorkspace={hasWorkspace} />}
+          problemCount={problems.errorCount}
+          renderProblems={() => (
+            <ProblemsPanel
+              onOpenProblem={(entry) =>
+                handleOpenSearchResult({
+                  path: entry.path,
+                  relativePath: entry.path,
+                  name: entry.path,
+                  line: entry.line,
+                  column: entry.column,
+                  preview: entry.message,
+                })
+              }
+            />
+          )}
         />
       </div>
       <AiPanel />

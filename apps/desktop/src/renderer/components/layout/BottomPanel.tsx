@@ -7,21 +7,32 @@
  */
 import { useState, type ReactNode } from 'react';
 
-type BottomPanelTab = 'terminal';
+type BottomPanelTab = 'terminal' | 'problems';
 
 interface TabDefinition {
   id: BottomPanelTab;
   label: string;
 }
 
-const TABS: readonly TabDefinition[] = [{ id: 'terminal', label: 'Terminal' }];
+const TABS: readonly TabDefinition[] = [
+  { id: 'terminal', label: 'Terminal' },
+  { id: 'problems', label: 'Problems' },
+];
 
 export interface BottomPanelProps {
   /** Renders the terminal panel. */
   renderTerminal: () => ReactNode;
+  /** Renders the problems panel. */
+  renderProblems: () => ReactNode;
+  /** Number of problems, shown as a badge on the problems tab. */
+  problemCount?: number;
 }
 
-export function BottomPanel({ renderTerminal }: BottomPanelProps): ReactNode {
+export function BottomPanel({
+  renderTerminal,
+  renderProblems,
+  problemCount = 0,
+}: BottomPanelProps): ReactNode {
   const [active, setActive] = useState<BottomPanelTab>('terminal');
 
   return (
@@ -39,11 +50,15 @@ export function BottomPanel({ renderTerminal }: BottomPanelProps): ReactNode {
             onClick={() => setActive(tab.id)}
           >
             {tab.label}
+            {tab.id === 'problems' && problemCount > 0 ? (
+              <span className="bottom-panel__badge">{problemCount}</span>
+            ) : null}
           </button>
         ))}
       </div>
       <div className="bottom-panel__body" role="tabpanel">
         {active === 'terminal' ? renderTerminal() : null}
+        {active === 'problems' ? renderProblems() : null}
       </div>
     </section>
   );

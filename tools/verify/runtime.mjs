@@ -122,6 +122,12 @@ function createFixture() {
   git('add', 'index.js', 'hello.js');
   git('commit', '-m', 'initial commit');
   writeFileSync(path.join(root, 'untracked.txt'), 'untracked\n', 'utf8');
+  // A file with a type error, so the problems panel has something to show.
+  writeFileSync(
+    path.join(root, 'broken.ts'),
+    'const value: number = "not a number";\n',
+    'utf8',
+  );
   return root;
 }
 
@@ -359,6 +365,73 @@ async function main() {
     );
 
 
+
+    // The problems panel must show the diagnostics of the editor.
+    const problemsOpened = await session.evaluate(
+      `(() => {
+        // The sidebar shows the search view at this point, so the explorer
+        // is activated again first.
+        const buttons = [...document.querySelectorAll('.activity-bar__item')];
+        const explorer = buttons.find(
+          (b) => b.getAttribute('aria-label') === 'Explorer');
+        if (explorer === undefined) return false;
+        explorer.click();
+        return true;
+      })()`,
+    );
+    check('the explorer view is reachable', problemsOpened === true);
+
+    const treeExpanded = await waitFor(
+      session,
+      `(() => {
+        const root = document.querySelector('.tree-node');
+        if (root === null) return false;
+        if (root.getAttribute('aria-expanded') === 'false') root.click();
+        return true;
+      })()`,
+      15000,
+    );
+    check('the explorer tree is reachable', treeExpanded === true);
+
+    const fileOpened = await waitFor(
+      session,
+      `(() => {
+        const labels = [...document.querySelectorAll('.tree-node__label')];
+        const file = labels.find((l) => l.textContent === 'broken.ts');
+        if (file === undefined) return false;
+        file.click();
+        return true;
+      })()`,
+      15000,
+    );
+    check('the file with the error can be opened', fileOpened === true);
+
+    const problemsTab = await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.bottom-panel__tab')];
+        const problems = tabs.find((tab) => tab.textContent.includes('Problems'));
+        if (problems === undefined) return false;
+        problems.click();
+        return true;
+      })()`,
+    );
+    check('problems panel is reachable', problemsTab === true);
+
+    const diagnostics = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.problems-panel__item')];
+        return items.length > 0
+          ? items.map((i) => i.textContent).join(' | ')
+          : false;
+      })()`,
+      30000,
+    );
+    check(
+      'problems panel lists the diagnostics of the editor',
+      typeof diagnostics === 'string' && diagnostics.includes('Error'),
+      String(diagnostics).slice(0, 160),
+    );
 
     // The source control panel must report the repository state.
     const scmReachable = await session.evaluate(
