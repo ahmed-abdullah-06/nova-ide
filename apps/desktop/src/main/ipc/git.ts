@@ -15,6 +15,8 @@ export interface GitHandlers {
   discard: Handler<'git:discard'>;
   commit: Handler<'git:commit'>;
   diff: Handler<'git:diff'>;
+  branches: Handler<'git:branches'>;
+  switchBranch: Handler<'git:switch-branch'>;
 }
 
 export function createGitHandlers(git: GitService): GitHandlers {
@@ -25,5 +27,7 @@ export function createGitHandlers(git: GitService): GitHandlers {
     discard: async (path) => git.discard(path),
     commit: async (message) => git.commit(message),
     diff: async (path, staged) => git.diff(path, staged),
+    branches: async () => git.branches(),
+    switchBranch: async (name) => git.switchBranch(name),
   };
 }

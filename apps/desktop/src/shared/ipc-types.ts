@@ -38,6 +38,8 @@ export const IpcChannels = {
   gitDiscard: 'git:discard',
   gitCommit: 'git:commit',
   gitDiff: 'git:diff',
+  gitBranches: 'git:branches',
+  gitSwitchBranch: 'git:switch-branch',
   taskList: 'task:list',
   taskRun: 'task:run',
   taskCancel: 'task:cancel',
@@ -228,6 +230,14 @@ export interface GitFileChange {
   status: string;
 }
 
+/** One branch of the repository. */
+export interface GitBranch {
+  /** The name of the branch (for example "main"). */
+  name: string;
+  /** True when the branch is the checked out one. */
+  current: boolean;
+}
+
 /** The state of the repository of the active workspace. */
 export interface GitStatus {
   /** False when the workspace is not inside a git repository. */
@@ -396,6 +406,10 @@ export interface IpcInvokeMap {
     args: [path: string, staged: boolean];
     result: FsResult<{ diff: string }>;
   };
+  /** Lists the local branches of the repository. */
+  'git:branches': { args: []; result: FsResult<GitBranch[]> };
+  /** Checks out another local branch. */
+  'git:switch-branch': { args: [name: string]; result: FsResult<GitStatus> };
   /** Lists the scripts of the workspace package.json. */
   'task:list': { args: []; result: FsResult<TaskDefinition[]> };
   /** Starts the script with the given name. */
@@ -487,6 +501,10 @@ export interface NovaGitApi {
   commit(message: string): Promise<FsResult<GitStatus>>;
   /** Reads the textual diff of a path. */
   diff(path: string, staged: boolean): Promise<FsResult<{ diff: string }>>;
+  /** Lists the local branches of the repository. */
+  branches(): Promise<FsResult<GitBranch[]>>;
+  /** Checks out another local branch. */
+  switchBranch(name: string): Promise<FsResult<GitStatus>>;
 }
 
 /** Build / test task runner (spec §6.1, §21). */

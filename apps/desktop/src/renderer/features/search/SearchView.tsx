@@ -68,6 +68,10 @@ export function SearchView({
 
       {!hasWorkspace ? (
         <p className="search-view__empty">Open a folder to search it.</p>
+      ) : search.searching ? (
+        <p className="search-view__empty" role="status">
+          Searching…
+        </p>
       ) : search.input.length === 0 ? (
         <p className="search-view__empty">Type to search the workspace.</p>
       ) : search.results.length === 0 && !search.searching ? (

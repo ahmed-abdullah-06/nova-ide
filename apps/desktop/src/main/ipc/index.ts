@@ -274,6 +274,12 @@ export function registerIpcHandlers(): () => Promise<void> {
     assertPathAndBoolean,
     gitHandlers.diff,
   );
+  registerChannel(IpcChannels.gitBranches, assertNoArgs, gitHandlers.branches);
+  registerChannel(
+    IpcChannels.gitSwitchBranch,
+    assertOneStringArg,
+    gitHandlers.switchBranch,
+  );
 
   // Tasks
   registerChannel(IpcChannels.taskList, assertNoArgs, taskHandlers.list);

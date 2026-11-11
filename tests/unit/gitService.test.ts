@@ -182,6 +182,76 @@ describe('git actions', () => {
   });
 });
 
+describe('git branches', () => {
+  it('lists the local branches and marks the current one', async () => {
+    await initRepository();
+    await git(root, 'branch', 'feature/search');
+    const result = await service?.branches();
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      const names = result.value.map((branch) => branch.name);
+      expect(names).toContain('main');
+      expect(names).toContain('feature/search');
+      const current = result.value.find((branch) => branch.current);
+      expect(current?.name).toBe('main');
+    }
+  });
+
+  it('returns an empty list when there is no repository', async () => {
+    const result = await service?.branches();
+    // A folder that is not a repository has no branches.
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.value).toEqual([]);
+    }
+  });
+
+  it('switches to another branch', async () => {
+    await initRepository();
+    await git(root, 'branch', 'feature/search');
+    const result = await service?.switchBranch('feature/search');
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.value.branch).toBe('feature/search');
+    }
+    const branch = await git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
+    expect(branch.trim()).toBe('feature/search');
+  });
+
+  it('keeps the current branch when it is selected again', async () => {
+    await initRepository();
+    const result = await service?.switchBranch('main');
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.value.branch).toBe('main');
+    }
+  });
+
+  it('refuses a branch that does not exist', async () => {
+    await initRepository();
+    const result = await service?.switchBranch('does-not-exist');
+    expect(result?.ok).toBe(false);
+    if (result && !result.ok) {
+      expect(result.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('refuses a branch name that could be an option', async () => {
+    await initRepository();
+    const result = await service?.switchBranch('--upload-pack=evil');
+    expect(result?.ok).toBe(false);
+    if (result && !result.ok) {
+      expect(result.code).toBe('INVALID_PATH');
+    }
+  });
+
+  it('refuses an empty branch name', async () => {
+    await initRepository();
+    const result = await service?.switchBranch('');
+    expect(result?.ok).toBe(false);
+  });
+});
+
 describe('git path confinement', () => {
   it('refuses a path outside the workspace', async () => {
     await initRepository();

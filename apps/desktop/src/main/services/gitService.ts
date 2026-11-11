@@ -15,7 +15,12 @@
  */
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import type { FsResult, GitFileChange, GitStatus } from '../../shared/ipc-types';
+import type {
+  FsResult,
+  GitBranch,
+  GitFileChange,
+  GitStatus,
+} from '../../shared/ipc-types';
 import { resolveInWorkspace } from './pathSecurity';
 import { fsFail, fsOk } from './results';
 
@@ -25,6 +30,8 @@ const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const GIT_TIMEOUT_MS = 30_000;
 /** Maximum length of a commit message. */
 const MAX_COMMIT_MESSAGE_LENGTH = 4096;
+/** Maximum length of a branch name. */
+const MAX_BRANCH_NAME_LENGTH = 255;
 
 export interface GitServiceOptions {
   /** Returns the canonical root of the active workspace, or null. */
@@ -41,6 +48,16 @@ interface GitResult {
 }
 
 /**
+ * The tail of the queue of the git commands.
+ *
+ * Git itself is not safe for concurrent access to the same repository:
+ * two commands that refresh the index at the same time wait for each
+ * other (and the user would see a status that takes seconds). Every
+ * command therefore runs alone — they are fast enough on their own.
+ */
+let commandQueue: Promise<unknown> = Promise.resolve();
+
+/**
  * Runs git with the given arguments.
  *
  * The environment is trimmed so git never opens an interactive prompt
@@ -50,6 +67,23 @@ function runGit(
   cwd: string,
   args: string[],
   timeoutMs = GIT_TIMEOUT_MS,
+): Promise<GitResult> {
+  const run = commandQueue.then(() => executeGit(cwd, args, timeoutMs));
+  // A failed command must not block the queue.
+  commandQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
+ * Runs a single git command.
+ */
+function executeGit(
+  cwd: string,
+  args: string[],
+  timeoutMs: number,
 ): Promise<GitResult> {
   return new Promise((resolve) => {
     let stdout = '';
@@ -249,6 +283,88 @@ export class GitService {
       return fsFail('UNKNOWN', result.stderr.trim() || 'The diff failed');
     }
     return fsOk({ diff: result.stdout });
+  }
+
+  /**
+   * Lists the local branches of the repository.
+   *
+   * Only local branches are listed: a remote branch is not checked out
+   * directly, it is created from a remote-tracking branch first.
+   */
+  async branches(): Promise<FsResult<GitBranch[]>> {
+    const root = this.getRoot();
+    if (root === null) {
+      return fsFail('NO_WORKSPACE', 'Open a folder before using Git');
+    }
+    const result = await runGit(root, [
+      'for-each-ref',
+      '--format=%(refname:short)%09%(HEAD)',
+      'refs/heads',
+    ]);
+    if (result.spawnFailed) {
+      return fsFail('UNKNOWN', 'Git is not installed or not available on the PATH');
+    }
+    if (result.code !== 0) {
+      return fsOk<GitBranch[]>([]);
+    }
+
+    const branches: GitBranch[] = [];
+    for (const line of result.stdout.split('\n')) {
+      if (line.trim().length === 0) {
+        continue;
+      }
+      const [name, marker] = line.split('\t');
+      if (name === undefined || name.length === 0) {
+        continue;
+      }
+      branches.push({ name, current: marker === '*' });
+    }
+    return fsOk(branches);
+  }
+
+  /**
+   * Checks out another local branch.
+   *
+   * The branch must be one of the local branches of the repository: the
+   * name is matched against the list, so a value from the renderer can
+   * never be interpreted as a git option.
+   */
+  async switchBranch(name: string): Promise<FsResult<GitStatus>> {
+    const root = this.getRoot();
+    if (root === null) {
+      return fsFail('NO_WORKSPACE', 'Open a folder before using Git');
+    }
+    if (name.length === 0 || name.length > MAX_BRANCH_NAME_LENGTH) {
+      return fsFail('INVALID_PATH', 'Invalid branch name');
+    }
+    // A name that starts with a dash could be an option of git.
+    if (name.startsWith('-')) {
+      return fsFail('INVALID_PATH', 'Invalid branch name');
+    }
+
+    const known = await this.branches();
+    if (!known.ok) {
+      return fsFail(known.code, known.message);
+    }
+    const branch = known.value.find((entry) => entry.name === name);
+    if (branch === undefined) {
+      return fsFail('NOT_FOUND', `The branch "${name}" does not exist`);
+    }
+    if (branch.current) {
+      return this.status();
+    }
+
+    const result = await runGit(root, ['switch', name]);
+    if (result.spawnFailed) {
+      return fsFail('UNKNOWN', 'Git is not installed or not available on the PATH');
+    }
+    if (result.code !== 0) {
+      return fsFail(
+        'UNKNOWN',
+        result.stderr.trim() || 'The branch could not be checked out',
+      );
+    }
+    return this.status();
   }
 
   /**

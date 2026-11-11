@@ -156,6 +156,26 @@ export function SourceControlView({
             </span>
           ) : null}
         </span>
+        {git.branches.length > 1 ? (
+          <select
+            className="source-control__branch-select"
+            aria-label="Switch branch"
+            title="Switch branch"
+            value={status?.branch ?? ''}
+            onChange={(event) => {
+              const name = event.target.value;
+              if (name.length > 0 && name !== status?.branch) {
+                git.switchBranch(name);
+              }
+            }}
+          >
+            {git.branches.map((branch) => (
+              <option key={branch.name} value={branch.name}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <button
           type="button"
           className="source-control__action"

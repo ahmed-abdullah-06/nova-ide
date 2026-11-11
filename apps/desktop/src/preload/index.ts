@@ -96,6 +96,8 @@ const novaApi: NovaApi = {
     discard: (path) => invoke(IpcChannels.gitDiscard, path),
     commit: (message) => invoke(IpcChannels.gitCommit, message),
     diff: (path, staged) => invoke(IpcChannels.gitDiff, path, staged),
+    branches: () => invoke(IpcChannels.gitBranches),
+    switchBranch: (name) => invoke(IpcChannels.gitSwitchBranch, name),
   },
 
   task: {

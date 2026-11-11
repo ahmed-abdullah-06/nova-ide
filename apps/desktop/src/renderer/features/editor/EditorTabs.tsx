@@ -16,6 +16,21 @@ export function EditorTabs({
   onClose,
   onNew,
 }: EditorTabsProps): ReactNode {
+  /**
+   * Closes a tab.
+   *
+   * A tab with unsaved changes is only closed after a confirmation, so
+   * the work is never lost silently.
+   */
+  const closeTab = (tab: EditorTab): void => {
+    if (
+      !tab.isDirty ||
+      window.confirm(`Close "${tab.name}"? Unsaved changes will be lost.`)
+    ) {
+      onClose(tab.id);
+    }
+  };
+
   return (
     <div className="editor-tabs" role="tablist" aria-label="Open editors">
       {tabs.map((tab) => {
@@ -34,7 +49,14 @@ export function EditorTabs({
                 onActivate(tab.id);
               }
             }}
-            title={tab.name}
+            onAuxClick={(event) => {
+              // The middle mouse button closes a tab.
+              if (event.button === 1) {
+                event.preventDefault();
+                closeTab(tab);
+              }
+            }}
+            title={tab.filePath ?? tab.name}
           >
             <span className="editor-tab__name">{tab.name}</span>
             {tab.isDirty && (
@@ -51,14 +73,7 @@ export function EditorTabs({
               title="Close"
               onClick={(event) => {
                 event.stopPropagation();
-                if (
-                  !tab.isDirty ||
-                  window.confirm(
-                    `Close "${tab.name}"? Unsaved changes will be lost.`,
-                  )
-                ) {
-                  onClose(tab.id);
-                }
+                closeTab(tab);
               }}
             >
               <svg

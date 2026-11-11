@@ -272,6 +272,20 @@
   font-weight: 400;
 }
 
+.source-control__branch-select {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  max-width: 140px;
+  padding: 2px 4px;
+}
+
+.source-control__branch-select:focus {
+  outline: 1px solid var(--color-accent);
+}
+
 .source-control__error {
   margin: 0;
   padding: 6px 12px;

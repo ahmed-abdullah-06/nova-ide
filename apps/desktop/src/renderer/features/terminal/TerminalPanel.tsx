@@ -27,6 +27,19 @@ export function TerminalPanel({
     }
   }, [controller]);
 
+  /**
+   * Interrupts the command that is running in the active session.
+   *
+   * Ctrl+C is sent to the shell, so the command is stopped but the session
+   * stays usable (spec: "Stopping running processes").
+   */
+  const handleStop = useCallback((): void => {
+    const sessionId = controller.activeSessionId;
+    if (sessionId !== null) {
+      controller.stop(sessionId);
+    }
+  }, [controller]);
+
   /** Copies the selection of the active terminal to the clipboard. */
   const handleCopy = useCallback((): void => {
     const selection = window.getSelection()?.toString() ?? '';
@@ -82,6 +95,15 @@ export function TerminalPanel({
             title="New terminal session"
           >
             +
+          </button>
+          <button
+            type="button"
+            className="terminal-panel__action"
+            onClick={handleStop}
+            disabled={controller.activeSessionId === null}
+            title="Stop the running command (Ctrl+C)"
+          >
+            Stop
           </button>
           <button
             type="button"

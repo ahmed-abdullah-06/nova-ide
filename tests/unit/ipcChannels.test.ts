@@ -61,6 +61,8 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.gitDiscard,
       IpcChannels.gitCommit,
       IpcChannels.gitDiff,
+      IpcChannels.gitBranches,
+      IpcChannels.gitSwitchBranch,
       IpcChannels.taskList,
       IpcChannels.taskRun,
       IpcChannels.taskCancel,

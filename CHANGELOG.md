@@ -75,8 +75,17 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     terminal, the search, the source control, the problems panel and the task
     runner (36/36 checks), plus a separate check that no process survives a
     crash of the application.
+  - Branch switching (spec §16): the local branches are listed and one of
+    them can be checked out. The name is matched against the list, so it can
+    never be interpreted as a git option; the git commands are serialised,
+    because concurrent commands on one repository wait for the index lock.
+  - The terminal can interrupt a running command ("Stop" sends Ctrl+C to the
+    shell, the session stays usable).
+  - The editor tabs show the full path of a file, can be closed with the
+    middle mouse button, and confirm the loss of unsaved changes.
+  - The search shows a progress indicator while it runs.
   - Unit tests for the terminal, the search, the git wrapper, the task runner
-    and the IPC security of the new channels — 172/172 tests passing in total.
+    and the IPC security of the new channels — 179/179 tests passing in total.
 
 ### Fixed
 

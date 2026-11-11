@@ -44,6 +44,8 @@ const options = {
 const results = [];
 /** Console errors reported by the renderer. */
 const consoleErrors = [];
+/** The moment the run started (for the timing of the checks). */
+const startedAt = Date.now();
 
 /**
  * Records the outcome of one check.
@@ -55,7 +57,8 @@ const consoleErrors = [];
 function check(name, ok, detail = '') {
   results.push({ name, ok, detail });
   const mark = ok ? 'PASS' : 'FAIL';
-  console.log(`${mark}  ${name}${detail ? ` — ${detail}` : ''}`);
+  const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.log(`${mark}  ${name}${detail ? ` — ${detail}` : ''} [${seconds}s]`);
 }
 
 /**
@@ -121,6 +124,7 @@ function createFixture() {
   git('config', 'commit.gpgsign', 'false');
   git('add', 'index.js', 'hello.js');
   git('commit', '-m', 'initial commit');
+  git('branch', 'feature/verify');
   writeFileSync(path.join(root, 'untracked.txt'), 'untracked\n', 'utf8');
   // A file with a type error, so the problems panel has something to show.
   writeFileSync(
@@ -551,6 +555,7 @@ async function main() {
       String(cancelledStatus),
     );
 
+
     // The source control panel must report the repository state.
     const scmReachable = await session.evaluate(
       `(() => {
@@ -598,6 +603,78 @@ async function main() {
       'source control shows the current branch',
       branch === 'main',
       String(branch),
+    );
+
+    // The branch selector must offer the other branch of the fixture.
+    const branchSelect = await waitFor(
+      session,
+      `(() => {
+        const select = document.querySelector('.source-control__branch-select');
+        if (select === null) return false;
+        const options = [...select.options].map((o) => o.value);
+        return options.includes('feature/verify') ? options.join(',') : false;
+      })()`,
+      15000,
+    );
+    check(
+      'source control offers the other branches',
+      typeof branchSelect === 'string',
+      String(branchSelect),
+    );
+
+    // Switching the branch must be visible in the panel.
+    const beforeSwitch = await session.evaluate(
+      `(() => {
+        const select = document.querySelector('.source-control__branch-select');
+        return select === null ? 'NO SELECT' : select.disabled;
+      })()`,
+    );
+    const switched = await session.evaluate(
+      `(() => {
+        const select = document.querySelector('.source-control__branch-select');
+        if (select === null) return false;
+        select.value = 'feature/verify';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    check(
+      'the branch can be switched',
+      switched === true,
+      `state: ${JSON.stringify(beforeSwitch)}`,
+    );
+
+    const newBranch = await waitFor(
+      session,
+      `(() => {
+        const element = document.querySelector('.source-control__branch');
+        if (element === null) return false;
+        const text = element.textContent.trim();
+        // The check waits for the new branch, not for any branch.
+        return text === 'feature/verify' ? text : false;
+      })()`,
+      30000,
+    );
+    const branchError = await session.evaluate(
+      `(() => {
+        const error = document.querySelector('.source-control__error');
+        return error === null ? '' : error.textContent.trim();
+      })()`,
+    );
+    const branchDiag = await session.evaluate(
+      `(() => {
+        const select = document.querySelector('.source-control__branch-select');
+        return {
+          selectValue: select === null ? 'NO SELECT' : select.value,
+          disabled: select === null ? null : select.disabled,
+          diag: window.__novaSwitchDiag ?? 'NO DIAG',
+        };
+      })()`,
+    );
+    check(
+      'the switched branch is shown',
+      newBranch === 'feature/verify',
+      `${String(newBranch)} ${String(branchError)} ${JSON.stringify(branchDiag)}`,
     );
 
     // The untracked file of the fixture must be listed.
@@ -674,6 +751,92 @@ async function main() {
       20000,
     );
     check('the commit empties the staged group', committedState === 'clean');
+
+
+    // The terminal must be able to stop a running command without closing
+    // the session.
+    const terminalTab = await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.bottom-panel__tab')];
+        const terminal = tabs.find((tab) => tab.textContent.includes('Terminal'));
+        if (terminal === undefined) return false;
+        terminal.click();
+        return true;
+      })()`,
+    );
+    check('the terminal tab is reachable', terminalTab === true);
+
+    await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return true;
+      })()`,
+    );
+    await session.insertText('Start-Sleep 30');
+    await session.pressKey('Enter', 13);
+
+    // The command must really be running before it is interrupted.
+    const commandStarted = await waitFor(
+      session,
+      `(() => {
+        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
+        if (rows.length === 0) return false;
+        const text = [...rows].map((row) => row.textContent).join('\\n');
+        return text.includes('Start-Sleep 30');
+      })()`,
+      30000,
+    );
+    check('the command in the terminal is running', commandStarted !== false);
+
+    const stopButtonClicked = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.terminal-panel__action')];
+        const stop = buttons.find((b) => b.textContent.trim() === 'Stop');
+        if (stop === undefined) return false;
+        stop.click();
+        return true;
+      })()`,
+    );
+    check(
+      'the terminal can stop a running command',
+      stopButtonClicked === true,
+    );
+
+    // The session must still be usable after the interrupt.
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const terminalText = await session.evaluate(
+      `(() => {
+        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
+        return [...rows].map((row) => row.textContent).join('\\n');
+      })()`,
+    );
+    await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return true;
+      })()`,
+    );
+    await session.insertText('echo NOVA_AFTER_STOP');
+    await session.pressKey('Enter', 13);
+    const afterStop = await waitFor(
+      session,
+      `(() => {
+        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
+        if (rows.length === 0) return false;
+        const text = [...rows].map((row) => row.textContent).join('\\n');
+        return text.includes('NOVA_AFTER_STOP');
+      })()`,
+      30000,
+    );
+    check(
+      'the terminal session survives the interrupt',
+      afterStop !== false,
+      `${String(afterStop).slice(0, 60)} | ${String(terminalText).slice(-300)}`,
+    );
 
     // The renderer must not log any error.
     check(

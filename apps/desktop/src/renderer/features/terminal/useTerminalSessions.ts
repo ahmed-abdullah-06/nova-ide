@@ -47,6 +47,8 @@ export interface TerminalController {
   selectSession: (sessionId: string) => void;
   /** Sends keystrokes to a session. */
   write: (sessionId: string, data: string) => void;
+  /** Interrupts the command that is running in a session. */
+  stop: (sessionId: string) => void;
   /** Resizes a session's pseudo-terminal. */
   resize: (sessionId: string, cols: number, rows: number) => void;
   /** Subscribes to output of a session; returns an unsubscribe function. */
@@ -200,6 +202,19 @@ export function useTerminalSessions(enabled: boolean): TerminalController {
     [],
   );
 
+  /**
+   * Interrupts the command that is running in a session.
+   *
+   * Ctrl+C is sent to the shell: the command is stopped, but the session
+   * stays usable.
+   */
+  const stop = useCallback(
+    (sessionId: string): void => {
+      write(sessionId, '\u0003');
+    },
+    [write],
+  );
+
   return {
     sessions,
     activeSessionId,
@@ -207,6 +222,7 @@ export function useTerminalSessions(enabled: boolean): TerminalController {
     closeSession,
     selectSession,
     write,
+    stop,
     resize,
     subscribeOutput,
   };

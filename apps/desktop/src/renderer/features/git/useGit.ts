@@ -6,7 +6,7 @@
  * commit). Every action returns the new status, so the view stays in sync.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GitStatus } from '../../../shared/ipc-types';
+import type { GitBranch, GitStatus } from '../../../shared/ipc-types';
 
 /** The status of a workspace that is not a repository. */
 const NOT_A_REPOSITORY: GitStatus = {
@@ -23,6 +23,8 @@ const NOT_A_REPOSITORY: GitStatus = {
 export interface GitController {
   /** The current status, or null while it is still unknown. */
   status: GitStatus | null;
+  /** The local branches of the repository. */
+  branches: GitBranch[];
   /** The last error message. */
   error: string | null;
   /** True while a git command is running. */
@@ -39,10 +41,13 @@ export interface GitController {
   commit: (message: string) => void;
   /** Reads the diff of a path. */
   diff: (path: string, staged: boolean) => Promise<string | null>;
+  /** Checks out another local branch. */
+  switchBranch: (name: string) => void;
 }
 
 export function useGit(enabled: boolean): GitController {
   const [status, setStatus] = useState<GitStatus | null>(null);
+  const [branches, setBranches] = useState<GitBranch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mountedRef = useRef(true);
@@ -74,28 +79,60 @@ export function useGit(enabled: boolean): GitController {
     });
   }, [enabled]);
 
+  // The branches are read together with the status.
+  const loadBranches = useCallback((): void => {
+    const api = window.nova;
+    if (!api || !enabled) {
+      setBranches([]);
+      return;
+    }
+    void api.git.branches().then((result) => {
+      if (!mountedRef.current) {
+        return;
+      }
+      setBranches(result.ok ? result.value : []);
+    });
+  }, [enabled]);
+
   // The status is refreshed when the workspace changes; there is no
   // polling, because a busy repository makes polling expensive (the git
   // status is explicit instead).
   useEffect(() => {
     refresh();
-  }, [refresh]);
+    loadBranches();
+  }, [refresh, loadBranches]);
 
   const run = useCallback(
     (
       action: () => Promise<{ ok: boolean; message: string }>,
     ): void => {
       setBusy(true);
-      void action().then((result) => {
-        if (!mountedRef.current) {
-          return;
-        }
-        setBusy(false);
-        setError(result.ok ? null : result.message);
-        refresh();
-      });
+      void action()
+        .then((result) => {
+          if (!mountedRef.current) {
+            return;
+          }
+          setError(result.ok ? null : result.message);
+          refresh();
+          loadBranches();
+        })
+        .catch((error: unknown) => {
+          if (!mountedRef.current) {
+            return;
+          }
+          setError(
+            error instanceof Error ? error.message : 'The Git command failed',
+          );
+        })
+        // The busy state is always released, even when the command failed —
+        // a stuck spinner would block the whole view.
+        .finally(() => {
+          if (mountedRef.current) {
+            setBusy(false);
+          }
+        });
     },
-    [refresh],
+    [refresh, loadBranches],
   );
 
   const stage = useCallback(
@@ -146,6 +183,46 @@ export function useGit(enabled: boolean): GitController {
     [run],
   );
 
+  const switchBranch = useCallback(
+    (name: string): void => {
+      const api = window.nova;
+      if (!api) {
+        return;
+      }
+      setBusy(true);
+      // The answer already carries the new status, so the repository does
+      // not have to be read again.
+      void api.git
+        .switchBranch(name)
+        .then((result) => {
+          if (!mountedRef.current) {
+            return;
+          }
+          if (result.ok) {
+            setStatus(result.value);
+            setError(null);
+          } else {
+            setError(result.message);
+          }
+          loadBranches();
+        })
+        .catch((error: unknown) => {
+          if (!mountedRef.current) {
+            return;
+          }
+          setError(
+            error instanceof Error ? error.message : 'The Git command failed',
+          );
+        })
+        .finally(() => {
+          if (mountedRef.current) {
+            setBusy(false);
+          }
+        });
+    },
+    [loadBranches],
+  );
+
   const diff = useCallback(
     async (path: string, staged: boolean): Promise<string | null> => {
       const result = await window.nova?.git.diff(path, staged);
@@ -157,5 +234,17 @@ export function useGit(enabled: boolean): GitController {
     [],
   );
 
-  return { status, error, busy, refresh, stage, unstage, discard, commit, diff };
+  return {
+    status,
+    branches,
+    error,
+    busy,
+    refresh,
+    stage,
+    unstage,
+    discard,
+    commit,
+    diff,
+    switchBranch,
+  };
 }

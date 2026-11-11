@@ -320,7 +320,10 @@ export class TerminalService {
     try {
       session.process.kill();
     } catch (error) {
-      console.error('[terminal] kill failed:', error);
+      // The tree is already gone (or node-pty could not enumerate the
+      // console processes because its helper is not available in the
+      // hardened build) — the shell is terminated either way.
+      console.warn('[terminal] the shell was already terminated:', error);
     }
   }
   /** Resolves the requested working directory inside the workspace. */

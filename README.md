@@ -78,14 +78,15 @@ Milestone 2 (workspace and file explorer) is still in place:
 Milestone 3 adds the developer tools:
 
 - **Integrated terminal** in the bottom panel: several sessions, a real
-  pseudo-terminal (Windows ConPTY), resize, copy, and a kill that terminates
-  the whole process tree.
+  pseudo-terminal (Windows ConPTY), resize, copy, a "Stop" button that
+  interrupts the running command, and a kill that terminates the whole
+  process tree.
 - **Project and file search** in the sidebar: by file name or by file content,
   honouring `.gitignore`, skipping build output and binary files, with
   incremental results and a bounded result count.
-- **Git integration** in the sidebar: branch, staged / unstaged / untracked
-  files, the diff of a file, stage, unstage, discard (behind a confirmation)
-  and commit.
+- **Git integration** in the sidebar: branch (with a switcher for the other
+  local branches), staged / unstaged / untracked files, the diff of a file,
+  stage, unstage, discard (behind a confirmation) and commit.
 - **Problems panel** in the bottom panel: the diagnostics that the language
   services report for the open files, with severity, position and source.
 - **Task runner** in the bottom panel: the scripts of the workspace
