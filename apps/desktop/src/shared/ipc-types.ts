@@ -38,6 +38,9 @@ export const IpcChannels = {
   gitDiscard: 'git:discard',
   gitCommit: 'git:commit',
   gitDiff: 'git:diff',
+  taskList: 'task:list',
+  taskRun: 'task:run',
+  taskCancel: 'task:cancel',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -52,6 +55,8 @@ export const IpcPushChannels = {
   terminalData: 'terminal:data',
   terminalExit: 'terminal:exit',
   searchResults: 'search:results',
+  taskOutput: 'task:output',
+  taskStatus: 'task:status',
 } as const;
 
 export type IpcPushChannel =
@@ -244,6 +249,39 @@ export interface GitStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Tasks (spec §6.1, §21)
+// ---------------------------------------------------------------------------
+
+/** One script of the workspace `package.json`. */
+export interface TaskDefinition {
+  /** The name of the script (the key in `package.json`). */
+  name: string;
+  /** The command of the script (for display only). */
+  command: string;
+}
+
+/** The lifecycle state of a task. */
+export type TaskStatus = 'running' | 'success' | 'failed' | 'cancelled';
+
+/** A chunk of output of a running task. */
+export interface TaskOutput {
+  /** The id of the task the output belongs to. */
+  taskId: string;
+  /** The output text. */
+  chunk: string;
+}
+
+/** A lifecycle change of a task. */
+export interface TaskStatusEvent {
+  /** The id of the task. */
+  taskId: string;
+  /** The new state of the task. */
+  status: TaskStatus;
+  /** The exit code, or null when the task was cancelled. */
+  exitCode: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // Terminal (spec §6.1, §17)
 // ---------------------------------------------------------------------------
 
@@ -358,6 +396,12 @@ export interface IpcInvokeMap {
     args: [path: string, staged: boolean];
     result: FsResult<{ diff: string }>;
   };
+  /** Lists the scripts of the workspace package.json. */
+  'task:list': { args: []; result: FsResult<TaskDefinition[]> };
+  /** Starts the script with the given name. */
+  'task:run': { args: [name: string]; result: FsResult<{ taskId: string }> };
+  /** Stops a running task and kills its process tree. */
+  'task:cancel': { args: [taskId: string]; result: FsResult<void> };
 }
 
 /**
@@ -445,6 +489,20 @@ export interface NovaGitApi {
   diff(path: string, staged: boolean): Promise<FsResult<{ diff: string }>>;
 }
 
+/** Build / test task runner (spec §6.1, §21). */
+export interface NovaTaskApi {
+  /** Lists the scripts of the workspace. */
+  list(): Promise<FsResult<TaskDefinition[]>>;
+  /** Starts a script by name. */
+  run(name: string): Promise<FsResult<{ taskId: string }>>;
+  /** Stops a running task. */
+  cancel(taskId: string): Promise<FsResult<void>>;
+  /** Subscribes to the output of the tasks. */
+  onOutput(listener: (output: TaskOutput) => void): () => void;
+  /** Subscribes to the lifecycle changes of the tasks. */
+  onStatus(listener: (status: TaskStatusEvent) => void): () => void;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
@@ -453,6 +511,7 @@ export interface NovaApi {
   terminal: NovaTerminalApi;
   search: NovaSearchApi;
   git: NovaGitApi;
+  task: NovaTaskApi;
 }
 
 /**

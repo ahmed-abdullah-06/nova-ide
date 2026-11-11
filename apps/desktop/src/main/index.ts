@@ -25,8 +25,18 @@ app.whenReady().then(() => {
     }
   });
 
-  app.on('will-quit', () => {
-    stopChildProcesses();
+  // The quit is delayed until every child process is really gone, so a
+  // task or a terminal shell can never outlive the application.
+  let cleanupDone = false;
+  app.on('will-quit', (event) => {
+    if (cleanupDone) {
+      return;
+    }
+    event.preventDefault();
+    void stopChildProcesses().finally(() => {
+      cleanupDone = true;
+      app.quit();
+    });
   });
 });
 

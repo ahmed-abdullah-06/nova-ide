@@ -16,6 +16,8 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
 import { TerminalPanel } from '../features/terminal/TerminalPanel';
 import { ProblemsPanel } from '../features/problems/ProblemsPanel';
+import { TaskOutputPanel } from '../features/tasks/TaskOutputPanel';
+import { useTasks } from '../features/tasks/useTasks';
 import { useProblems } from '../features/problems/useProblems';
 
 interface CursorPosition {
@@ -53,6 +55,9 @@ function Workspace(): ReactNode {
   // The badge of the problems tab shows how many diagnostics the language
   // services reported for the open files.
   const problems = useProblems();
+
+  // The task runner offers the scripts of the workspace package.json.
+  const tasks = useTasks(hasWorkspace);
 
   // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
   // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
@@ -144,6 +149,16 @@ function Workspace(): ReactNode {
         <BottomPanel
           renderTerminal={() => <TerminalPanel hasWorkspace={hasWorkspace} />}
           problemCount={problems.errorCount}
+          renderOutput={() => (
+            <TaskOutputPanel
+              tasks={tasks.tasks}
+              runningTask={tasks.runningTask}
+              output={tasks.output}
+              onRun={tasks.run}
+              onStop={tasks.stop}
+              onRefresh={tasks.refresh}
+            />
+          )}
           renderProblems={() => (
             <ProblemsPanel
               onOpenProblem={(entry) =>

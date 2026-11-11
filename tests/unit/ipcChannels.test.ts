@@ -61,6 +61,9 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.gitDiscard,
       IpcChannels.gitCommit,
       IpcChannels.gitDiff,
+      IpcChannels.taskList,
+      IpcChannels.taskRun,
+      IpcChannels.taskCancel,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

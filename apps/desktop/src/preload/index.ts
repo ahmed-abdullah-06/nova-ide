@@ -5,6 +5,8 @@ import {
   type ExternalChange,
   type IpcInvokeMap,
   type NovaApi,
+  type TaskOutput,
+  type TaskStatusEvent,
   type SearchResults,
   type TerminalData,
   type TerminalExit,
@@ -94,6 +96,16 @@ const novaApi: NovaApi = {
     discard: (path) => invoke(IpcChannels.gitDiscard, path),
     commit: (message) => invoke(IpcChannels.gitCommit, message),
     diff: (path, staged) => invoke(IpcChannels.gitDiff, path, staged),
+  },
+
+  task: {
+    list: () => invoke(IpcChannels.taskList),
+    run: (name) => invoke(IpcChannels.taskRun, name),
+    cancel: (taskId) => invoke(IpcChannels.taskCancel, taskId),
+    onOutput: (listener) =>
+      subscribe<TaskOutput>(IpcPushChannels.taskOutput, listener),
+    onStatus: (listener) =>
+      subscribe<TaskStatusEvent>(IpcPushChannels.taskStatus, listener),
   },
 
   terminal: {

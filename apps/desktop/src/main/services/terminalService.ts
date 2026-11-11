@@ -13,9 +13,7 @@
  *  - Every session is killed when the workspace closes or the app quits, so
  *    no child process is orphaned.
  */
-import { spawn as spawnChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import type {
   FsResult,
@@ -24,65 +22,12 @@ import type {
 } from '../../shared/ipc-types';
 import { resolveInWorkspace } from './pathSecurity';
 import { fsFail, fsOk } from './results';
-
-/** Minimal shape of the node-pty API we rely on (the module is NAPI). */
-interface PtyProcess {
-  readonly pid: number;
-  write(data: string): void;
-  resize(cols: number, rows: number): void;
-  kill(signal?: string): void;
-  onData(listener: (data: string) => void): { dispose(): void };
-  onExit(
-    listener: (event: { exitCode: number; signal?: number }) => void,
-  ): { dispose(): void };
-}
-
-interface PtyModule {
-  spawn(
-    file: string,
-    args: string[],
-    options: {
-      name: string;
-      cols: number;
-      rows: number;
-      cwd: string;
-      env: Record<string, string | undefined>;
-      encoding?: string | null;
-    },
-  ): PtyProcess;
-}
-
-/**
- * node-pty is an optional native dependency: it ships prebuilt N-API
- * binaries, but a broken installation must not take the whole app down.
- * The module is loaded lazily and a failure degrades to a clear error
- * instead of a crash (see `loadPty`).
- */
-let ptyModule: PtyModule | null = null;
-let ptyLoadError: string | null = null;
-
-/**
- * Resolves `node-pty` at runtime.
- *
- * The main bundle is CommonJS, but the source is written as ES modules, so
- * `createRequire` is used to obtain a plain `require`. `node-pty` is marked
- * `external` in the Vite main build (it must stay a real file on disk).
- */
-const nodeRequire = createRequire(__filename);
-
-function loadPty(): PtyModule | null {
-  if (ptyModule !== null || ptyLoadError !== null) {
-    return ptyModule;
-  }
-  try {
-    ptyModule = nodeRequire('node-pty') as PtyModule;
-  } catch (error) {
-    ptyLoadError =
-      error instanceof Error ? error.message : 'unknown error';
-    console.error('[terminal] node-pty is unavailable:', ptyLoadError);
-  }
-  return ptyModule;
-}
+import {
+  killProcessTree,
+  loadPty,
+  ptyUnavailable,
+  type PtyProcess,
+} from './processTree';
 
 /** Maximum number of concurrent terminal sessions. */
 const MAX_SESSIONS = 8;
@@ -149,6 +94,13 @@ export interface TerminalServiceOptions {
   onData: (sessionId: string, data: string) => void;
   /** Called when a session ends. */
   onExit: (exit: TerminalExit) => void;
+  /**
+   * Called when a shell process starts, so it can be terminated if the
+   * application dies unexpectedly.
+   */
+  onProcessStart?: (pid: number) => void;
+  /** Called when a shell process is gone. */
+  onProcessEnd?: (pid: number) => void;
 }
 
 export class TerminalService {
@@ -156,11 +108,15 @@ export class TerminalService {
   private readonly getRoot: () => string | null;
   private readonly onData: (sessionId: string, data: string) => void;
   private readonly onExit: (exit: TerminalExit) => void;
+  private readonly onProcessStart: ((pid: number) => void) | undefined;
+  private readonly onProcessEnd: ((pid: number) => void) | undefined;
 
   constructor(options: TerminalServiceOptions) {
     this.getRoot = options.getRoot;
     this.onData = options.onData;
     this.onExit = options.onExit;
+    this.onProcessStart = options.onProcessStart;
+    this.onProcessEnd = options.onProcessEnd;
   }
 
   /** Number of live sessions (used by tests and diagnostics). */
@@ -191,7 +147,7 @@ export class TerminalService {
     if (pty === null) {
       return fsFail(
         'UNKNOWN',
-        `The terminal backend is unavailable: ${ptyLoadError ?? 'unknown error'}`,
+        `The terminal backend is unavailable: ${ptyUnavailable()}`,
       );
     }
 
@@ -242,6 +198,7 @@ export class TerminalService {
         this.onData(id, data);
       }),
     );
+    this.onProcessStart?.(child.pid);
     subscriptions.push(
       child.onExit((event) => {
         // The session may already have been disposed by an explicit kill;
@@ -349,6 +306,7 @@ export class TerminalService {
       }
     }
     session.subscriptions.length = 0;
+    this.onProcessEnd?.(session.process.pid);
     // The process tree is terminated BEFORE the shell itself: on Windows
     // `taskkill /T` resolves the descendants through their parent, so
     // killing the shell first would detach the children.
@@ -378,39 +336,3 @@ export class TerminalService {
   }
 }
 
-/**
- * Best-effort cleanup of a process tree.
- *
- * `node-pty` kills the shell itself, but a shell can have spawned children
- * (a dev server, a watcher). On Windows the process tree is terminated with
- * `taskkill /T`; on POSIX the process group is signalled.
- *
- * The tree must be terminated BEFORE the shell itself, because `taskkill /T`
- * resolves the descendants through their parent.
- */
-export function killProcessTree(pid: number): void {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return;
-  }
-  if (process.platform === 'win32') {
-    try {
-      spawnChildProcess('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-    } catch (error) {
-      console.error('[terminal] could not kill the process tree:', error);
-    }
-    return;
-  }
-  try {
-    // Negative pid = the whole process group of the shell.
-    process.kill(-pid, 'SIGKILL');
-  } catch {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch (error) {
-      console.error('[terminal] could not kill the process group:', error);
-    }
-  }
-}

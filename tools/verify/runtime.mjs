@@ -433,6 +433,124 @@ async function main() {
       String(diagnostics).slice(0, 160),
     );
 
+    // The task runner must list the scripts of the workspace.
+    const outputTab = await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.bottom-panel__tab')];
+        const output = tabs.find((tab) => tab.textContent.includes('Output'));
+        if (output === undefined) return false;
+        output.click();
+        return true;
+      })()`,
+    );
+    check('task panel is reachable', outputTab === true);
+
+    const taskNames = await waitFor(
+      session,
+      `(() => {
+        const names = [...document.querySelectorAll('.task-panel__name')]
+          .map((n) => n.textContent);
+        return names.length > 0 ? names.join(',') : false;
+      })()`,
+      15000,
+    );
+    check(
+      'task runner lists the workspace scripts',
+      typeof taskNames === 'string' && taskNames.includes('hello'),
+      String(taskNames),
+    );
+
+    // A task must run and report its output.
+    const taskStarted = await session.evaluate(
+      `(() => {
+        const items = [...document.querySelectorAll('.task-panel__item')];
+        const item = items.find((i) => i.textContent.includes('hello'));
+        if (item === undefined) return false;
+        const button = item.querySelector('.task-panel__run');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('task runner starts a script', taskStarted === true);
+
+    const taskOutput = await waitFor(
+      session,
+      `(() => {
+        const output = document.querySelector('.task-panel__output');
+        return output !== null && output.textContent.includes('NOVA_TASK_OK')
+          ? output.textContent
+          : false;
+      })()`,
+      30000,
+    );
+    check(
+      'task runner shows the task output',
+      typeof taskOutput === 'string' && taskOutput.includes('NOVA_TASK_OK'),
+      String(taskOutput).slice(0, 120),
+    );
+
+    // The task must end with a success status.
+    const taskStatus = await waitFor(
+      session,
+      `(() => {
+        const status = document.querySelector('.task-panel__status');
+        if (status === null) return false;
+        const text = status.textContent.trim();
+        // The panel shows "running" while the task is still going.
+        return text.startsWith('success') ? text : false;
+      })()`,
+      30000,
+    );
+    check(
+      'task runner reports the final status',
+      typeof taskStatus === 'string' && taskStatus.startsWith('success'),
+      String(taskStatus),
+    );
+
+    // A long running task must be stoppable.
+    const slowStarted = await session.evaluate(
+      `(() => {
+        const items = [...document.querySelectorAll('.task-panel__item')];
+        const item = items.find((i) => i.textContent.includes('slow'));
+        if (item === undefined) return false;
+        const button = item.querySelector('.task-panel__run');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('task runner starts a long running script', slowStarted === true);
+
+    const stopClicked = await waitFor(
+      session,
+      `(() => {
+        const stop = document.querySelector('.task-panel__action--stop');
+        if (stop === null) return false;
+        stop.click();
+        return true;
+      })()`,
+      15000,
+    );
+    check('the running task can be stopped', stopClicked === true);
+
+    const cancelledStatus = await waitFor(
+      session,
+      `(() => {
+        const status = document.querySelector('.task-panel__status');
+        if (status === null) return false;
+        const text = status.textContent.trim();
+        return text.startsWith('cancelled') ? text : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the stopped task is reported as cancelled',
+      typeof cancelledStatus === 'string' &&
+        cancelledStatus.startsWith('cancelled'),
+      String(cancelledStatus),
+    );
+
     // The source control panel must report the repository state.
     const scmReachable = await session.evaluate(
       `(() => {

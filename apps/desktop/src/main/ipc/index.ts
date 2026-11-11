@@ -15,6 +15,7 @@ import { createWorkspaceHandlers } from './workspace';
 import { createTerminalHandlers } from './terminal';
 import { createSearchHandlers } from './search';
 import { createGitHandlers } from './git';
+import { createTaskHandlers } from './tasks';
 import {
   assertNoArgs,
   assertOneString,
@@ -33,6 +34,8 @@ import {
 import { TerminalService } from '../services/terminalService';
 import { SearchService } from '../services/searchService';
 import { GitService } from '../services/gitService';
+import { TaskService } from '../services/taskService';
+import { ChildWatchdog } from '../services/childWatchdog';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -63,7 +66,13 @@ function registerChannel<C extends keyof IpcInvokeMap & string>(
 }
 
 /** Registers every validated IPC handler. Call once during app startup. */
-export function registerIpcHandlers(): () => void {
+/**
+ * Registers every IPC handler.
+ *
+ * @returns A function that terminates every child process of the
+ *   application. The promise resolves when the process trees are gone.
+ */
+export function registerIpcHandlers(): () => Promise<void> {
   const watcher = new OpenFileWatcher((change) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(IpcPushChannels.fsExternalChange, change);
@@ -76,6 +85,11 @@ export function registerIpcHandlers(): () => void {
   );
 
   const fileHandlers = createFileHandlers(fileService);
+
+  // The watchdog terminates the children when the main process dies
+  // unexpectedly (a crash skips every cleanup handler).
+  const watchdog = new ChildWatchdog();
+  watchdog.start();
 
   const terminalService = new TerminalService({
     getRoot: () => workspaceService.getActiveRoot(),
@@ -91,6 +105,12 @@ export function registerIpcHandlers(): () => void {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(IpcPushChannels.terminalExit, exit);
       }
+    },
+    onProcessStart: (pid) => {
+      watchdog.track(pid);
+    },
+    onProcessEnd: (pid) => {
+      watchdog.untrack(pid);
     },
   });
   const terminalHandlers = createTerminalHandlers(terminalService);
@@ -110,6 +130,27 @@ export function registerIpcHandlers(): () => void {
   });
   const gitHandlers = createGitHandlers(gitService);
 
+  const taskService = new TaskService({
+    getRoot: () => workspaceService.getActiveRoot(),
+    onOutput: (output) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.taskOutput, output);
+      }
+    },
+    onStatus: (status) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.taskStatus, status);
+      }
+    },
+    onProcessStart: (pid) => {
+      watchdog.track(pid);
+    },
+    onProcessEnd: (pid) => {
+      watchdog.untrack(pid);
+    },
+  });
+  const taskHandlers = createTaskHandlers(taskService);
+
 
 
 
@@ -117,7 +158,7 @@ export function registerIpcHandlers(): () => void {
     onClose: () => {
       // Closing the workspace terminates every child process it owns
       // (spec §19.6 "Terminate running processes").
-      void terminalService.killAll();
+      void stopChildProcesses();
     },
   });
 
@@ -234,6 +275,19 @@ export function registerIpcHandlers(): () => void {
     gitHandlers.diff,
   );
 
+  // Tasks
+  registerChannel(IpcChannels.taskList, assertNoArgs, taskHandlers.list);
+  registerChannel(
+    IpcChannels.taskRun,
+    assertOneStringArg,
+    taskHandlers.run,
+  );
+  registerChannel(
+    IpcChannels.taskCancel,
+    assertOneStringArg,
+    taskHandlers.cancel,
+  );
+
 
 
 
@@ -242,9 +296,16 @@ export function registerIpcHandlers(): () => void {
    *
    * Called when the app quits, so no terminal shell or task survives the
    * main process (spec §19.6 "Terminate running processes").
+   *
+   * The promise resolves when the process trees are really gone, so the
+   * application can wait for it before it quits — otherwise a task could
+   * outlive the application.
    */
-  return () => {
-    void terminalService.killAll();
+  const stopChildProcesses = async (): Promise<void> => {
+    await Promise.all([terminalService.killAll(), taskService.killAll()]);
+    watchdog.stop();
     watcher.clear();
   };
+
+  return stopChildProcesses;
 }
