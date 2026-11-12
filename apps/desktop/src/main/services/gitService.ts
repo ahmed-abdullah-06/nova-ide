@@ -58,6 +58,22 @@ interface GitResult {
 let commandQueue: Promise<unknown> = Promise.resolve();
 
 /**
+ * Puts a command into the queue of the git commands.
+ *
+ * @param command The command to run.
+ * @returns The result of the command.
+ */
+function enqueue<T>(command: () => Promise<T>): Promise<T> {
+  const run = commandQueue.then(command);
+  // A failed command must not block the queue.
+  commandQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
  * Runs git with the given arguments.
  *
  * The environment is trimmed so git never opens an interactive prompt
@@ -68,13 +84,7 @@ function runGit(
   args: string[],
   timeoutMs = GIT_TIMEOUT_MS,
 ): Promise<GitResult> {
-  const run = commandQueue.then(() => executeGit(cwd, args, timeoutMs));
-  // A failed command must not block the queue.
-  commandQueue = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
+  return enqueue(() => executeGit(cwd, args, timeoutMs));
 }
 
 /**
@@ -527,6 +537,17 @@ export class GitService {
  * stdin so it can never be parsed as a git option.
  */
 function runGitWithInput(
+  cwd: string,
+  args: string[],
+  input: string,
+): Promise<GitResult> {
+  return enqueue(() => executeGitWithInput(cwd, args, input));
+}
+
+/**
+ * Runs a single git command that reads its input from stdin.
+ */
+function executeGitWithInput(
   cwd: string,
   args: string[],
   input: string,
