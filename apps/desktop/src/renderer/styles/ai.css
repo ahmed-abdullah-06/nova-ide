@@ -78,6 +78,23 @@
   padding: 2px 4px;
 }
 
+.ai-panel__title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  padding: 2px 4px;
+}
+
+.ai-panel__title:hover,
+.ai-panel__title:focus {
+  border-color: var(--color-border);
+  outline: none;
+}
+
 .ai-panel__notice {
   margin: 0;
   padding: 6px 12px;

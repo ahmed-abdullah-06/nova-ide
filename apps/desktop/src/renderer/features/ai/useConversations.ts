@@ -23,6 +23,13 @@ export interface ConversationController {
   remove: (id: string) => void;
   /** Stores the messages of the open conversation. */
   save: (messages: ChatMessage[]) => void;
+  /**
+   * Stores the provider and the model of the open conversation.
+   *
+   * Every conversation keeps its own provider and model, so switching
+   * between conversations restores them.
+   */
+  setProvider: (providerId: string, model: string) => void;
 }
 
 /** Creates the id of a conversation. */
@@ -134,8 +141,39 @@ export function useConversations(): ConversationController {
     [currentId],
   );
 
+  const setProvider = useCallback(
+    (providerId: string, model: string): void => {
+      setConversations((current) => {
+        const id = currentId;
+        if (id === null) {
+          return current;
+        }
+        const next = current.map((conversation) =>
+          conversation.id === id
+            ? { ...conversation, providerId, model, updatedAt: Date.now() }
+            : conversation,
+        );
+        const conversation = next.find((entry) => entry.id === id);
+        if (conversation !== undefined) {
+          void window.nova?.ai.saveConversation(conversation);
+        }
+        return next;
+      });
+    },
+    [currentId],
+  );
+
   const current =
     conversations.find((conversation) => conversation.id === currentId) ?? null;
 
-  return { conversations, current, create, open, rename, remove, save };
+  return {
+    conversations,
+    current,
+    create,
+    open,
+    rename,
+    remove,
+    save,
+    setProvider,
+  };
 }

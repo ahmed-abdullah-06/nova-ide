@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 3 — Developer Tools (implemented, awaiting review).
+**Status:** Milestone 4 — AI Providers and Chat (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -56,9 +56,9 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 3)
+## Features (Milestone 4)
 
-Milestone 2 (workspace and file explorer) is still in place:
+Milestone 3 (terminal, search, Git, problems, tasks) is still in place:
 
 - Open a workspace folder through the native folder picker; recent workspaces
   are remembered between launches.
@@ -93,8 +93,32 @@ Milestone 3 adds the developer tools:
   `package.json` can be started, their output and exit code are shown, and a
   running task can be stopped together with its child processes.
 
-Not yet implemented (planned for later milestones): AI features, planning and
-permissions, local models, voice, the extension marketplace (see spec §23).
+Milestone 4 adds the AI assistant:
+
+- **Provider layer** in the main process: a provider-neutral interface
+  (list models, check the connection, stream an answer, cancel), a
+  registry and a router. Nothing is hard-coded to a single model.
+- **Ollama** for local models: the installed models are listed, the
+  address is configurable (and must point at this machine unless it is
+  confirmed explicitly), and no model is ever pulled automatically.
+- **OpenAI compatible** for cloud services (OpenAI, OpenRouter, …): the
+  address is configurable, the provider is disabled until a key is
+  configured, and rate limits, timeouts and errors are reported clearly.
+- **Credentials** are encrypted with the operating system
+  (`safeStorage`) and stay in the main process; the renderer only sees
+  whether a key is configured.
+- **Privacy gate**: a local provider never sends anything off the
+  machine; a cloud provider needs the context of a request to be
+  approved, and files that usually hold secrets (`.env`, private keys,
+  files that `.gitignore` ignores) are never sent.
+- **Chat panel** in the layout: streaming answers, stop and ask again,
+  conversations with their own provider and model, Markdown with
+  highlighted code blocks, and the files that are attached to a message
+  with their size and token count.
+
+Not yet implemented (planned for later milestones): the agent and its
+tools, planning and permissions, local models, voice, the extension
+marketplace (see spec §23).
 
 ## Security model
 
@@ -112,6 +136,11 @@ permissions, local models, voice, the extension marketplace (see spec §23).
   tree of the application. A watchdog terminates them (together with their
   children) if the application dies unexpectedly, so no process outlives the
   app.
+- The AI requests are made by the main process only; the renderer cannot
+  reach a provider (the content security policy of the renderer allows
+  connections to the application only). API keys are encrypted with the
+  operating system, never returned to the renderer and redacted from every
+  log message.
 
 ## Documentation
 

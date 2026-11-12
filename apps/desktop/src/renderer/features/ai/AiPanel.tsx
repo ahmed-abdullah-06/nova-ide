@@ -35,8 +35,14 @@ export function AiPanel({
   const ai = useAi();
   const conversations = useConversations();
   const [input, setInput] = useState('');
+  const [title, setTitle] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [approveCloud, setApproveCloud] = useState(false);
+
+  // The title of the open conversation is shown in the field.
+  useEffect(() => {
+    setTitle(conversations.current?.title ?? '');
+  }, [conversations.current?.title]);
 
   // The messages of the open conversation are shown.
   useEffect(() => {
@@ -48,6 +54,38 @@ export function AiPanel({
       ai.setMessages(current.messages);
     }
   }, [ai, conversations.current]);
+
+  // The provider and the model of the conversation are restored when
+  // another conversation is opened.
+  useEffect(() => {
+    const conversation = conversations.current;
+    if (conversation === null) {
+      return;
+    }
+    if (
+      conversation.providerId.length > 0 &&
+      conversation.providerId !== ai.providerId &&
+      ai.providers.some((entry) => entry.id === conversation.providerId)
+    ) {
+      ai.selectProvider(conversation.providerId);
+    }
+    if (
+      conversation.model.length > 0 &&
+      conversation.model !== ai.model &&
+      ai.models.some((entry) => entry.id === conversation.model)
+    ) {
+      ai.selectModel(conversation.model);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.current?.id]);
+
+  // The provider and the model are stored with the conversation.
+  useEffect(() => {
+    if (ai.providerId === null) {
+      return;
+    }
+    conversations.setProvider(ai.providerId, ai.model);
+  }, [ai.providerId, ai.model, conversations.setProvider]);
 
   // The conversation is stored when the answer is finished.
   useEffect(() => {
@@ -199,14 +237,36 @@ export function AiPanel({
           New
         </button>
         {conversations.current !== null ? (
-          <button
-            type="button"
-            className="ai-panel__action"
-            onClick={() => conversations.remove(conversations.current?.id ?? '')}
-            title="Delete the conversation"
-          >
-            Delete
-          </button>
+          <>
+            <input
+              type="text"
+              className="ai-panel__title"
+              aria-label="Name of the conversation"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={() => {
+                if (title.trim().length > 0) {
+                  conversations.rename(
+                    conversations.current?.id ?? '',
+                    title.trim(),
+                  );
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={() => conversations.remove(conversations.current?.id ?? '')}
+              title="Delete the conversation"
+            >
+              Delete
+            </button>
+          </>
         ) : null}
       </div>
 

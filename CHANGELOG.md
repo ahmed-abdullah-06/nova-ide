@@ -86,6 +86,50 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
   - The search shows a progress indicator while it runs.
   - Unit tests for the terminal, the search, the git wrapper, the task runner
     and the IPC security of the new channels — 179/179 tests passing in total.
+- **Milestone 4 — AI Providers and Chat:**
+  - Provider layer in the main process: a provider-neutral interface (list
+    models, check the connection, stream an answer, cancel), a registry and a
+    router that owns the running requests. The messages, the stream events,
+    the errors, the token usage and the finish reasons are normalized, so
+    the interface never depends on a specific service.
+  - Ollama for local models: the installed models are listed (no model is
+    assumed, none is pulled automatically), "not running" and "not
+    installed" are distinguished, and the generation can really be aborted.
+  - OpenAI compatible adapter for cloud services (OpenAI, OpenRouter, a
+    local gateway, …) with a configurable address. It is disabled until a
+    key is configured; rate limits (with the wait time of the service and a
+    bounded number of retries), timeouts, cancellations, authentication
+    errors, network errors, unknown models and malformed streams are
+    reported with clear messages that never contain the key.
+  - Credentials are encrypted with the operating system (`safeStorage`) and
+    stay in the main process. The renderer only learns whether a key is
+    configured; the detail of an error answer is redacted before it reaches
+    the panel.
+  - Privacy gate: a local provider never sends anything off the machine. A
+    cloud provider needs an enabled provider, a key and the approval of the
+    user for the context of *this* request. Files that usually hold
+    secrets (`.env`, private keys) and files that `.gitignore` ignores are
+    never attached.
+  - Chat panel in the layout: streaming answers, stop and ask again,
+    conversations with their own provider and model, a LOCAL or CLOUD badge,
+    Markdown with highlighted code blocks and a copy button. The Markdown
+    parser is part of the application, so the output of a model can never
+    execute markup.
+  - Context of a message: the current file, the selected code or files the
+    user picks. The panel shows the name, the size and the approximate
+    number of tokens of every item, and every item can be removed before
+    the message is sent. A file that is too large is shortened and marked
+    as such — the limits are never applied silently.
+  - The conversations are stored as plain JSON in the user data directory,
+    the same way the recent workspaces are stored. SQLite is not used: the
+    data is a handful of small, flat records, so a database would add a
+    native dependency and a migration system for a few hundred kilobytes of
+    history.
+  - No dependency was added: the Markdown parser is part of the application
+    and the code highlighting uses Monaco, which is loaded already.
+  - Unit tests for the provider contract, the Ollama and the cloud adapter
+    (against real mock servers), the credentials, the privacy gate, the
+    context and the conversations — 293/293 tests passing in total.
 
 ### Fixed
 
@@ -113,7 +157,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M1 — Desktop Foundation and Editor | Completed |
 | M2 — File Explorer and Workspace | Implemented (awaiting review) |
 | M3 — Developer Tools (Terminal, Search, Git, Problems, Tasks) | Implemented (awaiting review) |
-| M4 — AI Provider Integration | Not Started |
+| M4 — AI Providers and Chat | Implemented (awaiting review) |
 | M5 — AI Agent and Tools | Not Started |
 | M6 — Planning, Permissions, and Verification | Not Started |
 | M7 — Local AI and Model Management | Not Started |

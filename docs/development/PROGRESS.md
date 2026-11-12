@@ -149,7 +149,68 @@ voice, extension marketplace, cloud sync.
 provider integration, agent tools, planning and permissions, local models,
 voice, extensions (see spec §23).
 
-## Milestones 4–10
+## Milestone 4 — AI Providers and Chat
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| A.1 | Provider interface (`interfaces/provider.ts`) | Completed | `listModels`, `checkConnection`, a streaming `chat` and a cancel; the messages, the stream events, the errors, the token usage and the finish reasons are normalized (spec §11.2) |
+| A.2 | Provider registry and router | Completed | The user picks the provider and the model; the router owns the running requests, really aborts them, caps the parallel requests (3) and the length of an answer (1,000,000 characters) |
+| B.1 | Ollama provider | Completed | The official HTTP API (`/api/tags`, `/api/chat`); "not running" and "not installed" are distinguished; the request is aborted when the generation stops; a malformed chunk is reported instead of crashing |
+| B.2 | The address of the local provider | Completed | Configurable, but it must point at the loopback interface — an address outside the machine has to be confirmed explicitly |
+| C.1 | OpenAI compatible provider | Completed | The OpenAI chat completion API with a configurable address (OpenAI, OpenRouter, a local gateway, …); plain `fetch`, no SDK |
+| C.2 | Errors of the cloud provider | Completed | Rate limits with the wait time of the service and a bounded number of retries, timeouts, cancellations, authentication errors, network errors, unknown models and malformed streams; the detail is redacted |
+| D.1 | Credentials (`credentials.ts`) | Completed | The key is encrypted with `safeStorage`; it is never returned, never logged and never stored in plaintext (when the system cannot encrypt, the key is not stored) |
+| D.2 | Privacy gate (`privacy.ts`) | Completed | A local provider never sends anything off the machine; a cloud provider needs an enabled provider, a key and the approval of the user for the context of *this* request |
+| D.3 | Exclusions | Completed | `.env`, private keys, `.npmrc`, `.ssh` and the files that `.gitignore` ignores are never attached |
+| E.1 | Chat panel | Completed | Streaming answers (the text is written into the state at most every 100 ms), stop, ask again, the conversations of the workspace, the provider and the model that are used, a LOCAL or CLOUD badge |
+| E.2 | Markdown and code blocks | Completed | A small, purpose-built parser that produces text (never markup); the code blocks are highlighted with Monaco and offer a copy button; a link is only opened when it points at http or https |
+| E.3 | Conversations | Completed | Plain JSON in the user data directory (the same approach as the recent workspaces); 50 conversations, 200 messages each; no key is ever stored in a conversation |
+| E.4 | Provider settings | Completed | The address can be changed, the provider switched on and off, the connection tested and the key added or removed |
+| F.1 | Context of a message | Completed | The current file, the selected code and files the user picks can be attached; the panel shows the name, the size and the approximate number of tokens of every item and lets the user remove it |
+| F.2 | The limits of the context | Completed | A file that is too large is shortened and marked as such; the limits are never applied silently |
+| G.1 | Unit tests: the provider contract | Tested | 15 tests: the interface, the registry, the router (routing, cancellation, the caps, the errors) |
+| G.2 | Unit tests: Ollama | Tested | 11 tests against a real mock server: the models, "not running", "not installed", no models, the streaming, the cancellation, a malformed chunk, an unknown model, a remote address |
+| G.3 | Unit tests: the cloud provider | Tested | 13 tests against a real mock server: 401, 429 with retry-after, the timeout, the abort during the stream, a malformed stream, a network error, no key in a message |
+| G.4 | Unit tests: the credentials and the privacy | Tested | 7 + 19 tests: the key is encrypted and never returned, the gate, the exclusions, the limits |
+| G.5 | Unit tests: the context | Tested | 8 tests: a selection is sent as the selected lines, the secret files are skipped, the preview |
+| G.6 | Unit tests: the conversations | Tested | 10 tests: the persistence, the caps, a corrupted file, no key in the history |
+| G.7 | Unit tests: the Markdown parser | Tested | 15 tests: the blocks, the inline forms, a link that is not http or https stays text |
+| G.8 | Typecheck + full test run | Tested | typecheck exit 0; **293/293 tests pass** (22 files) |
+| G.9 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
+| G.10 | Runtime verification (CDP, packaged app) | Tested | 53/53 checks — the chat really streams an answer through a mock of the local Ollama service, the context is attached and previewed, no console errors |
+| G.11 | Documentation (README, CHANGELOG, this file) | Completed | |
+
+### Milestone 4 Definition of Done
+
+- [x] The user can choose a provider and a model; nothing is hard-coded to a
+      single service
+- [x] The installed models of the local provider are listed (no model is
+      assumed and none is pulled automatically)
+- [x] A local provider answers without sending anything off the machine
+- [x] A cloud provider only works after a key was configured and the provider
+      was switched on; it is disabled by default
+- [x] The answer streams into the panel, can be stopped and asked again
+- [x] Conversations can be created, opened, renamed and deleted, and each one
+      keeps its own provider and model
+- [x] The answer is rendered as Markdown with highlighted code blocks; the
+      output of a model can never execute markup
+- [x] Files can be attached as context; the user sees exactly what will be
+      sent and can remove every item
+- [x] Workspace content is never sent to a cloud provider without the
+      approval of the user for that request
+- [x] API keys are encrypted with the operating system, stay in the main
+      process and never reach the renderer or a log file
+- [x] Unit tests pass (293/293), typecheck clean, `pnpm package`/`pnpm make`
+      succeed, 53/53 runtime checks pass in the packaged application
+- [x] No dependency was added: the Markdown parser is part of the application
+      and the code highlighting uses Monaco
+
+**M4 implemented — awaiting review.** Out of scope for M4 (planned): the agent
+and its tools, planning and permissions, local model management, voice, the
+extension marketplace (see spec §23).
+
+## Milestones 5–10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
+
 
