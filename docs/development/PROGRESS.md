@@ -101,7 +101,7 @@ voice, extension marketplace, cloud sync.
 | B.1 | Search contract + preload bridge | Completed | `search:query` / `search:cancel` plus the `search:results` push channel |
 | B.2 | Search service (`searchService.ts`, `gitignore.ts`) | Completed | Runs in the main process, `.gitignore` honoured, build output and binary files skipped, incremental results, result cap (500), file cap (20000), cancellable |
 | B.3 | Search view (`SearchView`, `useSearch`) | Completed | File name / content mode, debounced input, the previous request is cancelled, results open in the editor at the matching line |
-| C.1 | Git contract + preload bridge | Completed | `git:status/stage/unstage/discard/commit/diff` |
+| C.1 | Git contract + preload bridge | Completed | `git:status/stage/unstage/discard/commit/diff/branches/switch-branch` |
 | C.2 | Git service (`gitService.ts`) | Completed | Argument arrays only (`shell: false`), `--` separator, commit message through stdin (`-F -`), 30 s timeout, 8 MB output cap, trimmed environment without interactive prompts |
 | C.3 | Source control view (`SourceControlView`, `useGit`) | Completed | Branch, staged / unstaged / untracked files, diff, stage / unstage / discard (confirmed) / commit |
 | C.4 | Branch switching (spec §16) | Completed | The local branches are listed and one of them can be checked out; the name is matched against the list, so it can never be a git option; the git commands are serialised, because concurrent commands on one repository wait for the index lock |
@@ -112,15 +112,15 @@ voice, extension marketplace, cloud sync.
 | F.1 | Process hygiene | Completed | The quit is delayed until the process trees are gone; a detached watchdog kills the children of an application that died unexpectedly (spec §19.6) |
 | G.1 | Unit tests: terminal | Tested | 14 tests: lifecycle, working-directory boundary, output, exit reporting, session cap |
 | G.2 | Unit tests: search | Tested | 20 tests: ignore rules, node_modules, binary files, result cap, cancellation, batched delivery |
-| G.3 | Unit tests: git | Tested | 16 tests against real repositories: clean, dirty, not-a-repository, git missing, option-like paths and messages, path confinement |
+| G.3 | Unit tests: git | Tested | 23 tests against real repositories: clean, dirty, not-a-repository, git missing, option-like paths and messages, path confinement, branch list and branch switch |
 | G.4 | Unit tests: tasks | Tested | 11 tests: script list, success / failure, cancellation, process-tree cleanup |
 | G.5 | Unit tests: IPC security | Tested | Per-channel validators and the rejection of messages from an untrusted sender |
-| G.6 | Typecheck + full test run | Tested | typecheck exit 0; **172/172 tests pass** (12 files) |
+| G.6 | Typecheck + full test run | Tested | typecheck exit 0; **179/179 tests pass** (12 files) |
 | G.7 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
 | G.8 | Runtime verification (CDP, packaged app) | Tested | 43/43 checks: terminal (start, output, focus, stop a running command), search (files, content), source control (branch, switch, stage, commit), problems (real TypeScript diagnostic), tasks (list, run, output, stop) — no console errors |
-| G.11 | Editor tabs (spec §23 "Improve editor tabs") | Completed | The full path of a file is shown as the tooltip of the tab, the middle mouse button closes a tab, and a tab with unsaved changes is only closed after a confirmation |
 | G.9 | Crash hygiene (`tools/verify/quitcleanup.mjs`) | Tested | The application is killed while a task runs: no process of the task is left behind |
-| G.10 | Documentation (README, CHANGELOG, this file) | Completed | |
+| G.10 | Documentation (README, CHANGELOG, this file) | Completed |
+| G.11 | Editor tabs (spec §23 "Improve editor tabs") | Completed | The full path of a file is shown as the tooltip of the tab, the middle mouse button closes a tab, and a tab with unsaved changes is only closed after a confirmation | |
 
 ### Milestone 3 Definition of Done
 
