@@ -262,3 +262,124 @@ export function assertProviderKey(
     throw new Error('Invalid API key');
   }
 }
+
+/**
+ * A link that the user clicked in the chat.
+ *
+ * Only http and https are opened; every other scheme (file, javascript,
+ * …) is refused, so the output of a model cannot reach the system.
+ */
+export function assertExternalUrl(args: unknown[]): asserts args is [url: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected a link');
+  }
+  let url: URL;
+  try {
+    url = new URL(args[0]);
+  } catch {
+    throw new Error('Invalid link');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Only http and https links can be opened');
+  }
+}
+
+/**
+ * A conversation of the chat.
+ */
+export function assertConversation(
+  args: unknown[],
+): asserts args is [conversation: unknown] {
+  if (args.length !== 1 || typeof args[0] !== 'object' || args[0] === null) {
+    throw new Error('Expected a conversation');
+  }
+  const record = args[0] as {
+    id?: unknown;
+    title?: unknown;
+    messages?: unknown;
+  };
+  if (typeof record.id !== 'string' || record.id.length === 0 || record.id.length > 64) {
+    throw new Error('Invalid conversation id');
+  }
+  if (typeof record.title !== 'string' || record.title.length > 120) {
+    throw new Error('Invalid conversation title');
+  }
+  if (!Array.isArray(record.messages) || record.messages.length > 200) {
+    throw new Error('Invalid messages');
+  }
+  for (const message of record.messages) {
+    if (typeof message !== 'object' || message === null) {
+      throw new Error('Invalid message');
+    }
+    const entry = message as { role?: unknown; content?: unknown };
+    if (
+      entry.role !== 'system' &&
+      entry.role !== 'user' &&
+      entry.role !== 'assistant'
+    ) {
+      throw new Error('Invalid message role');
+    }
+    if (typeof entry.content !== 'string' || entry.content.length > 500000) {
+      throw new Error('Invalid message content');
+    }
+  }
+}
+
+/**
+ * The id of a conversation.
+ */
+export function assertConversationId(
+  args: unknown[],
+): asserts args is [id: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected a conversation id');
+  }
+  if (args[0].length === 0 || args[0].length > 64) {
+    throw new Error('Invalid conversation id');
+  }
+}
+
+/**
+ * The changed settings of a provider.
+ */
+export function assertProviderSettings(
+  args: unknown[],
+): asserts args is [
+  providerId: string,
+  settings: {
+    baseUrl?: string;
+    enabled?: boolean;
+    remoteConfirmed?: boolean;
+  },
+] {
+  if (args.length !== 2 || typeof args[0] !== 'string') {
+    throw new Error('Expected (providerId, settings)');
+  }
+  if (args[0].length === 0 || args[0].length > 64 || !/^[a-z0-9-]+$/.test(args[0])) {
+    throw new Error('Invalid provider id');
+  }
+  const settings = args[1];
+  if (typeof settings !== 'object' || settings === null) {
+    throw new Error('Expected the settings of the provider');
+  }
+  const record = settings as {
+    baseUrl?: unknown;
+    enabled?: unknown;
+    remoteConfirmed?: unknown;
+  };
+  if (
+    record.baseUrl !== undefined &&
+    (typeof record.baseUrl !== 'string' || record.baseUrl.length > 2048)
+  ) {
+    throw new Error('Invalid address');
+  }
+  if (record.enabled !== undefined && typeof record.enabled !== 'boolean') {
+    throw new Error('Invalid state');
+  }
+  if (
+    record.remoteConfirmed !== undefined &&
+    typeof record.remoteConfirmed !== 'boolean'
+  ) {
+    throw new Error('Invalid confirmation');
+  }
+}

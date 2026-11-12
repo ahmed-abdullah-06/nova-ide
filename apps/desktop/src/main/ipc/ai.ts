@@ -10,6 +10,7 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { ChatService } from '../providers/chatService';
+import type { ConversationStore } from '../providers/conversationStore';
 import type { CredentialStore } from '../providers/credentials';
 import type { ProviderService } from '../providers/providerService';
 
@@ -25,12 +26,18 @@ export interface AiHandlers {
   cancel: Handler<'ai:cancel'>;
   setKey: Handler<'ai:set-key'>;
   clearKey: Handler<'ai:clear-key'>;
+  conversations: Handler<'ai:conversations'>;
+  saveConversation: Handler<'ai:conversation-save'>;
+  deleteConversation: Handler<'ai:conversation-delete'>;
+  updateProvider: Handler<'ai:provider-update'>;
+  removeProvider: Handler<'ai:provider-remove'>;
 }
 
 export function createAiHandlers(
   providers: ProviderService,
   chat: ChatService,
   credentials: CredentialStore,
+  conversations: ConversationStore,
 ): AiHandlers {
   return {
     providers: async () => providers.descriptors(),
@@ -55,5 +62,13 @@ export function createAiHandlers(
     cancel: async (requestId) => chat.cancel(requestId),
     setKey: async (providerId, key) => credentials.setKey(providerId, key),
     clearKey: async (providerId) => credentials.clearKey(providerId),
+    conversations: async () => conversations.list(),
+    saveConversation: async (conversation) => conversations.save(conversation),
+    deleteConversation: async (id) => {
+      await conversations.remove(id);
+    },
+    updateProvider: async (providerId, settings) =>
+      providers.update(providerId, settings),
+    removeProvider: async (providerId) => providers.remove(providerId),
   };
 }

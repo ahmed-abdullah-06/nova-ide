@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import {
   IpcChannels,
   IpcPushChannels,
@@ -22,9 +22,13 @@ import {
   assertOneString,
   assertOptionalCwd,
   assertChatRequest,
+  assertConversation,
+  assertConversationId,
+  assertExternalUrl,
   assertOptionalString,
   assertProviderId,
   assertProviderKey,
+  assertProviderSettings,
   assertRequestId,
   assertSaveAsArgs,
   assertPathAndBoolean,
@@ -42,6 +46,7 @@ import { GitService } from '../services/gitService';
 import { TaskService } from '../services/taskService';
 import { ChildWatchdog } from '../services/childWatchdog';
 import { ChatService } from '../providers/chatService';
+import { ConversationStore } from '../providers/conversationStore';
 import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
@@ -179,7 +184,13 @@ export function registerIpcHandlers(): () => Promise<void> {
       }
     },
   });
-  const aiHandlers = createAiHandlers(providerService, chatService, credentialStore);
+  const conversationStore = new ConversationStore();
+  const aiHandlers = createAiHandlers(
+    providerService,
+    chatService,
+    credentialStore,
+    conversationStore,
+  );
 
 
 
@@ -193,6 +204,25 @@ export function registerIpcHandlers(): () => Promise<void> {
   });
 
   registerChannel(IpcChannels.appGetInfo, assertNoArgs, createAppInfoHandler());
+
+  // A link of the chat is opened in the browser of the user — only http
+  // and https are accepted (the output of a model is untrusted).
+  registerChannel(
+    IpcChannels.appOpenExternal,
+    assertExternalUrl,
+    async (url: string) => {
+      try {
+        await shell.openExternal(url);
+      } catch (error) {
+        console.error(
+          '[app] the link could not be opened:',
+          error instanceof Error ? error.message : 'unknown error',
+        );
+        return { ok: false, code: 'UNKNOWN', message: 'The link could not be opened.' };
+      }
+      return { ok: true, value: undefined };
+    },
+  );
 
   // Workspace
   registerChannel(
@@ -355,6 +385,31 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.aiClearKey,
     assertProviderId,
     aiHandlers.clearKey,
+  );
+  registerChannel(
+    IpcChannels.aiConversations,
+    assertNoArgs,
+    aiHandlers.conversations,
+  );
+  registerChannel(
+    IpcChannels.aiConversationSave,
+    assertConversation,
+    aiHandlers.saveConversation,
+  );
+  registerChannel(
+    IpcChannels.aiConversationDelete,
+    assertConversationId,
+    aiHandlers.deleteConversation,
+  );
+  registerChannel(
+    IpcChannels.aiProviderUpdate,
+    assertProviderSettings,
+    aiHandlers.updateProvider,
+  );
+  registerChannel(
+    IpcChannels.aiProviderRemove,
+    assertProviderId,
+    aiHandlers.removeProvider,
   );
 
 

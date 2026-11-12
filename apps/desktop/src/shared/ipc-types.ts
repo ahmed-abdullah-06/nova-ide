@@ -5,6 +5,7 @@ import type {
   ProviderDescriptor,
   ProviderModel,
   ProviderStatus,
+  StoredConversation,
 } from './ai-types';
 
 /**
@@ -22,6 +23,7 @@ import type {
 /** Registry of all allowed IPC channels (renderer may only use these). */
 export const IpcChannels = {
   appGetInfo: 'app:get-info',
+  appOpenExternal: 'app:open-external',
   workspaceOpen: 'workspace:open',
   workspaceClose: 'workspace:close',
   workspaceRecent: 'workspace:recent',
@@ -59,6 +61,11 @@ export const IpcChannels = {
   aiCancel: 'ai:cancel',
   aiSetKey: 'ai:set-key',
   aiClearKey: 'ai:clear-key',
+  aiConversations: 'ai:conversations',
+  aiConversationSave: 'ai:conversation-save',
+  aiConversationDelete: 'ai:conversation-delete',
+  aiProviderUpdate: 'ai:provider-update',
+  aiProviderRemove: 'ai:provider-remove',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -347,6 +354,13 @@ export interface TerminalExit {
  */
 export interface IpcInvokeMap {
   'app:get-info': { args: []; result: AppInfo };
+  /**
+   * Opens a link in the browser of the user.
+   *
+   * Only http and https are accepted; the address is never taken from the
+   * model output without that check.
+   */
+  'app:open-external': { args: [url: string]; result: FsResult<void> };
   /** No argument → native folder dialog; with a path → open that folder
    *  (used by Recent Workspaces). `value: null` means the user cancelled. */
   'workspace:open': { args: [path?: string]; result: FsResult<Workspace | null> };
@@ -476,6 +490,37 @@ export interface IpcInvokeMap {
     args: [providerId: string];
     result: AiResult<{ configured: boolean }>;
   };
+  /** The conversations of the chat. */
+  'ai:conversations': { args: []; result: StoredConversation[] };
+  /** Stores a conversation. */
+  'ai:conversation-save': {
+    args: [conversation: StoredConversation];
+    result: StoredConversation;
+  };
+  /** Removes a conversation. */
+  'ai:conversation-delete': { args: [id: string]; result: void };
+  /**
+   * Changes the settings of a provider.
+   *
+   * The address of a cloud provider is only used after the user
+   * confirmed it explicitly.
+   */
+  'ai:provider-update': {
+    args: [
+      providerId: string,
+      settings: {
+        baseUrl?: string;
+        enabled?: boolean;
+        remoteConfirmed?: boolean;
+      },
+    ];
+    result: AiResult<ProviderDescriptor>;
+  };
+  /** Removes the configuration of a provider. */
+  'ai:provider-remove': {
+    args: [providerId: string];
+    result: AiResult<ProviderDescriptor>;
+  };
 }
 
 /**
@@ -583,6 +628,25 @@ export interface NovaTaskApi {
 
 /** AI providers and chat (spec §11). */
 export interface NovaAiApi {
+  /** The conversations of the chat. */
+  conversations(): Promise<StoredConversation[]>;
+  /** Stores a conversation. */
+  saveConversation(
+    conversation: StoredConversation,
+  ): Promise<StoredConversation>;
+  /** Removes a conversation. */
+  deleteConversation(id: string): Promise<void>;
+  /** Changes the settings of a provider. */
+  updateProvider(
+    providerId: string,
+    settings: {
+      baseUrl?: string;
+      enabled?: boolean;
+      remoteConfirmed?: boolean;
+    },
+  ): Promise<AiResult<ProviderDescriptor>>;
+  /** Removes the configuration of a provider. */
+  removeProvider(providerId: string): Promise<AiResult<ProviderDescriptor>>;
   /** The providers the user can choose from. */
   providers(): Promise<AiResult<ProviderDescriptor[]>>;
   /** The models a provider offers. */
@@ -613,6 +677,8 @@ export interface NovaAiApi {
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
+  /** Opens a link in the browser of the user. */
+  openExternal(url: string): Promise<FsResult<void>>;
   workspace: NovaWorkspaceApi;
   fs: NovaFsApi;
   terminal: NovaTerminalApi;

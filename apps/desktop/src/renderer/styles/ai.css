@@ -1,0 +1,423 @@
+/**
+ * The styles of the AI assistant panel (spec §3.3, §6.1).
+ *
+ * The panel uses the tokens of the design system, so it fits both the
+ * dark and the light theme.
+ */
+
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-panel);
+  border-left: 1px solid var(--color-border);
+}
+
+.ai-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-panel__title {
+  flex: 1;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+.ai-panel__settings-button,
+.ai-panel__action {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 2px 8px;
+}
+
+.ai-panel__settings-button:hover,
+.ai-panel__action:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+.ai-panel__action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ai-panel__action--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
+}
+
+.ai-panel__controls,
+.ai-panel__conversations,
+.ai-panel__context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-panel__select {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  padding: 2px 4px;
+}
+
+.ai-panel__notice {
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--color-background);
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ai-panel__error {
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-panel__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-panel__attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.ai-panel__attachment-remove {
+  background: transparent;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.ai-panel__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-panel__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-panel__approval {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+/* The messages ------------------------------------------------------- */
+
+.ai-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.ai-messages--empty {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.ai-messages__hint {
+  margin: 0;
+}
+
+.ai-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-message__role {
+  color: var(--color-faint);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ai-message__content {
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ai-message__content p {
+  margin: 0 0 8px;
+}
+
+.ai-message__content h1,
+.ai-message__content h2,
+.ai-message__content h3,
+.ai-message__content h4,
+.ai-message__content h5,
+.ai-message__content h6 {
+  margin: 8px 0 4px;
+  font-size: var(--font-size-small);
+}
+
+.ai-message__content ul,
+.ai-message__content ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.ai-message__content blockquote {
+  margin: 0 0 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--color-border);
+  color: var(--color-muted);
+}
+
+.ai-message__code {
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  background: var(--color-background);
+  font-family: var(--font-mono);
+}
+
+.ai-message__link {
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ai-message__table {
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: var(--font-size-small);
+}
+
+.ai-message__table th,
+.ai-message__table td {
+  border: 1px solid var(--color-border);
+  padding: 2px 6px;
+  text-align: left;
+}
+
+.ai-message__attachments {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-message__attachment {
+  color: var(--color-faint);
+  font-size: var(--font-size-small);
+}
+
+.ai-message__cursor {
+  color: var(--color-accent);
+}
+
+/* The code block ------------------------------------------------------ */
+
+.ai-code {
+  margin: 0 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-background);
+}
+
+.ai-code__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-faint);
+  font-size: var(--font-size-small);
+}
+
+.ai-code__copy {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 0 6px;
+}
+
+.ai-code__body {
+  margin: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+/* The provider settings ----------------------------------------------- */
+
+.ai-settings {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
+}
+
+.ai-settings__title {
+  margin: 0 0 6px;
+  font-size: var(--font-size-small);
+}
+
+.ai-settings__list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-settings__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-settings__provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 2px 6px;
+  text-align: left;
+}
+
+.ai-settings__provider--active {
+  border-color: var(--color-accent);
+}
+
+.ai-settings__name {
+  flex: 1;
+}
+
+.ai-settings__off {
+  color: var(--color-faint);
+  font-size: var(--font-size-small);
+}
+
+.ai-settings__address {
+  padding-left: 6px;
+  color: var(--color-faint);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.ai-settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-settings__key {
+  flex: 1;
+  min-width: 140px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  padding: 2px 6px;
+}
+
+.ai-settings__action {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 2px 8px;
+}
+
+.ai-settings__action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ai-settings__message {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.ai-settings__error {
+  margin: 6px 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+}
+
+/* The badge ----------------------------------------------------------- */
+
+.ai-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.ai-badge--local {
+  background: rgba(76, 175, 128, 0.18);
+  color: #6fcf97;
+}
+
+.ai-badge--cloud {
+  background: rgba(240, 180, 41, 0.18);
+  color: #f0b429;
+}

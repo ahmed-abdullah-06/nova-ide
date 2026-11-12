@@ -9,7 +9,7 @@ import { useExternalFileChanges } from '../features/workspace/hooks/useExternalF
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
-import { AiPanel } from '../components/layout/AiPanel';
+import { AiPanel } from '../features/ai/AiPanel';
 import { BottomPanel } from '../components/layout/BottomPanel';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
@@ -175,7 +175,19 @@ function Workspace(): ReactNode {
           )}
         />
       </div>
-      <AiPanel />
+      <AiPanel
+        hasWorkspace={hasWorkspace}
+        activeFile={
+          activeTab !== null
+            ? {
+                path: activeTab.id,
+                name: activeTab.name,
+                sizeBytes: activeTab.content.length,
+              }
+            : null
+        }
+        selection={null}
+      />
       <StatusBar
         language={activeTab?.language ?? null}
         onLanguageChange={handleLanguageChange}

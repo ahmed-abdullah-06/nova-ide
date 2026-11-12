@@ -20,6 +20,7 @@
  *   node tools/verify/runtime.mjs --keep-open    # leave the app running
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -39,6 +40,58 @@ const options = {
   dev: process.argv.includes('--dev'),
   keepOpen: process.argv.includes('--keep-open'),
 };
+
+/**
+ * Starts a mock of the local Ollama service.
+ *
+ * The harness talks to it through the real provider of the application,
+ * so the chat flow is verified end to end without a model.
+ *
+ * @returns {Promise<{url: string, stop: () => void}>} The mock.
+ */
+async function startMockOllama() {
+  const server = createServer((request, response) => {
+    if ((request.url ?? '').startsWith('/api/tags')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          models: [
+            {
+              name: 'nova-verify-model',
+              size: 1024,
+              details: { family: 'nova', parameter_size: '1.0B' },
+            },
+          ],
+        }),
+      );
+      return;
+    }
+    if ((request.url ?? '').startsWith('/api/chat')) {
+      request.on('data', () => undefined);
+      request.on('end', () => {
+        response.writeHead(200, { 'content-type': 'application/x-ndjson' });
+        response.write(
+          '{"message":{"role":"assistant","content":"NOVA_VERIFY_ANSWER"},"done":false}\n',
+        );
+        response.write('{"done":true,"eval_count":7}\n');
+        response.end();
+      });
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    stop: () => {
+      server.close();
+    },
+  };
+}
 
 /** The checks that were executed. */
 const results = [];
@@ -837,6 +890,124 @@ async function main() {
       afterStop !== false,
       `${String(afterStop).slice(0, 60)} | ${String(terminalText).slice(-300)}`,
     );
+
+    // The number of open tabs before the chat (the answer must not
+    // change it).
+    const tabsBeforeChat = await session.evaluate(
+      `document.querySelectorAll('.editor-tab').length`,
+    );
+
+    // The chat panel must be able to talk to a provider. The harness
+    // hosts a mock of the local Ollama service.
+    const mockOllama = await startMockOllama();
+
+    // The address is changed through the settings of the panel, the way a
+    // user would do it.
+    const settingsOpened = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.ai-panel__settings-button');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the provider settings can be opened', settingsOpened === true);
+
+    const providerConfigured = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.ai-settings__address-input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, ${JSON.stringify(mockOllama.url)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const buttons = [...document.querySelectorAll('.ai-settings__action')];
+        const save = buttons.find((b) => b.textContent.trim() === 'Save address');
+        if (save === undefined) return false;
+        save.click();
+        return true;
+      })()`,
+    );
+    check(
+      'the provider can be pointed at a local service',
+      providerConfigured === true,
+    );
+
+    const modelListed = await waitFor(
+      session,
+      `(() => {
+        const select = document.querySelector('select[aria-label="Model"]');
+        if (select === null) return false;
+        const options = [...select.options].map((o) => o.value);
+        return options.includes('nova-verify-model');
+      })()`,
+      20000,
+    );
+    check('the model of the provider is listed', modelListed === true);
+
+    const localBadge = await session.evaluate(
+      `(() => {
+        const badge = document.querySelector('.ai-badge');
+        return badge === null ? '' : badge.textContent.trim();
+      })()`,
+    );
+    check(
+      'the panel shows that the provider is local',
+      localBadge === 'LOCAL',
+      String(localBadge),
+    );
+
+    // The answer of the model must arrive in the panel.
+    const sent = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.ai-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'What does the project do?');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    check('the chat input accepts a question', sent === true);
+
+    await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
+        const send = buttons.find((b) => b.textContent.trim() === 'Send');
+        if (send === undefined) return false;
+        send.click();
+        return true;
+      })()`,
+    );
+
+    const answer = await waitFor(
+      session,
+      `(() => {
+        const messages = document.querySelectorAll('.ai-message__content');
+        for (const message of messages) {
+          if (message.textContent.includes('NOVA_VERIFY_ANSWER')) {
+            return message.textContent;
+          }
+        }
+        return false;
+      })()`,
+      30000,
+    );
+    check(
+      'the answer of the model arrives in the panel',
+      typeof answer === 'string' && answer.includes('NOVA_VERIFY_ANSWER'),
+      String(answer).slice(0, 80),
+    );
+
+    // The answer must not be written into a file (that is Milestone 5):
+    // the number of open tabs must not change.
+    const noFileWrite = await session.evaluate(
+      `(() => document.querySelectorAll('.editor-tab').length === ${tabsBeforeChat})()`,
+    );
+    check('the answer did not open a file', noFileWrite === true);
+
+    mockOllama.stop();
 
     // The renderer must not log any error.
     check(

@@ -51,6 +51,7 @@ function subscribe<T>(
  */
 const novaApi: NovaApi = {
   getAppInfo: () => invoke(IpcChannels.appGetInfo),
+  openExternal: (url) => invoke(IpcChannels.appOpenExternal, url),
 
   workspace: {
     open: (pathValue?: string) =>
@@ -133,6 +134,14 @@ const novaApi: NovaApi = {
     cancel: (requestId) => invoke(IpcChannels.aiCancel, requestId),
     setKey: (providerId, key) => invoke(IpcChannels.aiSetKey, providerId, key),
     clearKey: (providerId) => invoke(IpcChannels.aiClearKey, providerId),
+    conversations: () => invoke(IpcChannels.aiConversations),
+    saveConversation: (conversation) =>
+      invoke(IpcChannels.aiConversationSave, conversation),
+    deleteConversation: (id) => invoke(IpcChannels.aiConversationDelete, id),
+    updateProvider: (providerId, settings) =>
+      invoke(IpcChannels.aiProviderUpdate, providerId, settings),
+    removeProvider: (providerId) =>
+      invoke(IpcChannels.aiProviderRemove, providerId),
   },
 
   terminal: {

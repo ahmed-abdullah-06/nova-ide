@@ -20,6 +20,11 @@ import { OllamaProvider } from './ollama/ollamaProvider';
 import { OpenAiCompatibleProvider } from './openai/openaiCompatibleProvider';
 import { ProviderRegistry } from './registry';
 import {
+  isLoopbackUrl,
+  normalizeBaseUrl,
+  validateProviderUrl,
+} from './urlPolicy';
+import {
   defaultProviderSettings,
   ProviderSettingsStore,
   type ProviderSettings,
@@ -127,6 +132,107 @@ export class ProviderService {
   async settingsOf(providerId: string): Promise<ProviderSettings> {
     const settings = await this.settings.get(providerId);
     return settings ?? defaultProviderSettings(providerId);
+  }
+
+  /**
+   * Changes the settings of a provider.
+   *
+   * The address of a cloud provider must be confirmed by the user before
+   * it is used — otherwise a setting could silently point the requests
+   * of the user at an unknown service.
+   */
+  async update(
+    providerId: string,
+    changes: {
+      baseUrl?: string;
+      enabled?: boolean;
+      remoteConfirmed?: boolean;
+    },
+  ): Promise<AiResult<ProviderDescriptor>> {
+    if (!this.registry.has(providerId)) {
+      return {
+        ok: false,
+        error: {
+          code: 'unknown',
+          message: 'The selected provider is not available.',
+        },
+      };
+    }
+    const current = await this.settingsOf(providerId);
+
+    let baseUrl = current.baseUrl;
+    if (changes.baseUrl !== undefined) {
+      const problem = validateProviderUrl(changes.baseUrl);
+      if (problem !== null) {
+        return { ok: false, error: { code: 'unknown', message: problem } };
+      }
+      baseUrl = normalizeBaseUrl(changes.baseUrl);
+    }
+
+    const remoteConfirmed =
+      changes.remoteConfirmed ?? current.remoteConfirmed ?? false;
+    if (!isLoopbackUrl(baseUrl) && !remoteConfirmed) {
+      return {
+        ok: false,
+        error: {
+          code: 'unknown',
+          message:
+            'This address is not on this machine. ' +
+            'Confirm it before it can be used.',
+        },
+      };
+    }
+
+    await this.settings.set({
+      ...current,
+      baseUrl,
+      enabled: changes.enabled ?? current.enabled,
+      remoteConfirmed,
+    });
+    await this.sync();
+    const descriptors = await this.descriptors();
+    if (!descriptors.ok) {
+      return descriptors;
+    }
+    const descriptor = descriptors.value.find(
+      (entry) => entry.id === providerId,
+    );
+    if (descriptor === undefined) {
+      return {
+        ok: false,
+        error: { code: 'unknown', message: 'The provider is not available.' },
+      };
+    }
+    return { ok: true, value: descriptor };
+  }
+
+  /** Removes the configuration of a provider (it returns to the default). */
+  async remove(providerId: string): Promise<AiResult<ProviderDescriptor>> {
+    if (!this.registry.has(providerId)) {
+      return {
+        ok: false,
+        error: {
+          code: 'unknown',
+          message: 'The selected provider is not available.',
+        },
+      };
+    }
+    await this.settings.remove(providerId);
+    await this.sync();
+    const descriptors = await this.descriptors();
+    if (!descriptors.ok) {
+      return descriptors;
+    }
+    const descriptor = descriptors.value.find(
+      (entry) => entry.id === providerId,
+    );
+    if (descriptor === undefined) {
+      return {
+        ok: false,
+        error: { code: 'unknown', message: 'The provider is not available.' },
+      };
+    }
+    return { ok: true, value: descriptor };
   }
 
   /** Creates the adapter of a provider (null for an unknown id). */
