@@ -79,6 +79,15 @@ export class SearchService {
   private readonly cancelled = new Set<string>();
   /** Request ids that are currently running. */
   private readonly running = new Set<string>();
+  /**
+   * The listeners of the results.
+   *
+   * The renderer sees the results of its searches; the agent needs the
+   * results of its own search in the main process.
+   */
+  private readonly resultListeners = new Set<
+    (results: SearchResults) => void
+  >();
 
   constructor(options: SearchServiceOptions) {
     this.getRoot = options.getRoot;
@@ -88,6 +97,18 @@ export class SearchService {
   /** Number of searches currently in flight (diagnostics / tests). */
   get runningCount(): number {
     return this.running.size;
+  }
+
+  /**
+   * Subscribes to the results of the searches.
+   *
+   * @returns A function that removes the subscription.
+   */
+  subscribeResults(listener: (results: SearchResults) => void): () => void {
+    this.resultListeners.add(listener);
+    return () => {
+      this.resultListeners.delete(listener);
+    };
   }
 
   /**

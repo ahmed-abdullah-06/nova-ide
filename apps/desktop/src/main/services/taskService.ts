@@ -94,6 +94,23 @@ export class TaskService {
   }) => void;
   private readonly onProcessStart: ((pid: number) => void) | undefined;
   private readonly onProcessEnd: ((pid: number) => void) | undefined;
+  /**
+   * The listeners of the output.
+   *
+   * The renderer sees the output of the tasks it started; the agent needs
+   * the output of its own command in the main process.
+   */
+  private readonly outputListeners = new Set<
+    (output: { taskId: string; chunk: string }) => void
+  >();
+  /** The listeners of the status changes. */
+  private readonly statusListeners = new Set<
+    (status: {
+      taskId: string;
+      status: TaskStatus;
+      exitCode: number | null;
+    }) => void
+  >();
   private readonly tasks = new Map<string, RunningTask>();
   /** The process ids of the tasks (kept after the task has ended). */
   private readonly processIds = new Map<string, number>();
@@ -110,6 +127,38 @@ export class TaskService {
   /** Number of running tasks (diagnostics / tests). */
   get runningCount(): number {
     return this.tasks.size;
+  }
+
+  /**
+   * Subscribes to the output of the tasks.
+   *
+   * @returns A function that removes the subscription.
+   */
+  subscribeOutput(
+    listener: (output: { taskId: string; chunk: string }) => void,
+  ): () => void {
+    this.outputListeners.add(listener);
+    return () => {
+      this.outputListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Subscribes to the status changes of the tasks.
+   *
+   * @returns A function that removes the subscription.
+   */
+  subscribeStatus(
+    listener: (status: {
+      taskId: string;
+      status: TaskStatus;
+      exitCode: number | null;
+    }) => void,
+  ): () => void {
+    this.statusListeners.add(listener);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
   }
 
   /** Lists the scripts of the workspace `package.json`. */
@@ -219,6 +268,9 @@ export class TaskService {
         task.output = `${task.output}${text}`.slice(0, MAX_TASK_OUTPUT_CHARS);
       }
       this.onOutput({ taskId, chunk: text });
+      for (const listener of this.outputListeners) {
+        listener({ taskId, chunk: text });
+      }
     };
 
     child.onData((data: string) => appendOutput(data));
@@ -232,6 +284,9 @@ export class TaskService {
     });
 
     this.onStatus({ taskId, status: 'running', exitCode: null });
+    for (const listener of this.statusListeners) {
+      listener({ taskId, status: 'running', exitCode: null });
+    }
     return fsOk<{ taskId: string }>({ taskId });
   }
 
@@ -301,6 +356,9 @@ export class TaskService {
     }
     this.tasks.delete(taskId);
     this.onStatus({ taskId, status, exitCode });
+    for (const listener of this.statusListeners) {
+      listener({ taskId, status, exitCode });
+    }
   }
 
   /**
