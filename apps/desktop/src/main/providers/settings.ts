@@ -16,6 +16,9 @@ import path from 'node:path';
 import { errnoOf } from '../services/results';
 import { DEFAULT_OLLAMA_URL } from './urlPolicy';
 
+/** The default address of the OpenAI compatible service. */
+export const DEFAULT_OPENAI_URL = 'https://api.openai.com/v1';
+
 /** The name of the settings file in the user data directory. */
 const SETTINGS_FILE_NAME = 'providers.json';
 
@@ -44,12 +47,18 @@ export interface ProviderSettingsFile {
   providers: ProviderSettings[];
 }
 
-/** The settings a provider starts with. */
+/**
+ * The settings a provider starts with.
+ *
+ * A cloud provider starts disabled: it is only usable after the user
+ * added a key and switched it on (spec §11.4).
+ */
 export function defaultProviderSettings(id: string): ProviderSettings {
+  const local = id === 'ollama';
   return {
     id,
-    enabled: true,
-    baseUrl: id === 'ollama' ? DEFAULT_OLLAMA_URL : '',
+    enabled: local,
+    baseUrl: local ? DEFAULT_OLLAMA_URL : DEFAULT_OPENAI_URL,
     encryptedKey: null,
     remoteConfirmed: false,
   };

@@ -17,6 +17,7 @@ import type {
 } from '../../shared/ai-types';
 import type { AIProvider } from './interfaces/provider';
 import { OllamaProvider } from './ollama/ollamaProvider';
+import { OpenAiCompatibleProvider } from './openai/openaiCompatibleProvider';
 import { ProviderRegistry } from './registry';
 import {
   defaultProviderSettings,
@@ -25,7 +26,7 @@ import {
 } from './settings';
 
 /** The providers the application offers out of the box. */
-const BUILT_IN_PROVIDERS = ['ollama'] as const;
+const BUILT_IN_PROVIDERS = ['ollama', 'openai-compatible'] as const;
 
 export class ProviderService {
   private readonly registry = new ProviderRegistry();
@@ -129,6 +130,13 @@ export class ProviderService {
         return new OllamaProvider({
           baseUrl: settings.baseUrl,
           remoteConfirmed: settings.remoteConfirmed,
+        });
+      case 'openai-compatible':
+        return new OpenAiCompatibleProvider({
+          baseUrl: settings.baseUrl,
+          // The key is read from the credential store when the provider
+          // is used (it never stays in the renderer).
+          apiKey: null,
         });
       default:
         return null;

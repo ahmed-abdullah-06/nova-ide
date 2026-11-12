@@ -24,6 +24,7 @@ import type {
   AIProvider,
   ProviderChatRequest,
 } from '../interfaces/provider';
+import { redact } from '../redact';
 import {
   DEFAULT_OLLAMA_URL,
   isLoopbackUrl,
@@ -452,12 +453,12 @@ async function readErrorDetail(response: Response): Promise<string> {
       const parsed: unknown = JSON.parse(text);
       const message = (parsed as { error?: unknown }).error;
       if (typeof message === 'string') {
-        return message;
+        return redact(message);
       }
     } catch {
       // Not JSON — the raw text is used (it is short and local).
     }
-    return text.slice(0, 200);
+    return redact(text.slice(0, 200));
   } catch {
     return '';
   }
