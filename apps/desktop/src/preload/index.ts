@@ -11,6 +11,7 @@ import {
   type TerminalData,
   type TerminalExit,
 } from '../shared/ipc-types';
+import type { AIStreamEvent } from '../shared/ai-types';
 
 /** Typed `ipcRenderer.invoke` restricted to the shared channel contract. */
 function invoke<C extends keyof IpcInvokeMap & string>(
@@ -108,6 +109,17 @@ const novaApi: NovaApi = {
       subscribe<TaskOutput>(IpcPushChannels.taskOutput, listener),
     onStatus: (listener) =>
       subscribe<TaskStatusEvent>(IpcPushChannels.taskStatus, listener),
+  },
+
+  ai: {
+    providers: () => invoke(IpcChannels.aiProviders),
+    models: (providerId) => invoke(IpcChannels.aiModels, providerId),
+    status: (providerId) => invoke(IpcChannels.aiStatus, providerId),
+    onStream: (listener) =>
+      subscribe<{ requestId: string; event: AIStreamEvent }>(
+        IpcPushChannels.aiStream,
+        listener,
+      ),
   },
 
   terminal: {

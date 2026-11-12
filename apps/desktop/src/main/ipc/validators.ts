@@ -137,3 +137,21 @@ export function assertPathAndBoolean(
     throw new Error('Expected (path, staged)');
   }
 }
+
+/**
+ * A provider id.
+ *
+ * The id is used to look up the provider in the registry, so it is
+ * limited to a short, safe charset.
+ */
+export function assertProviderId(
+  args: unknown[],
+): asserts args is [providerId: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected a provider id');
+  }
+  const id = args[0];
+  if (id.length === 0 || id.length > 64 || !/^[a-z0-9-]+$/.test(id)) {
+    throw new Error('Invalid provider id');
+  }
+}

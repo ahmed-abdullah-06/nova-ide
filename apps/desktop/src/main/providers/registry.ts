@@ -16,6 +16,11 @@ export class ProviderRegistry {
     this.providers.set(provider.id, provider);
   }
 
+  /** Removes a provider. */
+  unregister(id: string): void {
+    this.providers.delete(id);
+  }
+
   /** The provider with the given id (undefined when it is unknown). */
   get(id: string): AIProvider | undefined {
     return this.providers.get(id);

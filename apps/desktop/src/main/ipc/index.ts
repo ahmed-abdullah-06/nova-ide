@@ -16,11 +16,13 @@ import { createTerminalHandlers } from './terminal';
 import { createSearchHandlers } from './search';
 import { createGitHandlers } from './git';
 import { createTaskHandlers } from './tasks';
+import { createAiHandlers } from './ai';
 import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
   assertOptionalString,
+  assertProviderId,
   assertSaveAsArgs,
   assertPathAndBoolean,
   assertSearchQuery,
@@ -36,6 +38,8 @@ import { SearchService } from '../services/searchService';
 import { GitService } from '../services/gitService';
 import { TaskService } from '../services/taskService';
 import { ChildWatchdog } from '../services/childWatchdog';
+import { ProviderService } from '../providers/providerService';
+import { ProviderSettingsStore } from '../providers/settings';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -150,6 +154,13 @@ export function registerIpcHandlers(): () => Promise<void> {
     },
   });
   const taskHandlers = createTaskHandlers(taskService);
+
+  // The provider layer: the settings live in the main process, so the
+  // renderer never sees a key. The providers are created from the
+  // settings when they are used, so a changed address takes effect at
+  // once.
+  const providerService = new ProviderService(new ProviderSettingsStore());
+  const aiHandlers = createAiHandlers(providerService);
 
 
 
@@ -292,6 +303,19 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.taskCancel,
     assertOneStringArg,
     taskHandlers.cancel,
+  );
+
+  // AI providers
+  registerChannel(IpcChannels.aiProviders, assertNoArgs, aiHandlers.providers);
+  registerChannel(
+    IpcChannels.aiModels,
+    assertProviderId,
+    aiHandlers.models,
+  );
+  registerChannel(
+    IpcChannels.aiStatus,
+    assertProviderId,
+    aiHandlers.status,
   );
 
 

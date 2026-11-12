@@ -1,3 +1,11 @@
+import type {
+  AiResult,
+  AIStreamEvent,
+  ProviderDescriptor,
+  ProviderModel,
+  ProviderStatus,
+} from './ai-types';
+
 /**
  * Typed IPC contract between the renderer and the Electron main process.
  *
@@ -43,6 +51,9 @@ export const IpcChannels = {
   taskList: 'task:list',
   taskRun: 'task:run',
   taskCancel: 'task:cancel',
+  aiProviders: 'ai:providers',
+  aiModels: 'ai:models',
+  aiStatus: 'ai:status',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -59,6 +70,7 @@ export const IpcPushChannels = {
   searchResults: 'search:results',
   taskOutput: 'task:output',
   taskStatus: 'task:status',
+  aiStream: 'ai:stream',
 } as const;
 
 export type IpcPushChannel =
@@ -416,6 +428,18 @@ export interface IpcInvokeMap {
   'task:run': { args: [name: string]; result: FsResult<{ taskId: string }> };
   /** Stops a running task and kills its process tree. */
   'task:cancel': { args: [taskId: string]; result: FsResult<void> };
+  /** The providers the user can choose from (never a key). */
+  'ai:providers': { args: []; result: AiResult<ProviderDescriptor[]> };
+  /** The models a provider offers. */
+  'ai:models': {
+    args: [providerId: string];
+    result: AiResult<ProviderModel[]>;
+  };
+  /** Checks whether a provider can be reached. */
+  'ai:status': {
+    args: [providerId: string];
+    result: AiResult<ProviderStatus>;
+  };
 }
 
 /**
@@ -521,6 +545,20 @@ export interface NovaTaskApi {
   onStatus(listener: (status: TaskStatusEvent) => void): () => void;
 }
 
+/** AI providers and chat (spec §11). */
+export interface NovaAiApi {
+  /** The providers the user can choose from. */
+  providers(): Promise<AiResult<ProviderDescriptor[]>>;
+  /** The models a provider offers. */
+  models(providerId: string): Promise<AiResult<ProviderModel[]>>;
+  /** Checks whether a provider can be reached. */
+  status(providerId: string): Promise<AiResult<ProviderStatus>>;
+  /** Subscribes to the streaming answer of a request. */
+  onStream(
+    listener: (payload: { requestId: string; event: AIStreamEvent }) => void,
+  ): () => void;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
@@ -530,6 +568,7 @@ export interface NovaApi {
   search: NovaSearchApi;
   git: NovaGitApi;
   task: NovaTaskApi;
+  ai: NovaAiApi;
 }
 
 /**
