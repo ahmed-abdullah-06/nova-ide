@@ -22,6 +22,7 @@ import type {
   ContextPreview,
   ProviderErrorInfo,
 } from '../../shared/ai-types';
+import { looksBinary } from '../services/fileLimits';
 import { resolveInWorkspace } from '../services/pathSecurity';
 
 /** The maximum number of characters of one attached file. */
@@ -146,7 +147,13 @@ export async function buildContext(
         continue;
       }
       sizeBytes = stat.size;
-      content = await fs.readFile(resolved.value, 'utf8');
+      const buffer = await fs.readFile(resolved.value);
+      // A binary file is never sent: it would only waste tokens.
+      if (looksBinary(buffer)) {
+        skipped += 1;
+        continue;
+      }
+      content = buffer.toString('utf8');
     } catch {
       skipped += 1;
       continue;
@@ -367,7 +374,19 @@ export async function previewContext(
 
     let content: string;
     try {
-      content = await fs.readFile(resolved.value, 'utf8');
+      const buffer = await fs.readFile(resolved.value);
+      if (looksBinary(buffer)) {
+        previews.push({
+          path: request.path,
+          name: path.basename(resolved.value),
+          sizeBytes: 0,
+          tokens: 0,
+          truncated: false,
+          skipped: 'This file is a binary file and is not sent.',
+        });
+        continue;
+      }
+      content = buffer.toString('utf8');
     } catch {
       previews.push({
         path: request.path,

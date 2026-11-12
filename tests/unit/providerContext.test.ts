@@ -74,6 +74,20 @@ describe('context of a request', () => {
     expect(context.text).toBe('');
     expect(context.skipped).toBe(1);
   });
+
+  it('never sends a binary file', async () => {
+    await writeFile(
+      path.join(root, 'image.bin'),
+      Buffer.from([0x00, 0x01, 0x02, 0x03]),
+    );
+    const context = await buildContext(
+      root,
+      [{ path: path.join(root, 'image.bin'), kind: 'file' }],
+      parseGitignore(''),
+    );
+    expect(context.text).toBe('');
+    expect(context.skipped).toBe(1);
+  });
 });
 
 describe('preview of the context', () => {
@@ -107,6 +121,19 @@ describe('preview of the context', () => {
       parseGitignore('ignored.ts\n'),
     );
     expect(previews[0]?.skipped).toContain('.gitignore');
+  });
+
+  it('reports that a binary file is not sent', async () => {
+    await writeFile(
+      path.join(root, 'image.bin'),
+      Buffer.from([0x00, 0x01, 0x02, 0x03]),
+    );
+    const previews = await previewContext(
+      root,
+      [{ path: path.join(root, 'image.bin'), kind: 'file' }],
+      parseGitignore(''),
+    );
+    expect(previews[0]?.skipped).toContain('binary');
   });
 
   it('reports that a file is shortened', async () => {
