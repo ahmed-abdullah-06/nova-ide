@@ -155,3 +155,110 @@ export function assertProviderId(
     throw new Error('Invalid provider id');
   }
 }
+
+/**
+ * A request id of the renderer.
+ *
+ * The id is used to correlate the streamed events, so it is limited to a
+ * short, safe charset.
+ */
+export function assertRequestId(
+  args: unknown[],
+): asserts args is [requestId: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected a request id');
+  }
+  const id = args[0];
+  if (id.length === 0 || id.length > 64 || !/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error('Invalid request id');
+  }
+}
+
+/**
+ * The chat request of the renderer.
+ *
+ * The messages are plain text; the attachments are paths inside the
+ * workspace (the main process reads the files itself).
+ */
+export function assertChatRequest(
+  args: unknown[],
+): asserts args is [
+  requestId: string,
+  providerId: string,
+  model: string,
+  messages: unknown[],
+  attachments: unknown[],
+  approveCloudContext: boolean,
+] {
+  if (args.length !== 6) {
+    throw new Error('Expected (requestId, providerId, model, messages, attachments, approve)');
+  }
+  const [requestId, providerId, model, messages, attachments, approved] = args;
+  if (typeof requestId !== 'string' || requestId.length === 0 || requestId.length > 64) {
+    throw new Error('Invalid request id');
+  }
+  if (typeof providerId !== 'string' || providerId.length === 0 || providerId.length > 64) {
+    throw new Error('Invalid provider id');
+  }
+  if (typeof model !== 'string' || model.length === 0 || model.length > 200) {
+    throw new Error('Invalid model');
+  }
+  if (!Array.isArray(messages) || messages.length > 200) {
+    throw new Error('Invalid messages');
+  }
+  for (const message of messages) {
+    if (typeof message !== 'object' || message === null) {
+      throw new Error('Invalid message');
+    }
+    const record = message as { role?: unknown; content?: unknown };
+    if (
+      record.role !== 'system' &&
+      record.role !== 'user' &&
+      record.role !== 'assistant'
+    ) {
+      throw new Error('Invalid message role');
+    }
+    if (typeof record.content !== 'string' || record.content.length > 200000) {
+      throw new Error('Invalid message content');
+    }
+  }
+  if (!Array.isArray(attachments) || attachments.length > 50) {
+    throw new Error('Invalid attachments');
+  }
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'object' || attachment === null) {
+      throw new Error('Invalid attachment');
+    }
+    const record = attachment as { path?: unknown; kind?: unknown };
+    if (typeof record.path !== 'string' || record.path.length === 0 || record.path.length > 4096) {
+      throw new Error('Invalid attachment path');
+    }
+    if (record.kind !== 'selection' && record.kind !== 'file') {
+      throw new Error('Invalid attachment kind');
+    }
+  }
+  if (typeof approved !== 'boolean') {
+    throw new Error('Expected the approval of the context');
+  }
+}
+
+/**
+ * The API key of a provider.
+ *
+ * The key travels from the renderer to the main process exactly once
+ * (the user typed it); the main process encrypts it and never returns
+ * it.
+ */
+export function assertProviderKey(
+  args: unknown[],
+): asserts args is [providerId: string, key: string] {
+  if (args.length !== 2 || typeof args[0] !== 'string' || typeof args[1] !== 'string') {
+    throw new Error('Expected (providerId, key)');
+  }
+  if (args[0].length === 0 || args[0].length > 64 || !/^[a-z0-9-]+$/.test(args[0])) {
+    throw new Error('Invalid provider id');
+  }
+  if (args[1].length === 0 || args[1].length > 4096) {
+    throw new Error('Invalid API key');
+  }
+}

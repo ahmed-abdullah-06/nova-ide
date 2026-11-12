@@ -1,6 +1,7 @@
 import type {
   AiResult,
   AIStreamEvent,
+  ChatMessage,
   ProviderDescriptor,
   ProviderModel,
   ProviderStatus,
@@ -54,6 +55,10 @@ export const IpcChannels = {
   aiProviders: 'ai:providers',
   aiModels: 'ai:models',
   aiStatus: 'ai:status',
+  aiChat: 'ai:chat',
+  aiCancel: 'ai:cancel',
+  aiSetKey: 'ai:set-key',
+  aiClearKey: 'ai:clear-key',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -440,6 +445,37 @@ export interface IpcInvokeMap {
     args: [providerId: string];
     result: AiResult<ProviderStatus>;
   };
+  /**
+   * Starts a chat request. The events arrive through the `ai:stream`
+   * push channel and are correlated through the request id.
+   */
+  'ai:chat': {
+    args: [
+      requestId: string,
+      providerId: string,
+      model: string,
+      messages: ChatMessage[],
+      attachments: { path: string; kind: 'selection' | 'file' }[],
+      approveCloudContext: boolean,
+    ];
+    result: AiResult<{ requestId: string }>;
+  };
+  /** Cancels a running chat request. */
+  'ai:cancel': { args: [requestId: string]; result: AiResult<void> };
+  /**
+   * Stores the API key of a provider.
+   *
+   * The key is encrypted by the main process and never returned.
+   */
+  'ai:set-key': {
+    args: [providerId: string, key: string];
+    result: AiResult<{ configured: boolean }>;
+  };
+  /** Removes the API key of a provider. */
+  'ai:clear-key': {
+    args: [providerId: string];
+    result: AiResult<{ configured: boolean }>;
+  };
 }
 
 /**
@@ -557,6 +593,21 @@ export interface NovaAiApi {
   onStream(
     listener: (payload: { requestId: string; event: AIStreamEvent }) => void,
   ): () => void;
+  /** Starts a chat request; the answer arrives through `onStream`. */
+  chat(
+    requestId: string,
+    providerId: string,
+    model: string,
+    messages: ChatMessage[],
+    attachments: { path: string; kind: 'selection' | 'file' }[],
+    approveCloudContext: boolean,
+  ): Promise<AiResult<{ requestId: string }>>;
+  /** Cancels a running request. */
+  cancel(requestId: string): Promise<AiResult<void>>;
+  /** Stores the API key of a provider (the key is never returned). */
+  setKey(providerId: string, key: string): Promise<AiResult<{ configured: boolean }>>;
+  /** Removes the API key of a provider. */
+  clearKey(providerId: string): Promise<AiResult<{ configured: boolean }>>;
 }
 
 /** Public API exposed on `window.nova` by the preload bridge. */

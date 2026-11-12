@@ -31,9 +31,15 @@ const BUILT_IN_PROVIDERS = ['ollama', 'openai-compatible'] as const;
 export class ProviderService {
   private readonly registry = new ProviderRegistry();
   private readonly settings: ProviderSettingsStore;
+  /** Reads the API key of a provider (the main process only). */
+  private readonly getApiKey: (providerId: string) => Promise<string | null>;
 
-  constructor(settings: ProviderSettingsStore) {
+  constructor(
+    settings: ProviderSettingsStore,
+    getApiKey: (providerId: string) => Promise<string | null> = async () => null,
+  ) {
     this.settings = settings;
+    this.getApiKey = getApiKey;
   }
 
   /**
@@ -45,7 +51,10 @@ export class ProviderService {
   async sync(): Promise<void> {
     for (const id of BUILT_IN_PROVIDERS) {
       const settings = await this.settings.get(id);
-      const provider = this.createProvider(id, settings ?? defaultProviderSettings(id));
+      const provider = await this.createProvider(
+        id,
+        settings ?? defaultProviderSettings(id),
+      );
       if (provider !== null) {
         this.registry.register(provider);
       }
@@ -121,10 +130,10 @@ export class ProviderService {
   }
 
   /** Creates the adapter of a provider (null for an unknown id). */
-  private createProvider(
+  private async createProvider(
     id: string,
     settings: ProviderSettings,
-  ): AIProvider | null {
+  ): Promise<AIProvider | null> {
     switch (id) {
       case 'ollama':
         return new OllamaProvider({
@@ -134,9 +143,9 @@ export class ProviderService {
       case 'openai-compatible':
         return new OpenAiCompatibleProvider({
           baseUrl: settings.baseUrl,
-          // The key is read from the credential store when the provider
-          // is used (it never stays in the renderer).
-          apiKey: null,
+          // The key comes from the credential store; it is decrypted for
+          // this request only and never leaves the main process.
+          apiKey: await this.getApiKey(id),
         });
       default:
         return null;

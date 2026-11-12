@@ -120,6 +120,19 @@ const novaApi: NovaApi = {
         IpcPushChannels.aiStream,
         listener,
       ),
+    chat: (requestId, providerId, model, messages, attachments, approved) =>
+      invoke(
+        IpcChannels.aiChat,
+        requestId,
+        providerId,
+        model,
+        messages,
+        attachments,
+        approved,
+      ),
+    cancel: (requestId) => invoke(IpcChannels.aiCancel, requestId),
+    setKey: (providerId, key) => invoke(IpcChannels.aiSetKey, providerId, key),
+    clearKey: (providerId) => invoke(IpcChannels.aiClearKey, providerId),
   },
 
   terminal: {

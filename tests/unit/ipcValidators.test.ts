@@ -9,10 +9,14 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertChatRequest,
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
   assertPathAndBoolean,
+  assertProviderId,
+  assertProviderKey,
+  assertRequestId,
   assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
@@ -71,6 +75,77 @@ describe('IPC argument validators', () => {
     expect(() => assertPathAndBoolean(['C:\\a', false])).not.toThrow();
     expect(() => assertPathAndBoolean(['C:\\a'])).toThrow();
     expect(() => assertPathAndBoolean(['C:\\a', 'yes'])).toThrow();
+  });
+
+  it('validates a provider id', () => {
+    expect(() => assertProviderId(['ollama'])).not.toThrow();
+    expect(() => assertProviderId(['openai-compatible'])).not.toThrow();
+    expect(() => assertProviderId([])).toThrow();
+    expect(() => assertProviderId([42])).toThrow();
+    // A name that could be used for something else is refused.
+    expect(() => assertProviderId(['../etc/passwd'])).toThrow();
+    expect(() => assertProviderId(['a b'])).toThrow();
+  });
+
+  it('validates a request id', () => {
+    expect(() => assertRequestId(['chat-1'])).not.toThrow();
+    expect(() => assertRequestId(['chat_1'])).not.toThrow();
+    expect(() => assertRequestId([])).toThrow();
+    expect(() => assertRequestId(['chat 1'])).toThrow();
+    expect(() => assertRequestId(['x'.repeat(100)])).toThrow();
+  });
+
+  it('validates a chat request', () => {
+    const request = [
+      'chat-1',
+      'ollama',
+      'llama3',
+      [{ role: 'user', content: 'Hello' }],
+      [{ path: 'C:\\work\\app.ts', kind: 'file' }],
+      false,
+    ];
+    expect(() => assertChatRequest(request)).not.toThrow();
+    expect(() => assertChatRequest(request.slice(0, 5))).toThrow();
+    expect(() => assertChatRequest([...request.slice(0, 5), 'yes'])).toThrow();
+    expect(() =>
+      assertChatRequest([
+        'chat-1',
+        'ollama',
+        'llama3',
+        [{ role: 'system', content: 'Hello' }],
+        [],
+        false,
+      ]),
+    ).not.toThrow();
+    // An unknown role is refused.
+    expect(() =>
+      assertChatRequest([
+        'chat-1',
+        'ollama',
+        'llama3',
+        [{ role: 'developer', content: 'Hello' }],
+        [],
+        false,
+      ]),
+    ).toThrow();
+    // An attachment without a kind is refused.
+    expect(() =>
+      assertChatRequest([
+        'chat-1',
+        'ollama',
+        'llama3',
+        [],
+        [{ path: 'C:\\work\\app.ts' }],
+        false,
+      ]),
+    ).toThrow();
+  });
+
+  it('validates an API key', () => {
+    expect(() => assertProviderKey(['ollama', 'sk-abc'])).not.toThrow();
+    expect(() => assertProviderKey(['ollama', ''])).toThrow();
+    expect(() => assertProviderKey(['ollama'])).toThrow();
+    expect(() => assertProviderKey(['../etc', 'sk-abc'])).toThrow();
   });
 
   it('validates an array of strings', () => {

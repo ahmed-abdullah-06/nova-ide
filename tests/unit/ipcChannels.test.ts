@@ -66,6 +66,13 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.taskList,
       IpcChannels.taskRun,
       IpcChannels.taskCancel,
+      IpcChannels.aiProviders,
+      IpcChannels.aiModels,
+      IpcChannels.aiStatus,
+      IpcChannels.aiChat,
+      IpcChannels.aiCancel,
+      IpcChannels.aiSetKey,
+      IpcChannels.aiClearKey,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

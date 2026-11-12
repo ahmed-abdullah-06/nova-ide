@@ -36,7 +36,9 @@ export interface ProviderRouterOptions {
   /** Called for every event of every running request. */
   onEvent: (requestId: string, event: AIStreamEvent) => void;
   /** Returns the provider with the given id. */
-  resolve: (providerId: string) => AIProvider | undefined;
+  resolve: (
+    providerId: string,
+  ) => AIProvider | null | undefined | Promise<AIProvider | null | undefined>;
 }
 
 export class ProviderRouter {
@@ -91,8 +93,8 @@ export class ProviderRouter {
       };
     }
 
-    const provider = this.options.resolve(providerId);
-    if (provider === undefined) {
+    const provider = await this.options.resolve(providerId);
+    if (provider === undefined || provider === null) {
       return {
         ok: false,
         error: {

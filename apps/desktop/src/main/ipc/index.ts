@@ -21,8 +21,11 @@ import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
+  assertChatRequest,
   assertOptionalString,
   assertProviderId,
+  assertProviderKey,
+  assertRequestId,
   assertSaveAsArgs,
   assertPathAndBoolean,
   assertSearchQuery,
@@ -38,6 +41,8 @@ import { SearchService } from '../services/searchService';
 import { GitService } from '../services/gitService';
 import { TaskService } from '../services/taskService';
 import { ChildWatchdog } from '../services/childWatchdog';
+import { ChatService } from '../providers/chatService';
+import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
 
@@ -159,8 +164,22 @@ export function registerIpcHandlers(): () => Promise<void> {
   // renderer never sees a key. The providers are created from the
   // settings when they are used, so a changed address takes effect at
   // once.
-  const providerService = new ProviderService(new ProviderSettingsStore());
-  const aiHandlers = createAiHandlers(providerService);
+  const providerSettings = new ProviderSettingsStore();
+  const credentialStore = new CredentialStore(providerSettings);
+  const providerService = new ProviderService(providerSettings, (providerId) =>
+    credentialStore.getKey(providerId),
+  );
+  const chatService = new ChatService({
+    providers: providerService,
+    credentials: credentialStore,
+    getRoot: () => workspaceService.getActiveRoot(),
+    onEvent: (requestId, event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.aiStream, { requestId, event });
+      }
+    },
+  });
+  const aiHandlers = createAiHandlers(providerService, chatService, credentialStore);
 
 
 
@@ -317,6 +336,26 @@ export function registerIpcHandlers(): () => Promise<void> {
     assertProviderId,
     aiHandlers.status,
   );
+  registerChannel(
+    IpcChannels.aiChat,
+    assertChatRequest,
+    aiHandlers.chat,
+  );
+  registerChannel(
+    IpcChannels.aiCancel,
+    assertRequestId,
+    aiHandlers.cancel,
+  );
+  registerChannel(
+    IpcChannels.aiSetKey,
+    assertProviderKey,
+    aiHandlers.setKey,
+  );
+  registerChannel(
+    IpcChannels.aiClearKey,
+    assertProviderId,
+    aiHandlers.clearKey,
+  );
 
 
 
@@ -332,6 +371,8 @@ export function registerIpcHandlers(): () => Promise<void> {
    * outlive the application.
    */
   const stopChildProcesses = async (): Promise<void> => {
+    // The running requests are aborted, so the providers stop generating.
+    chatService.cancelAll();
     await Promise.all([terminalService.killAll(), taskService.killAll()]);
     watchdog.stop();
     watcher.clear();
