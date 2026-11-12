@@ -9,14 +9,18 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertAgentTask,
+  assertApprovalAnswer,
   assertChatRequest,
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
   assertPathAndBoolean,
+  assertProposalId,
   assertProviderId,
   assertProviderKey,
   assertRequestId,
+  assertRunId,
   assertSearchQuery,
   assertSessionAndData,
   assertSessionAndSize,
@@ -146,6 +150,40 @@ describe('IPC argument validators', () => {
     expect(() => assertProviderKey(['ollama', ''])).toThrow();
     expect(() => assertProviderKey(['ollama'])).toThrow();
     expect(() => assertProviderKey(['../etc', 'sk-abc'])).toThrow();
+  });
+
+  it('validates the task of an agent run', () => {
+    expect(() =>
+      assertAgentTask(['do something', 'ollama', 'llama3', false]),
+    ).not.toThrow();
+    expect(() => assertAgentTask(['x', 'ollama', 'llama3'])).toThrow();
+    expect(() => assertAgentTask(['', 'ollama', 'llama3', false])).toThrow();
+    expect(() => assertAgentTask(['x', '../etc', 'llama3', false])).toThrow();
+    expect(() => assertAgentTask(['x', 'ollama', '', false])).toThrow();
+    expect(() => assertAgentTask(['x', 'ollama', 'llama3', 'yes'])).toThrow();
+  });
+
+  it('validates a run id', () => {
+    expect(() => assertRunId(['run-1'])).not.toThrow();
+    expect(() => assertRunId([])).toThrow();
+    expect(() => assertRunId(['run 1'])).toThrow();
+    expect(() => assertRunId(['x'.repeat(100)])).toThrow();
+  });
+
+  it('validates the answer of an approval request', () => {
+    expect(() =>
+      assertApprovalAnswer(['run-1', 'approval-1', true]),
+    ).not.toThrow();
+    expect(() => assertApprovalAnswer(['run-1', 'approval-1'])).toThrow();
+    expect(() =>
+      assertApprovalAnswer(['run-1', 'approval-1', 'yes']),
+    ).toThrow();
+  });
+
+  it('validates the id of a proposal', () => {
+    expect(() => assertProposalId(['run-1', 'proposal-1'])).not.toThrow();
+    expect(() => assertProposalId(['run-1'])).toThrow();
+    expect(() => assertProposalId(['run-1', 'proposal 1'])).toThrow();
   });
 
   it('validates an array of strings', () => {

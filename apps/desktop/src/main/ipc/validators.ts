@@ -416,3 +416,98 @@ export function assertContextAttachments(
     }
   }
 }
+
+/**
+ * The task of an agent run.
+ */
+export function assertAgentTask(
+  args: unknown[],
+): asserts args is [
+  task: string,
+  providerId: string,
+  model: string,
+  approveCloudContext: boolean,
+] {
+  if (args.length !== 4) {
+    throw new Error('Expected (task, providerId, model, approve)');
+  }
+  const [task, providerId, model, approved] = args;
+  if (typeof task !== 'string' || task.trim().length === 0 || task.length > 8000) {
+    throw new Error('Invalid task');
+  }
+  if (
+    typeof providerId !== 'string' ||
+    providerId.length === 0 ||
+    providerId.length > 64 ||
+    !/^[a-z0-9-]+$/.test(providerId)
+  ) {
+    throw new Error('Invalid provider id');
+  }
+  if (typeof model !== 'string' || model.length === 0 || model.length > 200) {
+    throw new Error('Invalid model');
+  }
+  if (typeof approved !== 'boolean') {
+    throw new Error('Expected the approval of the user');
+  }
+}
+
+/**
+ * The id of an agent run.
+ */
+export function assertRunId(args: unknown[]): asserts args is [runId: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected a run id');
+  }
+  if (args[0].length === 0 || args[0].length > 64 || !/^[A-Za-z0-9_-]+$/.test(args[0])) {
+    throw new Error('Invalid run id');
+  }
+}
+
+/**
+ * The answer of an approval request.
+ */
+export function assertApprovalAnswer(
+  args: unknown[],
+): asserts args is [runId: string, approvalId: string, approved: boolean] {
+  if (args.length !== 3) {
+    throw new Error('Expected (runId, approvalId, approved)');
+  }
+  const [runId, approvalId, approved] = args;
+  if (typeof runId !== 'string' || runId.length === 0 || runId.length > 64) {
+    throw new Error('Invalid run id');
+  }
+  if (
+    typeof approvalId !== 'string' ||
+    approvalId.length === 0 ||
+    approvalId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(approvalId)
+  ) {
+    throw new Error('Invalid approval id');
+  }
+  if (typeof approved !== 'boolean') {
+    throw new Error('Expected the answer of the user');
+  }
+}
+
+/**
+ * The id of a change proposal.
+ */
+export function assertProposalId(
+  args: unknown[],
+): asserts args is [runId: string, proposalId: string] {
+  if (args.length !== 2) {
+    throw new Error('Expected (runId, proposalId)');
+  }
+  const [runId, proposalId] = args;
+  if (typeof runId !== 'string' || runId.length === 0 || runId.length > 64) {
+    throw new Error('Invalid run id');
+  }
+  if (
+    typeof proposalId !== 'string' ||
+    proposalId.length === 0 ||
+    proposalId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(proposalId)
+  ) {
+    throw new Error('Invalid proposal id');
+  }
+}

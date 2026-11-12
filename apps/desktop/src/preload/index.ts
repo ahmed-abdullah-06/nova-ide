@@ -12,6 +12,7 @@ import {
   type TerminalExit,
 } from '../shared/ipc-types';
 import type { AIStreamEvent } from '../shared/ai-types';
+import type { AgentEvent, AgentState } from '../shared/agent-types';
 
 /** Typed `ipcRenderer.invoke` restricted to the shared channel contract. */
 function invoke<C extends keyof IpcInvokeMap & string>(
@@ -100,6 +101,36 @@ const novaApi: NovaApi = {
     diff: (path, staged) => invoke(IpcChannels.gitDiff, path, staged),
     branches: () => invoke(IpcChannels.gitBranches),
     switchBranch: (name) => invoke(IpcChannels.gitSwitchBranch, name),
+  },
+
+  agent: {
+    start: (task, providerId, model, approveCloudContext) =>
+      invoke(
+        IpcChannels.agentStart,
+        task,
+        providerId,
+        model,
+        approveCloudContext,
+      ),
+    cancel: (runId) => invoke(IpcChannels.agentCancel, runId),
+    state: () => invoke(IpcChannels.agentState),
+    approve: (runId, approvalId, approved) =>
+      invoke(IpcChannels.agentApprove, runId, approvalId, approved),
+    acceptProposal: (runId, proposalId) =>
+      invoke(IpcChannels.agentAcceptProposal, runId, proposalId),
+    rejectProposal: (runId, proposalId) =>
+      invoke(IpcChannels.agentRejectProposal, runId, proposalId),
+    acceptAll: (runId) => invoke(IpcChannels.agentAcceptAll, runId),
+    rejectAll: (runId) => invoke(IpcChannels.agentRejectAll, runId),
+    revert: (runId) => invoke(IpcChannels.agentRevert, runId),
+    audit: () => invoke(IpcChannels.agentAudit),
+    onEvent: (listener) =>
+      subscribe<{ runId: string; event: AgentEvent }>(
+        IpcPushChannels.agentEvent,
+        listener,
+      ),
+    onState: (listener) =>
+      subscribe<AgentState>(IpcPushChannels.agentStateChanged, listener),
   },
 
   task: {

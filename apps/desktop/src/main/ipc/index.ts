@@ -17,10 +17,13 @@ import { createSearchHandlers } from './search';
 import { createGitHandlers } from './git';
 import { createTaskHandlers } from './tasks';
 import { createAiHandlers } from './ai';
+import { createAgentHandlers } from './agent';
 import {
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
+  assertAgentTask,
+  assertApprovalAnswer,
   assertChatRequest,
   assertContextAttachments,
   assertConversation,
@@ -28,9 +31,11 @@ import {
   assertExternalUrl,
   assertOptionalString,
   assertProviderId,
+  assertProposalId,
   assertProviderKey,
   assertProviderSettings,
   assertRequestId,
+  assertRunId,
   assertSaveAsArgs,
   assertPathAndBoolean,
   assertSearchQuery,
@@ -51,6 +56,9 @@ import { ConversationStore } from '../providers/conversationStore';
 import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
+import { AgentService } from '../agent/agentService';
+import { ToolExecutor } from '../agent/toolExecutor';
+import { DEFAULT_PERMISSION_SETTINGS } from '../agent/permissions';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -186,6 +194,49 @@ export function registerIpcHandlers(): () => Promise<void> {
     },
   });
   const conversationStore = new ConversationStore();
+
+  // The coding agent (spec §9, §12). The agent shares the services of the
+  // application: it reads through the file service, it searches with the
+  // search service, it inspects the repository with the git service and it
+  // runs commands through the task runner.
+  const agentSearch = new SearchService({
+    getRoot: () => workspaceService.getActiveRoot(),
+    onResults: () => undefined,
+  });
+  const agentExecutor = new ToolExecutor({
+    files: fileService,
+    search: agentSearch,
+    git: gitService,
+    tasks: taskService,
+  });
+  const agentService = new AgentService({
+    providers: providerService,
+    credentials: credentialStore,
+    files: fileService,
+    executor: agentExecutor,
+    getRoot: () => workspaceService.getActiveRoot(),
+    permissions: DEFAULT_PERMISSION_SETTINGS,
+    onEvent: (runId, event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.agentEvent, { runId, event });
+      }
+    },
+    onState: (state) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.agentStateChanged, state);
+      }
+    },
+    onFileChanged: (path) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.fsExternalChange, {
+          path,
+          kind: 'changed',
+          mtimeMs: null,
+        });
+      }
+    },
+  });
+  const agentHandlers = createAgentHandlers(agentService);
   const aiHandlers = createAiHandlers(
     providerService,
     chatService,
@@ -355,6 +406,50 @@ export function registerIpcHandlers(): () => Promise<void> {
     taskHandlers.cancel,
   );
 
+  // The coding agent
+  registerChannel(
+    IpcChannels.agentStart,
+    assertAgentTask,
+    agentHandlers.start,
+  );
+  registerChannel(
+    IpcChannels.agentCancel,
+    assertRunId,
+    agentHandlers.cancel,
+  );
+  registerChannel(IpcChannels.agentState, assertNoArgs, agentHandlers.state);
+  registerChannel(
+    IpcChannels.agentApprove,
+    assertApprovalAnswer,
+    agentHandlers.approve,
+  );
+  registerChannel(
+    IpcChannels.agentAcceptProposal,
+    assertProposalId,
+    agentHandlers.acceptProposal,
+  );
+  registerChannel(
+    IpcChannels.agentRejectProposal,
+    assertProposalId,
+    agentHandlers.rejectProposal,
+  );
+  registerChannel(
+    IpcChannels.agentAcceptAll,
+    assertRunId,
+    agentHandlers.acceptAll,
+  );
+  registerChannel(
+    IpcChannels.agentRejectAll,
+    assertRunId,
+    agentHandlers.rejectAll,
+  );
+  registerChannel(
+    IpcChannels.agentRevert,
+    assertRunId,
+    agentHandlers.revert,
+  );
+  registerChannel(IpcChannels.agentAudit, assertNoArgs, agentHandlers.audit);
+
   // AI providers
   registerChannel(IpcChannels.aiProviders, assertNoArgs, aiHandlers.providers);
   registerChannel(
@@ -439,6 +534,7 @@ export function registerIpcHandlers(): () => Promise<void> {
   const stopChildProcesses = async (): Promise<void> => {
     // The running requests are aborted, so the providers stop generating.
     chatService.cancelAll();
+    agentService.cancelAll();
     await Promise.all([terminalService.killAll(), taskService.killAll()]);
     watchdog.stop();
     watcher.clear();

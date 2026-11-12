@@ -8,6 +8,11 @@ import type {
   ProviderStatus,
   StoredConversation,
 } from './ai-types';
+import type {
+  AgentAuditEntry,
+  AgentEvent,
+  AgentState,
+} from './agent-types';
 
 /**
  * Typed IPC contract between the renderer and the Electron main process.
@@ -69,6 +74,16 @@ export const IpcChannels = {
   aiProviderRemove: 'ai:provider-remove',
   aiPickFiles: 'ai:pick-files',
   aiContextPreview: 'ai:context-preview',
+  agentStart: 'agent:start',
+  agentCancel: 'agent:cancel',
+  agentState: 'agent:state',
+  agentApprove: 'agent:approve',
+  agentAcceptProposal: 'agent:proposal-accept',
+  agentRejectProposal: 'agent:proposal-reject',
+  agentAcceptAll: 'agent:proposals-accept-all',
+  agentRejectAll: 'agent:proposals-reject-all',
+  agentRevert: 'agent:revert',
+  agentAudit: 'agent:audit',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -86,6 +101,8 @@ export const IpcPushChannels = {
   taskOutput: 'task:output',
   taskStatus: 'task:status',
   aiStream: 'ai:stream',
+  agentEvent: 'agent:event',
+  agentStateChanged: 'agent:state-changed',
 } as const;
 
 export type IpcPushChannel =
@@ -538,6 +555,54 @@ export interface IpcInvokeMap {
     args: [attachments: { path: string; kind: 'selection' | 'file' }[]];
     result: AiResult<ContextPreview[]>;
   };
+  /**
+   * Starts an agent run.
+   *
+   * The approval of the user for a cloud provider is never remembered
+   * for another run.
+   */
+  'agent:start': {
+    args: [
+      task: string,
+      providerId: string,
+      model: string,
+      approveCloudContext: boolean,
+    ];
+    result: FsResult<{ runId: string }>;
+  };
+  /** Stops the running agent. */
+  'agent:cancel': { args: [runId: string]; result: FsResult<void> };
+  /** The state of the agent. */
+  'agent:state': { args: []; result: AgentState };
+  /** Answers an approval request of the agent. */
+  'agent:approve': {
+    args: [runId: string, approvalId: string, approved: boolean];
+    result: FsResult<void>;
+  };
+  /** Accepts a change proposal: the file is written. */
+  'agent:proposal-accept': {
+    args: [runId: string, proposalId: string];
+    result: FsResult<void>;
+  };
+  /** Rejects a change proposal: the file stays untouched. */
+  'agent:proposal-reject': {
+    args: [runId: string, proposalId: string];
+    result: FsResult<void>;
+  };
+  /** Accepts every change proposal of the run. */
+  'agent:proposals-accept-all': {
+    args: [runId: string];
+    result: FsResult<void>;
+  };
+  /** Rejects every change proposal of the run. */
+  'agent:proposals-reject-all': {
+    args: [runId: string];
+    result: FsResult<void>;
+  };
+  /** Reverts the changes of a run (the checkpoint of the run). */
+  'agent:revert': { args: [runId: string]; result: FsResult<void> };
+  /** The audit log of the agent (metadata only). */
+  'agent:audit': { args: []; result: AgentAuditEntry[] };
 }
 
 /**
@@ -697,6 +762,45 @@ export interface NovaAiApi {
   clearKey(providerId: string): Promise<AiResult<{ configured: boolean }>>;
 }
 
+/** The coding agent (spec §9, §12). */
+export interface NovaAgentApi {
+  /** Starts an agent run. */
+  start(
+    task: string,
+    providerId: string,
+    model: string,
+    approveCloudContext: boolean,
+  ): Promise<FsResult<{ runId: string }>>;
+  /** Stops the running agent. */
+  cancel(runId: string): Promise<FsResult<void>>;
+  /** The state of the agent. */
+  state(): Promise<AgentState>;
+  /** Answers an approval request. */
+  approve(
+    runId: string,
+    approvalId: string,
+    approved: boolean,
+  ): Promise<FsResult<void>>;
+  /** Accepts a change proposal (the file is written). */
+  acceptProposal(runId: string, proposalId: string): Promise<FsResult<void>>;
+  /** Rejects a change proposal. */
+  rejectProposal(runId: string, proposalId: string): Promise<FsResult<void>>;
+  /** Accepts every change proposal of the run. */
+  acceptAll(runId: string): Promise<FsResult<void>>;
+  /** Rejects every change proposal of the run. */
+  rejectAll(runId: string): Promise<FsResult<void>>;
+  /** Reverts the changes of a run. */
+  revert(runId: string): Promise<FsResult<void>>;
+  /** The audit log of the agent (metadata only). */
+  audit(): Promise<AgentAuditEntry[]>;
+  /** Subscribes to the events of the agent. */
+  onEvent(
+    listener: (payload: { runId: string; event: AgentEvent }) => void,
+  ): () => void;
+  /** Subscribes to the state changes of the agent. */
+  onState(listener: (state: AgentState) => void): () => void;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
@@ -709,6 +813,7 @@ export interface NovaApi {
   git: NovaGitApi;
   task: NovaTaskApi;
   ai: NovaAiApi;
+  agent: NovaAgentApi;
 }
 
 /**
