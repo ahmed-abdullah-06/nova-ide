@@ -133,6 +133,13 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 
 ### Fixed
 
+- The verification harness started the application with the profile of the
+  user, so a test run overwrote the settings of the providers (the address
+  of Ollama was left pointing at the mock server of the harness), the API
+  keys and the conversations. Every run now uses its own, temporary profile
+  directory (`--user-data-dir`) that is deleted afterwards, and the
+  harness compares the profile of the user before and after the run, so a
+  regression that touches it is reported.
 - `pnpm make` failed with the scoped package name `@nova/desktop`: added
   `productName`/`author` and explicit packager/maker naming
   (`executableName: NOVAIDE`, Squirrel id `NOVAIDE`) so the NuGet id, nupkg and

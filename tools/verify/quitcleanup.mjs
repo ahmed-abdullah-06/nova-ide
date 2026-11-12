@@ -17,6 +17,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import {
+  createIsolatedProfile,
+  profileFingerprint,
+  realUserDataPath,
+  userDataArgument,
+} from './isolation.mjs';
 
 /** The port of the DevTools endpoint (a free one, to avoid collisions). */
 const PORT = 9400 + Math.floor(Math.random() * 200);
@@ -47,6 +53,12 @@ writeFileSync(
   'utf8',
 );
 
+// The application runs with an isolated profile, so the check never
+// touches the settings, the keys or the conversations of the user.
+const profile = createIsolatedProfile();
+const userProfile = realUserDataPath();
+const fingerprintBefore = profileFingerprint(userProfile);
+
 const app = spawn(
   path.join(
     process.cwd(),
@@ -56,7 +68,7 @@ const app = spawn(
     'NOVA IDE-win32-x64',
     'NOVAIDE.exe',
   ),
-  [`--remote-debugging-port=${PORT}`],
+  [`--remote-debugging-port=${PORT}`, userDataArgument(profile.dir)],
   { stdio: 'ignore' },
 );
 
@@ -199,4 +211,17 @@ console.log(
 );
 
 rmSync(root, { recursive: true, force: true });
+
+// The profile of the user must not have changed.
+const fingerprintAfter = profileFingerprint(userProfile);
+if (fingerprintAfter !== fingerprintBefore) {
+  console.error(
+    `FAIL the profile of the user was changed (${userProfile ?? 'unknown'})`,
+  );
+  profile.cleanup();
+  process.exit(1);
+}
+console.log('the profile of the user was not touched');
+
+profile.cleanup();
 process.exit(alive ? 1 : 0);

@@ -177,7 +177,8 @@ voice, extensions (see spec §23).
 | G.7 | Unit tests: the Markdown parser | Tested | 15 tests: the blocks, the inline forms, a link that is not http or https stays text |
 | G.8 | Typecheck + full test run | Tested | typecheck exit 0; **293/293 tests pass** (22 files) |
 | G.9 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
-| G.10 | Runtime verification (CDP, packaged app) | Tested | 53/53 checks — the chat really streams an answer through a mock of the local Ollama service, the context is attached and previewed, no console errors |
+| G.10 | Runtime verification (CDP, packaged app) | Tested | 58/58 checks — the chat really streams an answer through a mock of the local Ollama service, the context is attached and previewed, no console errors |
+| G.12 | Isolation of the verification runs | Tested | Every run uses its own, temporary profile directory (`--user-data-dir`), which is deleted afterwards; the harness compares the profile of the user before and after the run, so the settings, the keys and the conversations of the user are never touched |
 | G.11 | Documentation (README, CHANGELOG, this file) | Completed | |
 
 ### Milestone 4 Definition of Done

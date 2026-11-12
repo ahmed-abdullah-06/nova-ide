@@ -30,6 +30,12 @@ import {
   findPageTarget,
   waitForDevTools,
 } from './cdp.mjs';
+import {
+  createIsolatedProfile,
+  profileFingerprint,
+  realUserDataPath,
+  userDataArgument,
+} from './isolation.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -191,13 +197,25 @@ function createFixture() {
 /**
  * Starts the application under test.
  *
+ * The application gets an isolated profile directory, so a test run never
+ * reads or writes the settings, the keys or the conversations of the
+ * user.
+ *
+ * @param {string} profileDir The isolated profile directory.
  * @returns {import('node:child_process').ChildProcess} The child process.
  */
-function startApp() {
+function startApp(profileDir) {
+  const profileArgument = userDataArgument(profileDir);
   if (options.dev) {
     return spawn(
       'pnpm',
-      ['exec', 'electron-forge', 'start', '--inspect-port=9334'],
+      [
+        'exec',
+        'electron-forge',
+        'start',
+        '--inspect-port=9334',
+        profileArgument,
+      ],
       {
         cwd: DESKTOP,
         stdio: 'inherit',
@@ -219,7 +237,7 @@ function startApp() {
   }
   return spawn(
     executable,
-    [`--remote-debugging-port=${DEVTOOLS_PORT}`],
+    [`--remote-debugging-port=${DEVTOOLS_PORT}`, profileArgument],
     { stdio: 'inherit' },
   );
 }
@@ -229,7 +247,14 @@ async function main() {
   const fixture = createFixture();
   console.log(`Fixture workspace: ${fixture}\n`);
 
-  const app = startApp();
+  // The application runs with an isolated profile: a test run must never
+  // touch the settings, the keys or the conversations of the user.
+  const profile = createIsolatedProfile();
+  const userProfile = realUserDataPath();
+  const fingerprintBefore = profileFingerprint(userProfile);
+  console.log(`Profile of the application: ${profile.dir}\n`);
+
+  const app = startApp(profile.dir);
   let session = null;
   let exitCode = 0;
 
@@ -897,6 +922,21 @@ async function main() {
       `document.querySelectorAll('.editor-tab').length`,
     );
 
+    // On a fresh profile the local provider points at the default
+    // address of Ollama.
+    const defaultProviders = await session.evaluate(
+      `window.nova.ai.providers().then((r) =>
+         r.ok
+           ? r.value.map((p) => p.id + '=' + p.baseUrl).join(',')
+           : 'ERROR')`,
+    );
+    check(
+      'the default address of the local provider is the default of Ollama',
+      typeof defaultProviders === 'string' &&
+        defaultProviders.includes('ollama=http://127.0.0.1:11434'),
+      String(defaultProviders),
+    );
+
     // The chat panel must be able to talk to a provider. The harness
     // hosts a mock of the local Ollama service.
     const mockOllama = await startMockOllama();
@@ -912,6 +952,13 @@ async function main() {
       })()`,
     );
     check('the provider settings can be opened', settingsOpened === true);
+
+    const settingsRendered = await waitFor(
+      session,
+      `document.querySelector('.ai-settings__address-input') !== null`,
+      10000,
+    );
+    check('the provider settings are rendered', settingsRendered === true);
 
     const providerConfigured = await session.evaluate(
       `(() => {
@@ -1067,8 +1114,40 @@ async function main() {
     if (!options.keepOpen) {
       app.kill();
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      rmSync(fixture, { recursive: true, force: true });
+      try {
+        rmSync(fixture, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 200,
+        });
+      } catch {
+        // The application may still hold the directory (the terminal
+        // runs in it); the operating system removes it later.
+      }
     }
+
+    // The profile of the user must not have changed.
+    const fingerprintAfter = profileFingerprint(userProfile);
+    check(
+      'the profile of the user was not touched',
+      fingerprintAfter === fingerprintBefore,
+      userProfile === null ? '' : userProfile,
+    );
+
+    // The application really used the isolated profile.
+    check(
+      'the application used the isolated profile',
+      existsSync(path.join(profile.dir, 'providers.json')),
+      profile.dir,
+    );
+
+    profile.cleanup();
+    check(
+      'the isolated profile was removed',
+      !existsSync(profile.dir),
+      profile.dir,
+    );
   }
 
   const failed = results.filter((entry) => !entry.ok);

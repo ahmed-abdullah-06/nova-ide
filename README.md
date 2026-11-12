@@ -42,7 +42,12 @@ pnpm verify         # runtime verification of the packaged app (Chrome DevTools 
 
 The runtime verification drives the real application: it starts the packaged
 build, opens a workspace, uses the terminal, the search, the source control, the
-problems panel and the task runner, and reports every check it performed.
+problems panel, the task runner and the chat, and reports every check it
+performed.
+
+Every run uses its own, temporary profile directory, which is deleted
+afterwards — the settings, the API keys and the conversations of the user are
+never touched.
 
 ```bash
 pnpm package                # the verification needs the packaged build
