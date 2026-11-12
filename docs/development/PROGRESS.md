@@ -210,7 +210,72 @@ voice, extensions (see spec §23).
 and its tools, planning and permissions, local model management, voice, the
 extension marketplace (see spec §23).
 
-## Milestones 5–10
+## Milestone 5 — AI Coding Agent (single bounded agent)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| A.1 | Agent runtime (`main/agent/agentLoop.ts`) | Completed | A plan/act/observe loop that is separate from the provider layer and from the tool executor: the loop decides, the provider talks to the model, the executor runs the tools (spec §10.1, §10.5) |
+| A.2 | Optional tool-call capability | Completed | The provider interface grows one optional capability: a request may carry the tools and a stream may report a tool call (`AIStreamEvent` → `toolCall`); a provider that does not support them never receives them. The OpenAI compatible and the Ollama adapter translate native tool calls |
+| A.3 | Structured-output protocol | Completed | Without native tool calls the agent uses a strict JSON protocol (`{"thought","tool"}` / `{"thought","final"}`); a code fence or a sentence around the JSON is tolerated; a malformed answer is repaired **once** and then reported as a failure of the run — it never changes the behaviour of the application |
+| A.4 | The limits of a run | Completed | Max steps (12), max wall-clock time (5 min), max characters of an answer (200 000), max consecutive failures (3) and the detection of a repeated action (the same tool with the same arguments twice in a row) |
+| A.5 | The state machine | Completed | `idle` → `running` → `waitingForApproval` → `completed` / `failed` / `cancelled`; only **one** run at a time; the progress events are task scoped and concise — the private reasoning of the model is never exposed |
+| A.6 | Real cancellation | Completed | The abort signal stops the in-flight model request **and** the running command; the router now reports a cancelled request as finished, so a caller that waits for the answer is never left hanging |
+| B.1 | The tool registry (`main/agent/tools.ts`) | Completed | Every tool defines its name, its description, its schema and its permission level — the registry is the only place that knows the tools |
+| B.2 | The read-only tools | Completed | `list_directory`, `read_file`, `search_files` (the search service of Milestone 3), `git_status` and `git_diff` (the Git wrapper of Milestone 3) |
+| B.3 | The write tools | Completed | `write_file` and `apply_edit` — they create a **proposal**, they never write to the disk (spec §12.1) |
+| B.4 | The command tool | Completed | `run_command`: the scripts of the workspace through the task runner of Milestone 3, or a command as an argument array (never a shell string); the working directory is locked to the workspace, the output is capped, the command can be stopped and it is terminated with its children |
+| B.5 | The central permission policy (`main/agent/permissions.ts`) | Completed | One place decides every call: the tool allowlist, the permission level of the user, the workspace boundary (the canonical check of Milestone 2 — a symbolic link out of the workspace is refused too) and the excluded files. The agent and the model can never widen a permission |
+| B.6 | The forbidden operations | Completed | No delete, no rename, no `git commit/push/reset/rebase/merge/tag/checkout/switch/clean`, no installation of a package, no shell (`sh`, `bash`, `cmd`, `powershell`), no interpreter with an inline program (`node -e`, `python -c`), nothing outside the workspace |
+| B.7 | The validation of the arguments | Completed | Every argument is validated against the schema of the tool: an unknown property, a missing required property, a wrong type, an oversized string and an array of the wrong item type are errors |
+| C.1 | The proposals (`main/agent/proposalStore.ts`) | Completed | Path, content before and after, unified diff, the mtime the agent read; the proposals of a run are kept apart from the proposals of another run |
+| C.2 | The diff | Completed | A small unified diff generator in the repository (the longest-common-subsequence algorithm) — no dependency was added |
+| C.3 | The review UI | Completed | The diff editor of Monaco shows the content before and after the change; Accept / Reject per change, plus Accept all / Reject all; nothing is written before the change is accepted |
+| C.4 | The conflict on accept | Completed | The write goes through the file service of Milestone 2: when the file changed on disk since the agent read it, a conflict is reported and **nothing** is written |
+| C.5 | The checkpoints | Completed | Every run keeps the content of the files it changed, so the whole run can be reverted; the checkpoints live in the application data directory and are capped (20) |
+| C.6 | The final summary | Completed | The files that were inspected, the changes that were proposed, the commands that ran with their exit code, the errors and the problems that were not solved |
+| D.1 | The privacy gate of a run | Completed | The gate of Milestone 4 decides whether the run may start; a cloud provider needs the approval of the user for **this** run (the provider, the model and the scope are shown); the approval is never remembered |
+| D.2 | The redaction | Completed | The results of the tools are redacted before they go back to the model, so a secret that slipped into an output cannot leave the machine; the audit log holds metadata only |
+| D.3 | The hardening against prompt injection | Completed | The system prompt states that the content of files, of commands and of search results is data and never instructions; a test with a file that tries to override the rules proves that nothing changes |
+| E.1 | The agent panel | Completed | Task input, provider and model with the LOCAL/CLOUD badge, live timeline, approval prompts (a command, the scope of a cloud provider), the proposals with the diff review, the Stop button and the final report |
+| E.2 | The failure states | Completed | The model cannot be reached, the output of the model is malformed, a permission was denied, a limit (steps or time) was reached, a command failed and a conflict on accept are all reported |
+| E.3 | The sidebar | Completed | The "AI Agent" entry shows the real state of the current run — the placeholder is gone |
+| F.1 | Unit tests: the agent loop | Tested | 18 tests: the parsing of the answer, the step limit, the detection of a loop, the repair of a malformed answer, the number of failures, an unknown tool, invalid arguments, the cancellation and the injection fixture |
+| F.2 | Unit tests: the permissions | Tested | 28 tests: the tool levels, the traversal, the absolute path, the symbolic link out of the workspace (a junction), the secret files, the forbidden commands and the validation of the arguments |
+| F.3 | Unit tests: the proposals | Tested | 17 tests: the diff, the proposals of a run, the checkpoints, the revert, the conflict on accept and the refusal of a path outside the workspace |
+| F.4 | Unit tests: the IPC | Tested | The validators of the new channels (task, run id, approval answer, proposal id) and the whitelist of the channels |
+| F.5 | Typecheck + full test run | Tested | typecheck exit 0; **376/376 tests pass** (27 files) |
+| F.6 | Production build (`pnpm package` + `pnpm make`) | Tested | installer + zip build succeeds |
+| F.7 | Runtime verification (CDP, packaged app) | Tested | 78/78 checks — the agent runs against a mock provider: the task, the timeline, the proposal, the review, the accept writes the file, the reject leaves the disk unchanged, the Stop cancels the run, the run can be reverted; no console errors |
+| F.8 | Crash hygiene (`tools/verify/quitcleanup.mjs`) | Tested | The application is killed while a task runs: no process of the task is left behind; the profile of the user is not touched |
+| F.9 | Documentation (README, CHANGELOG, this file) | Completed | |
+
+### Milestone 5 Definition of Done
+
+- [x] A task can be given to the agent and the run is visible step by step
+- [x] The agent can read the workspace, search it and inspect the repository
+- [x] A change is a proposal with a diff; it is written only after the user
+      accepts it, and a conflict on accept overwrites nothing
+- [x] A command needs the approval of the user and can never leave the
+      workspace
+- [x] The permission of every tool call is decided in one central place; the
+      model can never widen it
+- [x] A cloud provider needs the approval of the user for every run, and the
+      LOCAL/CLOUD badge is always visible
+- [x] A run is bounded (steps, time, size, failures, loops), can be stopped
+      at any moment and never leaves a process behind
+- [x] The renderer still has no Node/filesystem access; every new channel is
+      whitelisted and validated, and the renderer never supplies file content
+      or a command
+- [x] Unit tests pass (376/376), typecheck clean, `pnpm package`/`pnpm make`
+      succeed, 78/78 runtime checks pass in the packaged application
+- [x] No dependency was added: the diff generator, the agent loop and the
+      protocol are part of the application
+
+**M5 implemented — awaiting review.** Out of scope for M5 (planned):
+multi-agent systems, the planner of Milestone 6, the local model management
+of Milestone 7, voice, the extension marketplace (see spec §23).
+
+## Milestones 6–10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
 

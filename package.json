@@ -18,7 +18,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.tests.json && pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "node tools/verify/runtime.mjs"
+    "verify": "node tools/verify/runtime.mjs",
+    "verify:fuses": "node tools/verify/fuses.mjs",
+    "verify:quitcleanup": "node tools/verify/quitcleanup.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.0",

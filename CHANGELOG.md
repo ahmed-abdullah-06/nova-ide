@@ -130,9 +130,85 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
   - Unit tests for the provider contract, the Ollama and the cloud adapter
     (against real mock servers), the credentials, the privacy gate, the
     context and the conversations — 293/293 tests passing in total.
+- **Milestone 5 — AI Coding Agent (single bounded agent):**
+  - Agent runtime in the main process (`main/agent/`), split into three
+    modules: the agent loop (plan/act/observe), the provider adapter and the
+    tool executor. The loop decides what to do, the provider talks to the
+    model and the executor runs the tools.
+  - The provider interface grows one **optional** capability: a request may
+    carry the tools and a stream may report a tool call. The OpenAI
+    compatible and the Ollama adapter translate native tool calls; a model
+    that does not use them falls back to a strict JSON protocol
+    (`{"thought","tool"}` / `{"thought","final"}`) with a bounded repair
+    attempt. The output of a model is never trusted.
+  - Hard limits of a run: the number of steps, the wall-clock time, the size
+    of an answer, the number of failures in a row and the detection of a
+    repeated action. Only one run runs at a time; the run states are `idle`,
+    `running`, `waitingForApproval`, `completed`, `failed` and `cancelled`.
+    The progress events are concise and never expose the private reasoning
+    of the model.
+  - Tools: `list_directory`, `read_file`, `search_files`, `git_status` and
+    `git_diff` read the workspace (reusing the search and the Git service of
+    Milestone 3); `write_file` and `apply_edit` prepare a **proposal**;
+    `run_command` runs a script of the workspace through the task runner of
+    Milestone 3 or a command as an argument array (never a shell string).
+  - One central permission policy decides every tool call: the tool
+    allowlist, the permission level of the user, the workspace boundary (the
+    canonical check of Milestone 2, so a symbolic link out of the workspace is
+    refused too) and the excluded files (`.env`, private keys, `.ssh`, `.git`,
+    `node_modules`, the files that `.gitignore` ignores, binary files and
+    oversized files). The model can never widen a permission.
+  - Not available in this milestone: deleting and renaming files, `git
+    commit/push/reset/rebase/merge/tag/checkout/switch/clean`, the
+    installation of a package, a shell, an interpreter with an inline program
+    and everything outside the workspace.
+  - Reviewable changes: a proposal carries the path, the content before and
+    after and a unified diff; the diff editor of Monaco shows it, and every
+    change is accepted or rejected on its own (plus "accept all" / "reject
+    all"). Nothing is written before the change is accepted; when the file
+    changed on disk in the meantime, a conflict is reported and nothing is
+    overwritten. Every run keeps a checkpoint, so the whole run can be
+    reverted.
+  - Privacy: a local provider needs no approval, a cloud provider needs the
+    approval of the user for *this* run (the provider, the model and the
+    scope are shown, and the approval is never remembered). The results of
+    the tools are redacted before they go back to the model, and the content
+    of files, of commands and of search results is treated as data, never as
+    instructions.
+  - Agent mode in the AI panel: task input, provider and model with the
+    LOCAL/CLOUD badge, live timeline, approval prompts, the proposals with
+    the diff review, a Stop button and an honest final report (the files that
+    were inspected, the commands with their exit code, the errors and the
+    problems that were not solved). The "AI Agent" entry of the sidebar shows
+    the real state of the run — the placeholder is gone.
+  - Ten new IPC channels (whitelisted, with a validator per channel and a
+    trusted-sender check) and two push channels keyed by the run id. The
+    renderer never supplies file content or a command.
+  - Audit log of the agent with metadata only: every tool call, every
+    permission decision, every approval and every result — never a secret,
+    never the content of a file.
+  - No dependency was added: the unified diff generator, the agent loop and
+    the JSON protocol are part of the application.
+  - Unit tests for the agent loop (18), the permissions (28), the proposals
+    (17) and the validators of the new channels — 376/376 tests passing in
+    total. The runtime verification drives the agent in the packaged
+    application against a mock provider (78/78 checks): the task, the
+    timeline, the proposal, the diff review, the accept writes the file, the
+    reject leaves the disk unchanged, the Stop cancels the run and the
+    checkpoint of the run can be reverted.
 
 ### Fixed
 
+- Cancelling a request of the provider router aborted the underlying request
+  but never settled the promise of the caller, so a consumer that waited for
+  the answer (the chat and the agent) stayed hanging forever. The router now
+  reports a cancelled request as finished (`finish` / `cancelled`).
+- The permission check of the agent compared the paths lexically, so a
+  symbolic link inside the workspace that pointed outside of it was not
+  refused. The check uses the canonical resolution of Milestone 2 now, so
+  the link is followed and the file behind it is recognised as outside.
+- The unified diff of a proposal marked the changed lines in the wrong order
+  and counted the trailing newline as an extra line.
 - The verification harness started the application with the profile of the
   user, so a test run overwrote the settings of the providers (the address
   of Ollama was left pointing at the mock server of the harness), the API
@@ -165,7 +241,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M2 — File Explorer and Workspace | Implemented (awaiting review) |
 | M3 — Developer Tools (Terminal, Search, Git, Problems, Tasks) | Implemented (awaiting review) |
 | M4 — AI Providers and Chat | Implemented (awaiting review) |
-| M5 — AI Agent and Tools | Not Started |
+| M5 — AI Coding Agent (single bounded agent) | Implemented (awaiting review) |
 | M6 — Planning, Permissions, and Verification | Not Started |
 | M7 — Local AI and Model Management | Not Started |
 | M8 — Voice Assistant | Not Started |

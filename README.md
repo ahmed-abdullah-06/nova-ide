@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 4 — AI Providers and Chat (implemented, awaiting review).
+**Status:** Milestone 5 — AI Coding Agent (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -42,8 +42,8 @@ pnpm verify         # runtime verification of the packaged app (Chrome DevTools 
 
 The runtime verification drives the real application: it starts the packaged
 build, opens a workspace, uses the terminal, the search, the source control, the
-problems panel, the task runner and the chat, and reports every check it
-performed.
+problems panel, the task runner, the chat and the coding agent (against a mock
+provider), and reports every check it performed.
 
 Every run uses its own, temporary profile directory, which is deleted
 afterwards — the settings, the API keys and the conversations of the user are
@@ -51,6 +51,7 @@ never touched.
 
 ```bash
 pnpm package                # the verification needs the packaged build
+pnpm verify:fuses           # the fuses of the packaged executable are read back
 node tools/verify/quitcleanup.mjs   # no process survives a crash of the app
 ```
 
@@ -61,9 +62,10 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 4)
+## Features (Milestone 5)
 
-Milestone 3 (terminal, search, Git, problems, tasks) is still in place:
+Milestone 4 (the provider layer and the chat) and Milestone 3 (terminal,
+search, Git, problems, tasks) are still in place:
 
 - Open a workspace folder through the native folder picker; recent workspaces
   are remembered between launches.
@@ -121,9 +123,45 @@ Milestone 4 adds the AI assistant:
   highlighted code blocks, and the files that are attached to a message
   with their size and token count.
 
-Not yet implemented (planned for later milestones): the agent and its
-tools, planning and permissions, local models, voice, the extension
-marketplace (see spec §23).
+Milestone 5 adds the coding agent:
+
+- **Agent mode in the AI panel**: a task is written in plain language, the
+  provider and the model are chosen (with the LOCAL or CLOUD badge), the run
+  is started, watched on a live timeline and stopped at any moment.
+- **A bounded agent loop** in the main process: plan, act, observe. The
+  output of the model is never trusted — a malformed answer is repaired once
+  and then reported, never obeyed. A run is bounded by the number of steps,
+  the wall-clock time, the size of the answer, the number of failures in a
+  row and a detection of repeated actions. Only one run runs at a time.
+- **Tools**: `list_directory`, `read_file`, `search_files` (the search of
+  Milestone 3), `git_status` and `git_diff` (the Git wrapper of Milestone 3)
+  read the workspace; `write_file` and `apply_edit` prepare a change;
+  `run_command` runs a script of the workspace through the task runner of
+  Milestone 3, or a command as an argument array (never a shell string).
+- **One central permission policy**: it decides every tool call — the tool
+  allowlist, the permission level of the user, the workspace boundary (the
+  canonical check of Milestone 2, so a symbolic link out of the workspace is
+  refused too) and the excluded files (`.env`, private keys, `.ssh`, `.git`,
+  `node_modules`, the files that `.gitignore` ignores, binary files and
+  oversized files). The model can never widen a permission.
+- **Reviewable changes**: a change is a proposal with a unified diff, shown
+  in the diff editor of Monaco. Nothing is written to the disk before the
+  user accepts it; when the file changed on disk in the meantime, a conflict
+  is reported and nothing is overwritten. A checkpoint of every run allows
+  reverting the whole run.
+- **Privacy**: a local provider needs no approval; a cloud provider needs the
+  explicit approval of the user for *this* run, showing the provider, the
+  model and the scope. The approval is never remembered. The results of the
+  tools are redacted before they go back to the model, and the content of
+  files, of commands and of search results is treated as data, never as
+  instructions.
+- **Honest reports**: the final report lists the files that were inspected,
+  the changes that were proposed, the commands that ran with their exit code,
+  the errors and the problems the agent could not solve. The agent never
+  claims a success that no command proved.
+
+Not yet implemented (planned for later milestones): multi-agent systems,
+local model management, voice, the extension marketplace (see spec §23).
 
 ## Security model
 
@@ -146,6 +184,20 @@ marketplace (see spec §23).
   connections to the application only). API keys are encrypted with the
   operating system, never returned to the renderer and redacted from every
   log message.
+- The coding agent works in the main process and stays inside the
+  workspace. Every tool call passes the central permission policy; the
+  renderer can only approve a request that already exists for the active
+  run, and it never supplies file content or a command. The agent cannot
+  delete or rename files, commit, push, install a package, use a shell or
+  run anything outside the workspace.
+- The agent may only run a command as an argument array (no shell string)
+  with the working directory locked to the workspace, a timeout and a cap on
+  the output; a command that runs is terminated together with its children
+  when the run is stopped or the application quits.
+- The changes of the agent are proposals: nothing is written before the user
+  accepts them, the file service of Milestone 2 detects a conflict, and the
+  audit log of the agent holds metadata only — never a secret, never the
+  content of a file, never the reasoning of the model.
 
 ## Documentation
 
