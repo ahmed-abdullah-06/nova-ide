@@ -21,7 +21,13 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,9 +79,32 @@ async function startMockOllama() {
       return;
     }
     if ((request.url ?? '').startsWith('/api/chat')) {
-      request.on('data', () => undefined);
+      const chunks = [];
+      request.on('data', (chunk) => {
+        chunks.push(chunk.toString('utf8'));
+      });
       request.on('end', () => {
+        const body = chunks.join('');
+        // The agent uses a different system prompt, so the mock can tell
+        // the two flows apart.
+        const isAgent = body.includes('You are a coding agent');
         response.writeHead(200, { 'content-type': 'application/x-ndjson' });
+        if (isAgent) {
+          const answer = agentAnswers.shift() ?? agentAnswers[0] ??
+            '{"thought":"done","final":"The agent is finished."}';
+          // The answer takes a moment, so the run can be stopped while
+          // the model is still thinking.
+          setTimeout(() => {
+            response.write(
+              '{"message":{"role":"assistant","content":' +
+                JSON.stringify(answer) +
+                '},"done":false}\n',
+            );
+            response.write('{"done":true,"eval_count":7}\n');
+            response.end();
+          }, 1200);
+          return;
+        }
         response.write(
           '{"message":{"role":"assistant","content":"NOVA_VERIFY_ANSWER"},"done":false}\n',
         );
@@ -98,6 +127,27 @@ async function startMockOllama() {
     },
   };
 }
+
+/**
+ * The scripted answers of the agent.
+ *
+ * The mock service returns them one after the other, so the agent walks
+ * through its steps deterministically.
+ */
+const agentAnswers = [
+  JSON.stringify({
+    thought: 'read the notes',
+    tool: { name: 'read_file', arguments: { path: 'notes.txt' } },
+  }),
+  JSON.stringify({
+    thought: 'write the notes',
+    tool: {
+      name: 'write_file',
+      arguments: { path: 'notes.txt', content: 'written by the agent\n' },
+    },
+  }),
+  JSON.stringify({ thought: 'done', final: 'The notes were updated.' }),
+];
 
 /** The checks that were executed. */
 const results = [];
@@ -890,16 +940,31 @@ async function main() {
         return [...rows].map((row) => row.textContent).join('\\n');
       })()`,
     );
-    await session.evaluate(
-      `(() => {
-        const area = document.querySelector('.terminal-view textarea');
-        if (area === null) return false;
-        area.focus();
-        return true;
-      })()`,
-    );
-    await session.insertText('echo NOVA_AFTER_STOP');
-    await session.pressKey('Enter', 13);
+    // The shell needs a moment to return to the prompt; the command is
+    // sent a few times, so a lost keystroke cannot fail the check.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await session.evaluate(
+        `(() => {
+          const area = document.querySelector('.terminal-view textarea');
+          if (area === null) return false;
+          area.focus();
+          return true;
+        })()`,
+      );
+      await session.insertText('echo NOVA_AFTER_STOP');
+      await session.pressKey('Enter', 13);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      const done = await session.evaluate(
+        `(() => {
+          const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
+          const text = [...rows].map((row) => row.textContent).join('\\n');
+          return text.includes('NOVA_AFTER_STOP');
+        })()`,
+      );
+      if (done === true) {
+        break;
+      }
+    }
     const afterStop = await waitFor(
       session,
       `(() => {
@@ -1098,6 +1163,242 @@ async function main() {
       `(() => document.querySelectorAll('.editor-tab').length === ${tabsBeforeChat})()`,
     );
     check('the answer did not open a file', noFileWrite === true);
+
+    // The agent mode of the AI panel.
+    const agentTab = await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.ai-panel__mode')];
+        const agent = tabs.find((tab) => tab.textContent.trim() === 'Agent');
+        if (agent === undefined) return false;
+        agent.click();
+        return true;
+      })()`,
+    );
+    check('the agent mode of the panel is reachable', agentTab === true);
+
+    // The task of the agent.
+    const taskTyped = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.agent-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Update the notes of the project');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    check('the agent accepts a task', taskTyped === true);
+
+    const started = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const start = buttons.find((b) => b.textContent.trim() === 'Start');
+        if (start === undefined || start.disabled) return false;
+        start.click();
+        return true;
+      })()`,
+    );
+    check('the agent run starts', started === true);
+
+    // The progress of the run must be visible.
+    const timeline = await waitFor(
+      session,
+      `(() => {
+        const events = document.querySelectorAll('.agent-panel__event');
+        if (events.length === 0) return false;
+        const text = [...events].map((e) => e.textContent).join(' | ');
+        // The check waits for the tool call, not for the first event.
+        return text.includes('read_file') ? text : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the progress of the run is shown',
+      typeof timeline === 'string' && timeline.includes('read_file'),
+      String(timeline).slice(0, 120),
+    );
+
+    // The change must be a proposal; the file must not be written yet.
+    const proposal = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.agent-panel__proposal-path')];
+        return items.length > 0 ? items.map((i) => i.textContent).join(',') : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the agent proposes a change',
+      typeof proposal === 'string' && proposal.includes('notes.txt'),
+      String(proposal),
+    );
+
+    const notWrittenYet = !existsSync(
+      path.join(fixture, 'notes.txt'),
+    );
+    check('the file is not written before the user accepts', notWrittenYet);
+
+    // Accept the proposal: the file is written.
+    const accepted = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.agent-proposal__accept');
+        if (button === null || button.disabled) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the change can be accepted', accepted === true);
+
+    const written = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.agent-panel__proposal-path')];
+        return items.length === 0 ? 'accepted' : false;
+      })()`,
+      20000,
+    );
+    check('the accepted change leaves the list', written === 'accepted');
+
+    const fileOnDisk = existsSync(path.join(fixture, 'notes.txt'))
+      ? readFileSync(path.join(fixture, 'notes.txt'), 'utf8')
+      : '';
+    check(
+      'the accepted change is written to the disk',
+      fileOnDisk.includes('written by the agent'),
+      JSON.stringify(fileOnDisk),
+    );
+
+    // The next run may only start when the previous one has finished.
+    const firstRunFinished = await waitFor(
+      session,
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        if (state === null) return false;
+        const text = state.textContent.trim();
+        return text === 'completed' || text === 'failed' ? text : false;
+      })()`,
+      30000,
+    );
+    check('the first run finishes', firstRunFinished !== false);
+
+    // A rejected proposal must leave the disk untouched.
+    agentAnswers.length = 0;
+    agentAnswers.push(
+      JSON.stringify({
+        thought: 'write the notes again',
+        tool: {
+          name: 'write_file',
+          arguments: { path: 'notes.txt', content: 'rejected content\n' },
+        },
+      }),
+      JSON.stringify({ thought: 'done', final: 'done' }),
+    );
+    const secondRun = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.agent-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Change the notes again');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    check('a second task can be entered', secondRun === true);
+
+    const secondStarted = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const start = buttons.find((b) => b.textContent.trim() === 'Start');
+        if (start === undefined || start.disabled) return false;
+        start.click();
+        return true;
+      })()`,
+    );
+    check('the second run starts', secondStarted === true);
+
+    const secondProposal = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.agent-panel__proposal-path')];
+        return items.length > 0 ? items.map((i) => i.textContent).join(',') : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the second run proposes a change',
+      typeof secondProposal === 'string',
+      String(secondProposal),
+    );
+
+    const rejected = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.agent-proposal__reject');
+        if (button === null || button.disabled) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the change can be rejected', rejected === true);
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const unchanged = readFileSync(
+      path.join(fixture, 'notes.txt'),
+      'utf8',
+    );
+    check(
+      'a rejected change does not touch the file',
+      !unchanged.includes('rejected content'),
+      JSON.stringify(unchanged),
+    );
+
+    // The stop button must work while a run is in progress.
+    agentAnswers.length = 0;
+    agentAnswers.push(
+      JSON.stringify({
+        thought: 'read the notes',
+        tool: { name: 'read_file', arguments: { path: 'notes.txt' } },
+      }),
+    );
+    await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.agent-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Stop me');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const start = buttons.find((b) => b.textContent.trim() === 'Start');
+        if (start === undefined) return false;
+        start.click();
+        return true;
+      })()`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const stopped = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const stop = buttons.find((b) => b.textContent.trim() === 'Stop');
+        if (stop === undefined || stop.disabled) return false;
+        stop.click();
+        return true;
+      })()`,
+    );
+    check('the run can be stopped', stopped === true);
+
+    const cancelled = await waitFor(
+      session,
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        if (state === null) return false;
+        const text = state.textContent.trim();
+        return text === 'cancelled' ? text : false;
+      })()`,
+      30000,
+    );
+    check('the stopped run reports that it was cancelled', cancelled === 'cancelled');
 
     mockOllama.stop();
 
