@@ -209,9 +209,11 @@ export class ToolExecutor {
       };
     }
     const truncated = file.value.content.length > MAX_TOOL_RESULT_CHARS;
-    const content = truncated
-      ? file.value.content.slice(0, MAX_TOOL_RESULT_CHARS)
-      : file.value.content;
+    const content = redact(
+      truncated
+        ? file.value.content.slice(0, MAX_TOOL_RESULT_CHARS)
+        : file.value.content,
+    );
     return {
       ok: true,
       content: truncated
@@ -245,7 +247,7 @@ export class ToolExecutor {
       };
     }
     const lines = matches.map(
-      (match) => `${match.relativePath}:${match.line}`,
+      (match) => redact(`${match.relativePath}:${match.line}`),
     );
     return {
       ok: true,

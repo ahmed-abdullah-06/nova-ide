@@ -123,7 +123,9 @@ export class ProviderRouter {
   /**
    * Cancels a running request.
    *
-   * The abort signal really stops the underlying request.
+   * The abort signal really stops the underlying request, and the
+   * consumer is told that the request ended (otherwise a caller that
+   * waits for the answer would wait forever).
    */
   cancel(requestId: string): AiResult<void> {
     const request = this.running.get(requestId);
@@ -138,15 +140,15 @@ export class ProviderRouter {
     }
     request.controller.abort();
     this.running.delete(requestId);
+    this.options.onEvent(requestId, { type: 'finish', reason: 'cancelled' });
     return { ok: true, value: undefined };
   }
 
   /** Cancels every running request (the application quits). */
   cancelAll(): void {
-    for (const request of this.running.values()) {
-      request.controller.abort();
+    for (const requestId of [...this.running.keys()]) {
+      this.cancel(requestId);
     }
-    this.running.clear();
   }
 
   /**

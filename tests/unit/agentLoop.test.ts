@@ -73,7 +73,7 @@ function buildLoop(
     systemPrompt: 'the system prompt',
     limits: options.limits ?? LIMITS,
     registry: new ToolRegistry(),
-    executor: options.executor ?? executor,
+    executor: (options.executor ?? executor) as never,
     context: (options.context ?? fakeContext()) as never,
     callModel: async () => {
       const text = answers[index] ?? '{"thought":"done","final":"finished"}';
