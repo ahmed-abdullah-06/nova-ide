@@ -8,6 +8,7 @@ import './styles/editor.css';
 import './styles/explorer.css';
 import './styles/panels.css';
 import './styles/ai.css';
+import './styles/agent.css';
 
 const container = document.getElementById('root');
 if (!container) {

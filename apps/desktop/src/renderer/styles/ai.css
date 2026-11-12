@@ -458,3 +458,27 @@
   background: rgba(240, 180, 41, 0.18);
   color: #f0b429;
 }
+
+/* The mode switch of the AI panel (chat and agent) --------------------- */
+
+.ai-panel__modes {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.ai-panel__mode {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 1px 8px;
+}
+
+.ai-panel__mode--active {
+  background: var(--color-background);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}

@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
+import { AgentPanel } from '../agent/AgentPanel';
 import { MessageList } from './MessageList';
 import { ProviderSettings } from './ProviderSettings';
 import { useAi, type Attachment } from './useAi';
@@ -34,6 +35,7 @@ export function AiPanel({
 }: AiPanelProps): React.JSX.Element {
   const ai = useAi();
   const conversations = useConversations();
+  const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [input, setInput] = useState('');
   const [title, setTitle] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -139,7 +141,26 @@ export function AiPanel({
   return (
     <aside className="ai-panel" aria-label="AI assistant">
       <div className="ai-panel__header">
-        <span className="ai-panel__title">AI Assistant</span>
+        <div className="ai-panel__modes" role="tablist" aria-label="Mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'chat'}
+            className={`ai-panel__mode${mode === 'chat' ? ' ai-panel__mode--active' : ''}`}
+            onClick={() => setMode('chat')}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'agent'}
+            className={`ai-panel__mode${mode === 'agent' ? ' ai-panel__mode--active' : ''}`}
+            onClick={() => setMode('agent')}
+          >
+            Agent
+          </button>
+        </div>
         {provider !== null ? (
           <span
             className={`ai-badge ai-badge--${provider.kind}`}
@@ -270,13 +291,26 @@ export function AiPanel({
         ) : null}
       </div>
 
-      <div className="ai-panel__body">
-        <MessageList
-          messages={ai.messages}
-          streaming={ai.streaming}
-          onOpenLink={handleOpenLink}
+      {mode === 'agent' ? (
+        <AgentPanel
+          providers={ai.providers}
+          models={ai.models}
+          providerId={ai.providerId}
+          model={ai.model}
+          onSelectProvider={ai.selectProvider}
+          onSelectModel={ai.selectModel}
         />
-      </div>
+      ) : (
+        <>
+          <div className="ai-panel__body">
+            <MessageList
+              messages={ai.messages}
+              streaming={ai.streaming}
+              onOpenLink={handleOpenLink}
+            />
+          </div>
+        </>
+      )}
 
       {ai.error !== null ? (
         <p className="ai-panel__error" role="alert">
