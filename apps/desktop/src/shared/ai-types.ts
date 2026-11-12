@@ -123,10 +123,24 @@ export type AiResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: ProviderErrorInfo };
 
+/**
+ * A tool call of the model.
+ *
+ * Tool calls are an OPTIONAL capability of a provider (spec §11.1): a
+ * provider that does not support them never produces one.
+ */
+export interface ToolCall {
+  /** The id of the tool. */
+  name: string;
+  /** The arguments of the tool. */
+  arguments: unknown;
+}
+
 /** One normalized event of a streaming answer. */
 export type AIStreamEvent =
   | { type: 'start'; model: string }
   | { type: 'text'; delta: string }
+  | { type: 'toolCall'; toolCall: ToolCall }
   | { type: 'usage'; usage: TokenUsage }
   | { type: 'finish'; reason: FinishReason }
   | { type: 'error'; error: ProviderErrorInfo };

@@ -58,7 +58,10 @@ interface OllamaTag {
 
 /** One chunk of the answer (`/api/chat`). */
 interface OllamaChatChunk {
-  message?: { content?: unknown };
+  message?: {
+    content?: unknown;
+    tool_calls?: { function?: { name?: unknown; arguments?: unknown } }[];
+  };
   done?: unknown;
   error?: unknown;
   prompt_eval_count?: unknown;
@@ -173,7 +176,7 @@ export class OllamaProvider implements AIProvider {
    * is cancelled, so the model stops generating.
    */
   async *chat(request: ProviderChatRequest): AsyncIterable<AIStreamEvent> {
-    const body = {
+    const body: Record<string, unknown> = {
       model: request.options.model,
       messages: request.messages.map((message) => ({
         role: message.role,
@@ -181,6 +184,20 @@ export class OllamaProvider implements AIProvider {
       })),
       stream: true,
     };
+    if (
+      request.tools !== undefined &&
+      request.tools.length > 0 &&
+      this.getCapabilities().toolCalls
+    ) {
+      body.tools = request.tools.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+    }
 
     const response = await this.request('POST', '/api/chat', {
       body: JSON.stringify(body),
@@ -231,6 +248,9 @@ export class OllamaProvider implements AIProvider {
             if (event.usage !== undefined) {
               promptTokens = event.usage.promptTokens;
               completionTokens = event.usage.completionTokens;
+            }
+            if (event.toolCall !== undefined) {
+              yield { type: 'toolCall', toolCall: event.toolCall };
             }
             if (event.text !== undefined && event.text.length > 0) {
               yield { type: 'text', delta: event.text };
@@ -394,6 +414,7 @@ interface ParsedChunk {
   text?: string;
   usage?: { promptTokens?: number; completionTokens?: number };
   error?: AIStreamEvent & { type: 'error' };
+  toolCall?: { name: string; arguments: unknown };
 }
 /** Parses one line of the answer of Ollama. */
 function parseChatChunk(line: string): ParsedChunk {
@@ -425,6 +446,30 @@ function parseChatChunk(line: string): ParsedChunk {
         },
       },
     };
+  }
+
+  const toolCalls = chunk.message?.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+    const fn = toolCalls[0]?.function;
+    let args: unknown = {};
+    if (typeof fn?.arguments === 'object' && fn?.arguments !== null) {
+      args = fn.arguments;
+    } else if (typeof fn?.arguments === 'string' && fn.arguments.length > 0) {
+      try {
+        args = JSON.parse(fn.arguments);
+      } catch {
+        args = {};
+      }
+    }
+    const name = typeof fn?.name === 'string' ? fn.name : '';
+    if (name.length > 0) {
+      return {
+        text: undefined,
+        usage: undefined,
+        error: undefined,
+        toolCall: { name, arguments: args },
+      };
+    }
   }
 
   const content = chunk.message?.content;

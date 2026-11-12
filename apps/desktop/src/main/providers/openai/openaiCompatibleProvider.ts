@@ -81,7 +81,8 @@ export class OpenAiCompatibleProvider implements AIProvider {
   getCapabilities(): ProviderCapabilities {
     return {
       streaming: true,
-      toolCalls: false,
+      // The OpenAI compatible API can carry tool calls.
+      toolCalls: true,
       vision: false,
       structuredOutput: false,
       systemPrompt: true,
@@ -170,6 +171,21 @@ export class OpenAiCompatibleProvider implements AIProvider {
     }
     if (request.options.maxTokens !== undefined) {
       body.max_tokens = request.options.maxTokens;
+    }
+    if (
+      request.tools !== undefined &&
+      request.tools.length > 0 &&
+      this.getCapabilities().toolCalls
+    ) {
+      body.tools = request.tools.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+      body.tool_choice = 'auto';
     }
 
     const response = await this.send('POST', '/chat/completions', {
@@ -474,7 +490,14 @@ export function parseStreamLine(line: string): AIStreamEvent {
 
   const chunk = parsed as {
     choices?: {
-      delta?: { content?: unknown };
+      delta?: {
+        content?: unknown;
+        tool_calls?: {
+          index?: unknown;
+          id?: unknown;
+          function?: { name?: unknown; arguments?: unknown };
+        }[];
+      };
       finish_reason?: unknown;
     }[];
     usage?: {
@@ -506,6 +529,24 @@ export function parseStreamLine(line: string): AIStreamEvent {
       type: 'usage',
       usage: { promptTokens, completionTokens, totalTokens },
     };
+  }
+
+  const toolCalls = chunk.choices?.[0]?.delta?.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+    const call = toolCalls[0];
+    const fn = call?.function;
+    let args: unknown = {};
+    if (typeof fn?.arguments === 'string' && fn.arguments.length > 0) {
+      try {
+        args = JSON.parse(fn.arguments);
+      } catch {
+        args = {};
+      }
+    }
+    const name = typeof fn?.name === 'string' ? fn.name : '';
+    if (name.length > 0) {
+      return { type: 'toolCall', toolCall: { name, arguments: args } };
+    }
   }
 
   const content = chunk.choices?.[0]?.delta?.content;
