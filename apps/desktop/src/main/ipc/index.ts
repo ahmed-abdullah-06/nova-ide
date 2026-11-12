@@ -22,6 +22,7 @@ import {
   assertOneString,
   assertOptionalCwd,
   assertChatRequest,
+  assertContextAttachments,
   assertConversation,
   assertConversationId,
   assertExternalUrl,
@@ -410,6 +411,16 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.aiProviderRemove,
     assertProviderId,
     aiHandlers.removeProvider,
+  );
+  registerChannel(
+    IpcChannels.aiPickFiles,
+    assertNoArgs,
+    aiHandlers.pickFiles,
+  );
+  registerChannel(
+    IpcChannels.aiContextPreview,
+    assertContextAttachments,
+    aiHandlers.previewContext,
   );
 
 

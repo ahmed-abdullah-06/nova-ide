@@ -2,6 +2,7 @@ import type {
   AiResult,
   AIStreamEvent,
   ChatMessage,
+  ContextPreview,
   ProviderDescriptor,
   ProviderModel,
   ProviderStatus,
@@ -66,6 +67,8 @@ export const IpcChannels = {
   aiConversationDelete: 'ai:conversation-delete',
   aiProviderUpdate: 'ai:provider-update',
   aiProviderRemove: 'ai:provider-remove',
+  aiPickFiles: 'ai:pick-files',
+  aiContextPreview: 'ai:context-preview',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -521,6 +524,20 @@ export interface IpcInvokeMap {
     args: [providerId: string];
     result: AiResult<ProviderDescriptor>;
   };
+  /**
+   * Lets the user pick the files that are attached as context.
+   *
+   * The dialog is restricted to the workspace, so a file outside of it
+   * can never be attached.
+   */
+  'ai:pick-files': { args: []; result: FsResult<string[]> };
+  /**
+   * Describes the context of a request before it is sent.
+   */
+  'ai:context-preview': {
+    args: [attachments: { path: string; kind: 'selection' | 'file' }[]];
+    result: AiResult<ContextPreview[]>;
+  };
 }
 
 /**
@@ -647,6 +664,12 @@ export interface NovaAiApi {
   ): Promise<AiResult<ProviderDescriptor>>;
   /** Removes the configuration of a provider. */
   removeProvider(providerId: string): Promise<AiResult<ProviderDescriptor>>;
+  /** Lets the user pick the files that are attached as context. */
+  pickFiles(): Promise<FsResult<string[]>>;
+  /** Describes the context of a request before it is sent. */
+  previewContext(
+    attachments: { path: string; kind: 'selection' | 'file' }[],
+  ): Promise<AiResult<ContextPreview[]>>;
   /** The providers the user can choose from. */
   providers(): Promise<AiResult<ProviderDescriptor[]>>;
   /** The models a provider offers. */

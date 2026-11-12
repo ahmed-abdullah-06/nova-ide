@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AIStreamEvent,
   ChatMessage,
+  ContextPreview,
   ProviderDescriptor,
   ProviderModel,
   ProviderStatus,
@@ -31,6 +32,10 @@ export interface Attachment {
   sizeBytes: number;
   /** What the user attached. */
   kind: 'selection' | 'file';
+  /** The first line of a selection (1-based). */
+  startLine?: number;
+  /** The last line of a selection (1-based). */
+  endLine?: number;
 }
 
 export interface AiController {
@@ -48,6 +53,13 @@ export interface AiController {
   messages: ChatMessage[];
   /** The files that are attached to the next message. */
   attachments: Attachment[];
+  /**
+   * What will be sent with the next message.
+   *
+   * The main process reads the files, so only it knows the real size
+   * and whether something would be shortened.
+   */
+  preview: ContextPreview[];
   /** True while an answer is coming in. */
   streaming: boolean;
   /** The last error. */
@@ -66,6 +78,8 @@ export interface AiController {
   attach: (attachment: Attachment) => void;
   /** Removes an attached file. */
   detach: (path: string) => void;
+  /** Lets the user pick the files that are attached. */
+  pickFiles: () => Promise<void>;
   /** Re-reads the providers and the models. */
   refresh: () => void;
   /** Sets the messages of the conversation (when a conversation is loaded). */
@@ -80,6 +94,7 @@ export function useAi(): AiController {
   const [model, setModel] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [preview, setPreview] = useState<ContextPreview[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -350,16 +365,76 @@ export function useAi(): AiController {
     await runRequest(history, last.content, [], false, false);
   }, [messages, runRequest]);
 
-  const attach = useCallback((attachment: Attachment): void => {
-    setAttachments((current) => [
-      ...current.filter((entry) => entry.path !== attachment.path),
-      attachment,
-    ]);
-  }, []);
+  /** Reads what will be sent with the next message. */
+  const refreshPreview = useCallback(
+    (files: Attachment[]): void => {
+      const api = window.nova;
+      if (!api || files.length === 0) {
+        setPreview([]);
+        return;
+      }
+      void api.ai
+        .previewContext(
+          files.map((attachment) => ({
+            path: attachment.path,
+            kind: attachment.kind,
+          })),
+        )
+        .then((result) => {
+          setPreview(result.ok ? result.value : []);
+        })
+        .catch(() => {
+          setPreview([]);
+        });
+    },
+    [],
+  );
 
-  const detach = useCallback((path: string): void => {
-    setAttachments((current) => current.filter((entry) => entry.path !== path));
-  }, []);
+  const attach = useCallback(
+    (attachment: Attachment): void => {
+      // The next list is computed outside the state updater: an updater
+      // must stay free of side effects.
+      const next = [
+        ...attachments.filter((entry) => entry.path !== attachment.path),
+        attachment,
+      ];
+      setAttachments(next);
+      refreshPreview(next);
+    },
+    [attachments, refreshPreview],
+  );
+
+  const detach = useCallback(
+    (path: string): void => {
+      const next = attachments.filter((entry) => entry.path !== path);
+      setAttachments(next);
+      refreshPreview(next);
+    },
+    [attachments, refreshPreview],
+  );
+
+  const pickFiles = useCallback(async (): Promise<void> => {
+    const api = window.nova;
+    if (!api) {
+      return;
+    }
+    const result = await api.ai.pickFiles();
+    if (!result.ok || result.value.length === 0) {
+      return;
+    }
+    const next = [...attachments];
+    for (const filePath of result.value) {
+      const name = filePath.split(/[\\/]/).pop() ?? filePath;
+      next.push({
+        path: filePath,
+        name,
+        sizeBytes: 0,
+        kind: 'file',
+      });
+    }
+    setAttachments(next);
+    refreshPreview(next);
+  }, [attachments, refreshPreview]);
 
   const setConversationMessages = useCallback((next: ChatMessage[]): void => {
     setMessages(next);
@@ -383,6 +458,8 @@ export function useAi(): AiController {
     regenerate,
     attach,
     detach,
+    pickFiles,
+    preview,
     refresh,
     setMessages: setConversationMessages,
   };

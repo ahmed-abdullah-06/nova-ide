@@ -29,6 +29,30 @@ export interface ChatAttachment {
   truncated: boolean;
   /** What the user attached. */
   kind: 'selection' | 'file';
+  /** The first line of a selection (1-based). */
+  startLine?: number;
+  /** The last line of a selection (1-based). */
+  endLine?: number;
+}
+
+/**
+ * A description of an attachment before it is sent.
+ *
+ * The panel shows it, so the user knows exactly what will be sent.
+ */
+export interface ContextPreview {
+  /** The absolute path inside the workspace. */
+  path: string;
+  /** The display name. */
+  name: string;
+  /** The size of the content in bytes. */
+  sizeBytes: number;
+  /** The approximate number of tokens. */
+  tokens: number;
+  /** True when the content would be shortened. */
+  truncated: boolean;
+  /** The reason why the file is not sent (secret, ignored, too large). */
+  skipped?: string;
 }
 
 /** One message of a conversation. */

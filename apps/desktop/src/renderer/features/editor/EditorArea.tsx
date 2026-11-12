@@ -8,12 +8,17 @@ import { MonacoEditor } from './MonacoEditor';
 interface EditorAreaProps {
   theme: Theme;
   onCursorChange: (position: { line: number; column: number }) => void;
+  /** Reports the selected lines (the context of the chat). */
+  onSelectionChange?: (
+    selection: { startLine: number; endLine: number } | null,
+  ) => void;
 }
 
 /** Tab strip + Monaco editor composition (spec §6.1, §8). */
 export function EditorArea({
   theme,
   onCursorChange,
+  onSelectionChange,
 }: EditorAreaProps): ReactNode {
   const { state, dispatch } = useTabs();
   const activeTab =
@@ -52,6 +57,7 @@ export function EditorArea({
         theme={theme}
         onChange={handleChange}
         onCursorChange={onCursorChange}
+        onSelectionChange={onSelectionChange}
       />
     </div>
   );

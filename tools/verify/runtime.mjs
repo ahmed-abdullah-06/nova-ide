@@ -957,6 +957,51 @@ async function main() {
       String(localBadge),
     );
 
+    // The current file can be attached as context, and the panel shows
+    // what will be sent.
+    const attached = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
+        const attach = buttons.find(
+          (b) => b.textContent.trim() === 'Attach file');
+        if (attach === undefined || attach.disabled) return false;
+        const chip = document.querySelector('.ai-panel__attachment');
+        attach.click();
+        return true;
+      })()`,
+    );
+    check('the current file can be attached', attached === true);
+
+    const contextShown = await waitFor(
+      session,
+      `(() => {
+        const title = document.querySelector('.ai-panel__context-title');
+        if (title === null) return false;
+        const items = [...document.querySelectorAll('.ai-panel__attachment')];
+        const text = items.map((i) => i.textContent).join('|');
+        // The check waits for the size of the context, not for the chip.
+        return text.includes('tokens') ? text : false;
+      })()`,
+      15000,
+    );
+    check(
+      'the panel shows what will be sent',
+      typeof contextShown === 'string' && contextShown.includes('tokens'),
+      `${String(contextShown)}`,
+    );
+
+    // The attached file can be removed again.
+    const removed = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll(
+          '.ai-panel__attachment-remove')];
+        if (buttons.length === 0) return false;
+        buttons[0].click();
+        return true;
+      })()`,
+    );
+    check('the attached file can be removed', removed === true);
+
     // The answer of the model must arrive in the panel.
     const sent = await session.evaluate(
       `(() => {

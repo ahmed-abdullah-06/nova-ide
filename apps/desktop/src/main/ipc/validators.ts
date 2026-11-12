@@ -383,3 +383,36 @@ export function assertProviderSettings(
     throw new Error('Invalid confirmation');
   }
 }
+
+/**
+ * The attachments of a request.
+ *
+ * The attachments are paths inside the workspace; the main process reads
+ * the files itself.
+ */
+export function assertContextAttachments(
+  args: unknown[],
+): asserts args is [attachments: { path: string; kind: 'selection' | 'file' }[]] {
+  if (args.length !== 1 || !Array.isArray(args[0])) {
+    throw new Error('Expected the attachments');
+  }
+  if (args[0].length > 50) {
+    throw new Error('Too many attachments');
+  }
+  for (const attachment of args[0]) {
+    if (typeof attachment !== 'object' || attachment === null) {
+      throw new Error('Invalid attachment');
+    }
+    const record = attachment as { path?: unknown; kind?: unknown };
+    if (
+      typeof record.path !== 'string' ||
+      record.path.length === 0 ||
+      record.path.length > 4096
+    ) {
+      throw new Error('Invalid attachment path');
+    }
+    if (record.kind !== 'selection' && record.kind !== 'file') {
+      throw new Error('Invalid attachment kind');
+    }
+  }
+}

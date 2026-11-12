@@ -142,6 +142,9 @@ const novaApi: NovaApi = {
       invoke(IpcChannels.aiProviderUpdate, providerId, settings),
     removeProvider: (providerId) =>
       invoke(IpcChannels.aiProviderRemove, providerId),
+    pickFiles: () => invoke(IpcChannels.aiPickFiles),
+    previewContext: (attachments) =>
+      invoke(IpcChannels.aiContextPreview, attachments),
   },
 
   terminal: {

@@ -18,7 +18,13 @@ export interface AiPanelProps {
   /** The file that is open in the editor (can be attached as context). */
   activeFile: { path: string; name: string; sizeBytes: number } | null;
   /** The selected text of the editor (can be attached as context). */
-  selection: { path: string; name: string; sizeBytes: number } | null;
+  selection: {
+    path: string;
+    name: string;
+    sizeBytes: number;
+    startLine: number;
+    endLine: number;
+  } | null;
 }
 
 export function AiPanel({
@@ -83,6 +89,8 @@ export function AiPanel({
       name: selection.name,
       sizeBytes: selection.sizeBytes,
       kind: 'selection',
+      startLine: selection.startLine,
+      endLine: selection.endLine,
     });
   }, [ai, selection]);
 
@@ -217,21 +225,54 @@ export function AiPanel({
       ) : null}
 
       {ai.attachments.length > 0 ? (
-        <ul className="ai-panel__attachments" aria-label="Attached context">
-          {ai.attachments.map((attachment) => (
-            <li key={attachment.path} className="ai-panel__attachment">
-              <span>{attachment.name}</span>
-              <button
-                type="button"
-                className="ai-panel__attachment-remove"
-                aria-label={`Remove ${attachment.name}`}
-                onClick={() => ai.detach(attachment.path)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div
+          className="ai-panel__context-preview"
+          data-preview-count={ai.preview.length}
+        >
+          <p className="ai-panel__context-title">
+            This will be sent with the next message:
+          </p>
+          <ul className="ai-panel__attachments" aria-label="Attached context">
+            {ai.attachments.map((attachment) => {
+              const preview = ai.preview.find(
+                (entry) => entry.path === attachment.path,
+              );
+              return (
+                <li
+                  key={attachment.path}
+                  className="ai-panel__attachment"
+                  data-path={attachment.path}
+                  title={
+                    preview?.skipped ??
+                    `${preview?.tokens ?? 0} tokens`
+                  }
+                >
+                  <span>{attachment.name}</span>
+                  {preview !== undefined ? (
+                    <span className="ai-panel__attachment-size">
+                      {preview.skipped !== undefined
+                        ? 'not sent'
+                        : `${preview.tokens} tokens`}
+                    </span>
+                  ) : null}
+                  {preview?.truncated === true ? (
+                    <span className="ai-panel__attachment-size ai-panel__attachment-size--warn">
+                      shortened
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ai-panel__attachment-remove"
+                    aria-label={`Remove ${attachment.name}`}
+                    onClick={() => ai.detach(attachment.path)}
+                  >
+                    ×
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
 
       <div className="ai-panel__composer">
@@ -284,6 +325,15 @@ export function AiPanel({
             title="Attach the current file as context"
           >
             Attach file
+          </button>
+          <button
+            type="button"
+            className="ai-panel__action"
+            onClick={() => void ai.pickFiles()}
+            disabled={!hasWorkspace}
+            title="Choose the files that are attached as context"
+          >
+            Browse files
           </button>
           <button
             type="button"

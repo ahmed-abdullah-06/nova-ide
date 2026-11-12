@@ -19,6 +19,7 @@ import path from 'node:path';
 import type {
   ChatAttachment,
   ChatMessage,
+  ContextPreview,
   ProviderErrorInfo,
 } from '../../shared/ai-types';
 import { resolveInWorkspace } from '../services/pathSecurity';
@@ -76,6 +77,10 @@ export interface ContextRequest {
   path: string;
   /** What the user attached. */
   kind: 'selection' | 'file';
+  /** The first line of a selection (1-based). */
+  startLine?: number;
+  /** The last line of a selection (1-based). */
+  endLine?: number;
 }
 
 /** The content that is attached to a request. */
@@ -147,6 +152,15 @@ export async function buildContext(
       continue;
     }
 
+    // A selection is sent as the selected lines only.
+    if (request.kind === 'selection') {
+      const start = Math.max(1, request.startLine ?? 1);
+      const end = Math.max(start, request.endLine ?? start);
+      const lines = content.split('\n').slice(start - 1, end);
+      content = lines.join('\n');
+      sizeBytes = content.length;
+    }
+
     const remaining = MAX_CONTEXT_CHARS - used;
     if (remaining <= 0) {
       truncated = true;
@@ -179,6 +193,8 @@ export async function buildContext(
       sizeBytes,
       truncated: wasTruncated,
       kind: request.kind,
+      startLine: request.startLine,
+      endLine: request.endLine,
     });
 
     parts.push(
@@ -289,4 +305,104 @@ export function buildMessages(
  */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+/**
+ * Describes the context of a request before it is sent.
+ *
+ * The panel shows the result, so the user knows exactly which files will
+ * be sent, how large they are and whether something would be shortened.
+ */
+export async function previewContext(
+  root: string,
+  requests: readonly ContextRequest[],
+  gitignore: { ignores: (relativePath: string, isDirectory: boolean) => boolean },
+): Promise<ContextPreview[]> {
+  const previews: ContextPreview[] = [];
+  let used = 0;
+
+  for (const request of requests) {
+    const relative = path.relative(root, request.path);
+    if (relative.length === 0 || relative.startsWith('..')) {
+      continue;
+    }
+    if (isExcludedFile(relative)) {
+      previews.push({
+        path: request.path,
+        name: path.basename(request.path),
+        sizeBytes: 0,
+        tokens: 0,
+        truncated: false,
+        skipped: 'This file is never sent (it usually holds secrets).',
+      });
+      continue;
+    }
+    if (gitignore.ignores(relative, false)) {
+      previews.push({
+        path: request.path,
+        name: path.basename(request.path),
+        sizeBytes: 0,
+        tokens: 0,
+        truncated: false,
+        skipped: 'This file is ignored by .gitignore.',
+      });
+      continue;
+    }
+
+    const resolved = await resolveInWorkspace(root, request.path, {
+      allowRoot: false,
+      mustExist: true,
+    });
+    if (!resolved.ok) {
+      previews.push({
+        path: request.path,
+        name: path.basename(request.path),
+        sizeBytes: 0,
+        tokens: 0,
+        truncated: false,
+        skipped: 'The file could not be read.',
+      });
+      continue;
+    }
+
+    let content: string;
+    try {
+      content = await fs.readFile(resolved.value, 'utf8');
+    } catch {
+      previews.push({
+        path: request.path,
+        name: path.basename(resolved.value),
+        sizeBytes: 0,
+        tokens: 0,
+        truncated: false,
+        skipped: 'The file could not be read.',
+      });
+      continue;
+    }
+
+    if (request.kind === 'selection') {
+      const start = Math.max(1, request.startLine ?? 1);
+      const end = Math.max(start, request.endLine ?? start);
+      content = content.split('\n').slice(start - 1, end).join('\n');
+    }
+
+    const remaining = Math.max(0, MAX_CONTEXT_CHARS - used);
+    const budget = Math.min(MAX_ATTACHMENT_CHARS, remaining);
+    const truncated = content.length > budget;
+    const text = truncated ? content.slice(0, budget) : content;
+    used += text.length;
+
+    previews.push({
+      path: request.path,
+      name: path.basename(resolved.value),
+      sizeBytes: text.length,
+      tokens: estimateTokens(text),
+      truncated,
+      skipped: truncated
+        ? `The file is too large and will be shortened.`
+        : undefined,
+    });
+  }
+
+  return previews;
 }

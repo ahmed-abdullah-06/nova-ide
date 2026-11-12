@@ -36,6 +36,10 @@ function Workspace(): ReactNode {
   const workspaceActions = useWorkspaceActions();
   const [activity, setActivity] = useState<ActivityId>('explorer');
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
+  const [selection, setSelection] = useState<{
+    startLine: number;
+    endLine: number;
+  } | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
   const { openFolder } = workspaceActions;
@@ -145,7 +149,11 @@ function Workspace(): ReactNode {
         onOpenFile={handleOpenFile}
       />
       <div className="main-column">
-        <EditorArea theme={theme} onCursorChange={setCursor} />
+        <EditorArea
+          theme={theme}
+          onCursorChange={setCursor}
+          onSelectionChange={setSelection}
+        />
         <BottomPanel
           renderTerminal={() => <TerminalPanel hasWorkspace={hasWorkspace} />}
           problemCount={problems.errorCount}
@@ -186,7 +194,17 @@ function Workspace(): ReactNode {
               }
             : null
         }
-        selection={null}
+        selection={
+          selection !== null && activeTab !== null
+            ? {
+                path: activeTab.id,
+                name: activeTab.name,
+                sizeBytes: 0,
+                startLine: selection.startLine,
+                endLine: selection.endLine,
+              }
+            : null
+        }
       />
       <StatusBar
         language={activeTab?.language ?? null}

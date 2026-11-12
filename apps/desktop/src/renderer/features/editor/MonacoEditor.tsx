@@ -10,6 +10,10 @@ interface MonacoEditorProps {
   theme: 'dark' | 'light';
   onChange: (content: string) => void;
   onCursorChange: (position: { line: number; column: number }) => void;
+  /** Reports the selected lines (the context of the chat). */
+  onSelectionChange?: (
+    selection: { startLine: number; endLine: number } | null,
+  ) => void;
 }
 
 /**
@@ -22,6 +26,7 @@ export function MonacoEditor({
   theme,
   onChange,
   onCursorChange,
+  onSelectionChange,
 }: MonacoEditorProps): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -31,6 +36,7 @@ export function MonacoEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const onCursorChangeRef = useRef(onCursorChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   onCursorChangeRef.current = onCursorChange;
   const activeTabIdRef = useRef<string | null>(null);
   activeTabIdRef.current = tab?.id ?? null;
@@ -70,6 +76,19 @@ export function MonacoEditor({
           line: event.position.lineNumber,
           column: event.position.column,
         });
+      });
+
+      // The selected lines are the context of the chat.
+      editor.onDidChangeCursorSelection((event) => {
+        const selection = event.selection;
+        const startLine = selection.startLineNumber;
+        const endLine = selection.endLineNumber;
+        const empty =
+          startLine === endLine &&
+          selection.startColumn === selection.endColumn;
+        onSelectionChangeRef.current?.(
+          empty ? null : { startLine, endLine },
+        );
       });
 
       setReady(true);

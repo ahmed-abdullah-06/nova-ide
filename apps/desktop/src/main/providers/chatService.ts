@@ -24,6 +24,7 @@ import {
   buildContext,
   buildMessages,
   checkPrivacyGate,
+  previewContext,
   type ContextRequest,
 } from './privacy';
 import type { ProviderService } from './providerService';
@@ -98,6 +99,30 @@ export class ChatService {
     const messages = buildMessages(history, context.attachments, context.text);
 
     return this.router.start(requestId, providerId, messages, { model });
+  }
+
+  /** The root of the active workspace (null when there is none). */
+  workspaceRoot(): string | null {
+    return this.options.getRoot();
+  }
+
+  /**
+   * Describes the context of a request before it is sent.
+   *
+   * The panel shows the result, so the user knows exactly what will be
+   * sent and whether something would be shortened.
+   */
+  async preview(
+    attachments: readonly ContextRequest[],
+  ): Promise<
+    Awaited<ReturnType<typeof previewContext>>
+  > {
+    const root = this.options.getRoot();
+    if (root === null || attachments.length === 0) {
+      return [];
+    }
+    const gitignore = await this.loadGitignore(root);
+    return previewContext(root, attachments, gitignore);
   }
 
   /** Cancels a running request. */
