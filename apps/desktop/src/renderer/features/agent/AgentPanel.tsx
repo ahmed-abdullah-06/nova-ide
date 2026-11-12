@@ -282,14 +282,16 @@ export function AgentPanel({
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            className="agent-panel__action"
-            onClick={() => void agent.revert()}
-            disabled={busy}
-          >
-            Revert the changes of this run
-          </button>
+          {state.revertibleRunId !== null ? (
+            <button
+              type="button"
+              className="agent-panel__action"
+              onClick={() => void agent.revert()}
+              disabled={busy}
+            >
+              Revert the changes of this run
+            </button>
+          ) : null}
         </div>
       ) : null}
 

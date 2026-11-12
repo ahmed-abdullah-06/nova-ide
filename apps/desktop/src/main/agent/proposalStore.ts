@@ -111,9 +111,48 @@ export class ProposalStore {
     await this.writeCheckpoint(checkpoint);
   }
 
+  /**
+   * Adds a file to the checkpoint of a run.
+   *
+   * The content of a file is kept only once: the first recorded state is
+   * the state before the run changed the file, so a revert restores the
+   * original content and not an intermediate one.
+   *
+   * @param runId The run.
+   * @param file The path of the file and its content before the change
+   *   (null when the file did not exist).
+   */
+  async addToCheckpoint(
+    runId: string,
+    file: { path: string; content: string | null },
+  ): Promise<void> {
+    const existing = this.checkpoints.get(runId);
+    if (
+      existing !== undefined &&
+      existing.files.some((entry) => entry.path === file.path)
+    ) {
+      // The file was already changed by this run: the state that was
+      // recorded first is the one before the run touched it.
+      return;
+    }
+    const files = existing === undefined ? [] : [...existing.files];
+    files.push(file);
+    await this.checkpoint(runId, files);
+  }
+
   /** The checkpoint of a run (undefined when there is none). */
   checkpointOf(runId: string): AgentCheckpoint | undefined {
     return this.checkpoints.get(runId);
+  }
+
+  /**
+   * Forgets the checkpoint of a run.
+   *
+   * The files of the checkpoint are removed from the disk as well.
+   */
+  async forget(runId: string): Promise<void> {
+    this.checkpoints.delete(runId);
+    await this.removeCheckpointFiles(runId);
   }
 
   /**

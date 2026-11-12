@@ -49,6 +49,7 @@ const EMPTY_STATE: AgentState = {
   events: [],
   approval: null,
   proposals: [],
+  revertibleRunId: null,
   summary: null,
 };
 
@@ -191,15 +192,18 @@ export function useAgent(): AgentController {
 
   const revert = useCallback(async (): Promise<void> => {
     const api = window.nova;
-    if (!api || state.runId === null) {
+    // The checkpoint belongs to the run that really changed a file, which
+    // is not always the run that is on the screen.
+    const target = state.revertibleRunId ?? state.runId;
+    if (!api || target === null) {
       return;
     }
-    const result = await api.agent.revert(state.runId);
+    const result = await api.agent.revert(target);
     if (!result.ok) {
       setError(result.message);
     }
     reload();
-  }, [reload, state.runId]);
+  }, [reload, state.revertibleRunId, state.runId]);
 
   return {
     state,

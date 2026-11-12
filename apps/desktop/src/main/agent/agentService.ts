@@ -106,6 +106,13 @@ export class AgentService {
   private commands: AgentCommandRecord[] = [];
   /** The audit log. */
   private audit: AgentAuditEntry[] = [];
+  /**
+   * The run whose checkpoint can be reverted.
+   *
+   * It is the last run that really changed a file: a run that only
+   * proposed changes has no checkpoint.
+   */
+  private revertibleRunId: string | null = null;
 
   constructor(options: AgentServiceOptions) {
     this.options = options;
@@ -129,6 +136,7 @@ export class AgentService {
       events: [...this.events],
       approval: this.approval,
       proposals: this.proposals.list(this.currentRunId ?? ''),
+      revertibleRunId: this.revertibleRunId,
       summary: this.summary,
     };
   }
@@ -275,6 +283,13 @@ export class AgentService {
       return { ok: false, message: result.message };
     }
     this.proposals.remove(runId, proposalId);
+    // The content before the change is kept, so the user can revert the
+    // whole run later.
+    await this.proposals.addToCheckpoint(runId, {
+      path: proposal.path,
+      content: proposal.created ? null : proposal.before,
+    });
+    this.revertibleRunId = runId;
     this.log('proposal', `the change of ${proposal.relativePath} was accepted`);
     this.options.onFileChanged(proposal.path);
     this.publish();
@@ -324,13 +339,39 @@ export class AgentService {
 
   /** Reverts the changes of a run (the checkpoint of the run). */
   async revertRun(runId: string): Promise<{ ok: boolean; message?: string }> {
-    const restored = await this.proposals.revert(runId);
+    const checkpoint = this.proposals.checkpointOf(runId);
+    if (checkpoint === undefined) {
+      return { ok: false, message: 'This run has no checkpoint.' };
+    }
+    this.revertibleRunId = null;
+    const files = this.options.files;
+    const restored: string[] = [];
+    for (const file of checkpoint.files) {
+      // The write goes through the file service of Milestone 2, so the
+      // boundary of the workspace and the protections apply.
+      const result =
+        file.content === null
+          ? await files.delete(file.path)
+          : await files.writeFile(file.path, file.content, null);
+      if (!result.ok) {
+        this.log('run', 'a file of the checkpoint could not be restored');
+        this.addError(
+          `The change of "${file.path}" could not be reverted: ${result.message}`,
+        );
+        continue;
+      }
+      restored.push(file.path);
+    }
+    await this.proposals.forget(runId);
     for (const file of restored) {
       this.options.onFileChanged(file);
     }
     this.log('run', `the run was reverted (${restored.length} files)`);
     this.publish();
-    return { ok: true, message: `${restored.length} files were restored` };
+    return {
+      ok: restored.length > 0,
+      message: `${restored.length} files were restored`,
+    };
   }
 
   /** Cancels every running request (the application quits). */
@@ -540,6 +581,21 @@ export class AgentService {
     return new Promise<boolean>((resolve) => {
       this.approvalResolve = resolve;
     });
+  }
+
+  /**
+   * Adds an error to the summary of the run.
+   *
+   * The summary is the report the user reads, so a problem that happens
+   * after the run (a failed revert) belongs there.
+   */
+  private addError(message: string): void {
+    if (this.summary !== null) {
+      this.summary = {
+        ...this.summary,
+        errors: [...this.summary.errors, message],
+      };
+    }
   }
 
   /** Emits an event of the run. */

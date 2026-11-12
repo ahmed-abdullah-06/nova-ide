@@ -149,6 +149,40 @@ describe('the checkpoint of a run', () => {
     const store = new ProposalStore();
     expect(await store.revert('run-unknown')).toEqual([]);
   });
+
+  it('collects the files of a run in the checkpoint', async () => {
+    const store = new ProposalStore();
+    await store.addToCheckpoint('run-1', {
+      path: path.join(root, 'a.ts'),
+      content: 'first\n',
+    });
+    await store.addToCheckpoint('run-1', {
+      path: path.join(root, 'b.ts'),
+      content: 'second\n',
+    });
+    const checkpoint = store.checkpointOf('run-1');
+    expect(checkpoint?.files).toHaveLength(2);
+  });
+
+  it('keeps the first state of a file that the run changed twice', async () => {
+    const store = new ProposalStore();
+    const file = path.join(root, 'a.ts');
+    await store.addToCheckpoint('run-1', { path: file, content: 'original\n' });
+    await store.addToCheckpoint('run-1', { path: file, content: 'changed\n' });
+    const checkpoint = store.checkpointOf('run-1');
+    expect(checkpoint?.files).toHaveLength(1);
+    expect(checkpoint?.files[0]?.content).toBe('original\n');
+  });
+
+  it('forgets the checkpoint of a run', async () => {
+    const store = new ProposalStore();
+    await store.addToCheckpoint('run-1', {
+      path: path.join(root, 'a.ts'),
+      content: 'x\n',
+    });
+    await store.forget('run-1');
+    expect(store.checkpointOf('run-1')).toBeUndefined();
+  });
 });
 
 describe('writing an accepted proposal', () => {

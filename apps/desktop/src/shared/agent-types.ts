@@ -217,6 +217,13 @@ export interface AgentState {
   approval: AgentApproval | null;
   /** The proposals of the current run. */
   proposals: AgentProposal[];
+  /**
+   * The run whose checkpoint can be reverted (null when there is none).
+   *
+   * It is the last run that really changed a file: a run that only
+   * proposed changes has no checkpoint.
+   */
+  revertibleRunId: string | null;
   /** The summary of the current run. */
   summary: AgentRunSummary | null;
 }

@@ -1353,6 +1353,38 @@ async function main() {
       JSON.stringify(unchanged),
     );
 
+    // The checkpoint of the run: the accepted change can be reverted.
+    const reverted = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const revert = buttons.find(
+          (b) => b.textContent.includes('Revert the changes'),
+        );
+        if (revert === undefined || revert.disabled) return false;
+        revert.click();
+        return true;
+      })()`,
+    );
+    check('the run can be reverted', reverted === true);
+
+    const revertedFile = await waitFor(
+      session,
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        if (state === null) return false;
+        return state.textContent.trim() !== 'running';
+      })()`,
+      20000,
+    );
+    check('the revert finished', revertedFile !== false);
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    check(
+      'the reverted file is gone again',
+      !existsSync(path.join(fixture, 'notes.txt')),
+      'the file was not removed',
+    );
+
     // The stop button must work while a run is in progress.
     agentAnswers.length = 0;
     agentAnswers.push(
