@@ -127,6 +127,9 @@ const novaApi: NovaApi = {
     revert: (runId, confirmedPaths, dirtyPaths) =>
       invoke(IpcChannels.agentRevert, runId, confirmedPaths, dirtyPaths),
     audit: () => invoke(IpcChannels.agentAudit),
+    permissionSettings: () => invoke(IpcChannels.agentPermissionSettings),
+    updatePermission: (category, allowed) =>
+      invoke(IpcChannels.agentPermissionUpdate, category, allowed),
     onEvent: (listener) =>
       subscribe<{ runId: string; event: AgentEvent }>(
         IpcPushChannels.agentEvent,

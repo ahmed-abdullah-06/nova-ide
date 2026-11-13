@@ -59,6 +59,51 @@ export interface AgentEvent {
 export type AgentPermissionDecision = 'allow' | 'ask' | 'deny';
 
 /**
+ * The permission categories the user can configure (spec §12.3, §18.8).
+ *
+ * `system` is deliberately absent: operations outside the workspace are
+ * never allowed, whatever the settings are.
+ */
+export type AgentPermissionCategory = 'read' | 'workspace' | 'command';
+
+/** True when a category may be used without an approval of the user. */
+export interface AgentPermissionConfig {
+  /** Read only tools (files, search, git status). */
+  read: boolean;
+  /** Tools that prepare a change of the workspace. */
+  workspace: boolean;
+  /** Tools that run a command. */
+  command: boolean;
+}
+
+/**
+ * The defaults of the permission categories.
+ *
+ * Reading is allowed; changing a file and running a command need the
+ * user. The defaults are the narrowest useful policy.
+ */
+export const DEFAULT_AGENT_PERMISSION_CONFIG: AgentPermissionConfig = {
+  read: true,
+  workspace: false,
+  command: false,
+};
+
+/**
+ * The permission settings the panel shows.
+ *
+ * The defaults are sent along, so the user always sees what the
+ * application would do without their change.
+ */
+export interface AgentPermissionView {
+  /** The settings that are in force. */
+  current: AgentPermissionConfig;
+  /** The defaults (never changed by the user). */
+  defaults: AgentPermissionConfig;
+  /** True when the user allows a cloud provider to receive content. */
+  allowCloudContext: boolean;
+}
+
+/**
  * The permission level of a tool (spec §12.3).
  *
  *  - 'read': only reads the workspace,
@@ -101,7 +146,7 @@ export interface AgentApproval {
   /** The run the request belongs to. */
   runId: string;
   /** What kind of approval this is. */
-  kind: 'command' | 'cloud-context';
+  kind: 'read' | 'command' | 'cloud-context';
   /** The tool that needs the approval. */
   tool?: string;
   /** The command as an argument array (never a shell string). */

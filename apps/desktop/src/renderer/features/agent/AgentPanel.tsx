@@ -10,6 +10,7 @@ import type { ProviderDescriptor } from '../../../shared/ai-types';
 import type { AgentRevertPreview } from '../../../shared/agent-types';
 import { useTabs } from '../../stores/tabs';
 import { ProposalReview } from './ProposalReview';
+import { AgentPermissionSettings } from './AgentPermissionSettings';
 import { useAgent } from './useAgent';
 
 export interface AgentPanelProps {
@@ -204,6 +205,11 @@ export function AgentPanel({
           {agent.error}
         </p>
       ) : null}
+
+      <details className="agent-panel__permissions-slot">
+        <summary className="agent-panel__permissions-summary">Permissions</summary>
+        <AgentPermissionSettings />
+      </details>
 
       <div className="agent-panel__timeline">
         {state.events.map((event) => (

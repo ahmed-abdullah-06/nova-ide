@@ -17,6 +17,8 @@
  */
 import path from 'node:path';
 import type {
+  AgentPermissionCategory,
+  AgentPermissionConfig,
   AgentPermissionDecision,
   AgentPermissionLevel,
   AgentToolParameter,
@@ -53,6 +55,56 @@ export const DEFAULT_PERMISSION_SETTINGS: AgentPermissionSettings = {
   allowedLevels: ['read'],
   allowCloudContext: false,
 };
+
+/** The categories a user can configure (system is never one of them). */
+export const AGENT_PERMISSION_CATEGORIES: readonly AgentPermissionCategory[] = [
+  'read',
+  'workspace',
+  'command',
+];
+
+/**
+ * Turns the category settings into the levels the policy uses.
+ *
+ * `system` is never added: it is refused before the settings are read.
+ */
+export function permissionLevels(
+  config: AgentPermissionConfig,
+): AgentPermissionLevel[] {
+  const levels: AgentPermissionLevel[] = [];
+  if (config.read) {
+    levels.push('read');
+  }
+  if (config.workspace) {
+    levels.push('workspace');
+  }
+  if (config.command) {
+    levels.push('command');
+  }
+  return levels;
+}
+
+/** Reads the category settings out of the policy settings. */
+export function permissionConfig(
+  settings: AgentPermissionSettings,
+): AgentPermissionConfig {
+  return {
+    read: settings.allowedLevels.includes('read'),
+    workspace: settings.allowedLevels.includes('workspace'),
+    command: settings.allowedLevels.includes('command'),
+  };
+}
+
+/** Builds the policy settings from the category settings. */
+export function settingsFromConfig(
+  config: AgentPermissionConfig,
+  allowCloudContext = false,
+): AgentPermissionSettings {
+  return {
+    allowedLevels: permissionLevels(config),
+    allowCloudContext,
+  };
+}
 
 /** The result of a permission check. */
 export interface PermissionOutcome {

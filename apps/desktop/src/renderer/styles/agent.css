@@ -416,3 +416,90 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-small);
 }
+
+/* The permission settings (M6 C3) -------------------------------------- */
+
+.agent-panel__permissions-slot {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-background);
+}
+
+.agent-panel__permissions-summary {
+  cursor: pointer;
+  padding: 4px 6px;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  user-select: none;
+}
+
+.agent-panel__permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
+.agent-panel__permissions-title {
+  margin: 0;
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__permissions-note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__permissions-loading {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__permissions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-panel__permission-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.agent-panel__permission-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__permission-name {
+  color: var(--color-text);
+}
+
+.agent-panel__permission-detail,
+.agent-panel__permission-default {
+  color: var(--color-muted);
+}
+
+.agent-panel__permission-message,
+.agent-panel__permission-error {
+  margin: 0;
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__permission-message {
+  color: var(--color-success);
+}
+
+.agent-panel__permission-error {
+  color: var(--color-danger);
+}

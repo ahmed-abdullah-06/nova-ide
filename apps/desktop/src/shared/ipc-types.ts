@@ -11,6 +11,8 @@ import type {
 import type {
   AgentAuditEntry,
   AgentEvent,
+  AgentPermissionCategory,
+  AgentPermissionView,
   AgentRevertPreview,
   AgentRevertResult,
   AgentState,
@@ -87,6 +89,8 @@ export const IpcChannels = {
   agentRevertPreview: 'agent:revert-preview',
   agentRevert: 'agent:revert',
   agentAudit: 'agent:audit',
+  agentPermissionSettings: 'agent:permission-settings',
+  agentPermissionUpdate: 'agent:permission-update',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -618,6 +622,18 @@ export interface IpcInvokeMap {
   };
   /** The audit log of the agent (metadata only). */
   'agent:audit': { args: []; result: AgentAuditEntry[] };
+  /** The permission categories the user configured (with the defaults). */
+  'agent:permission-settings': { args: []; result: AgentPermissionView };
+  /**
+   * Changes one permission category.
+   *
+   * Narrowing is applied at once. Widening is confirmed by the main
+   * process with a native dialog; the renderer cannot confirm it.
+   */
+  'agent:permission-update': {
+    args: [category: AgentPermissionCategory, allowed: boolean];
+    result: FsResult<AgentPermissionView>;
+  };
 }
 
 /**
@@ -817,6 +833,13 @@ export interface NovaAgentApi {
   ): Promise<FsResult<AgentRevertResult>>;
   /** The audit log of the agent (metadata only). */
   audit(): Promise<AgentAuditEntry[]>;
+  /** The permission categories the user configured (with the defaults). */
+  permissionSettings(): Promise<AgentPermissionView>;
+  /** Changes one permission category (widening asks the user in main). */
+  updatePermission(
+    category: AgentPermissionCategory,
+    allowed: boolean,
+  ): Promise<FsResult<AgentPermissionView>>;
   /** Subscribes to the events of the agent. */
   onEvent(
     listener: (payload: { runId: string; event: AgentEvent }) => void,

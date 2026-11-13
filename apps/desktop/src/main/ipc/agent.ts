@@ -7,6 +7,7 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { AgentService } from '../agent/agentService';
+import type { PermissionController } from '../agent/permissionController';
 
 type Handler<C extends keyof IpcInvokeMap> = (
   ...args: IpcInvokeMap[C]['args']
@@ -24,11 +25,18 @@ export interface AgentHandlers {
   previewRevert: Handler<'agent:revert-preview'>;
   revert: Handler<'agent:revert'>;
   audit: Handler<'agent:audit'>;
+  permissionSettings: Handler<'agent:permission-settings'>;
+  updatePermission: Handler<'agent:permission-update'>;
 }
 
-export function createAgentHandlers(agent: AgentService): AgentHandlers {
+export function createAgentHandlers(
+  agent: AgentService,
+  permissions: PermissionController,
+): AgentHandlers {
   return {
     start: async (task, providerId, model, approveCloudContext) => {
+      // The stored preferences are in force before a run can use a tool.
+      await permissions.ready();
       const result = await agent.start(task, providerId, model, {
         approveCloudContext,
       });
@@ -115,5 +123,13 @@ export function createAgentHandlers(agent: AgentService): AgentHandlers {
       };
     },
     audit: async () => agent.getAudit(),
+    permissionSettings: async () => permissions.view(),
+    updatePermission: async (category, allowed) => {
+      const result = await permissions.update(category, allowed);
+      if (!result.ok) {
+        return { ok: false, code: 'CANCELLED', message: result.message };
+      }
+      return { ok: true, value: result.view };
+    },
   };
 }

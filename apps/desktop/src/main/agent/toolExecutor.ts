@@ -57,7 +57,7 @@ export interface ToolContext {
    * @returns True when the user approved it.
    */
   requestApproval: (request: {
-    kind: 'command' | 'cloud-context';
+    kind: 'read' | 'command' | 'cloud-context';
     tool: string;
     argv?: string[];
     script?: string;
@@ -115,6 +115,24 @@ export class ToolExecutor {
       };
     }
 
+    // A read tool is normally allowed without asking. When the user
+    // narrowed the read category, the call has to be approved — the
+    // policy is the only place that decides this, never the model.
+    if (permission.decision === 'ask' && permission.level === 'read') {
+      const approved = await context.requestApproval({
+        kind: 'read',
+        tool: tool.name,
+        reason: permission.reason,
+      });
+      if (!approved) {
+        return {
+          ok: false,
+          content: `The user did not allow the tool "${tool.name}".`,
+          error: 'the user rejected the read',
+        };
+      }
+    }
+
     switch (tool.name) {
       case 'list_directory':
         return this.listDirectory(args, context);
@@ -131,7 +149,10 @@ export class ToolExecutor {
       case 'apply_edit':
         return this.applyEdit(args, context);
       case 'run_command':
-        return this.runCommand(args, context);
+        // A command always asks the user unless the command category was
+        // explicitly widened by the user (the forbidden programs stay
+        // blocked in every case).
+        return this.runCommand(args, context, permission.decision === 'allow');
       default:
         return {
           ok: false,
@@ -456,15 +477,16 @@ export class ToolExecutor {
   private async runCommand(
     args: Record<string, unknown>,
     context: ToolContext,
+    approvedCategory: boolean,
   ): Promise<ToolResult> {
     const script = args.script;
     const argv = args.argv;
 
     if (typeof script === 'string' && script.length > 0) {
-      return this.runScript(script, context);
+      return this.runScript(script, context, approvedCategory);
     }
     if (Array.isArray(argv) && argv.length > 0) {
-      return this.runArgv(argv.map((entry) => String(entry)), context);
+      return this.runArgv(argv.map((entry) => String(entry)), context, approvedCategory);
     }
     return {
       ok: false,
@@ -479,19 +501,22 @@ export class ToolExecutor {
   private async runScript(
     script: string,
     context: ToolContext,
+    approvedCategory: boolean,
   ): Promise<ToolResult> {
-    const approved = await context.requestApproval({
-      kind: 'command',
-      tool: 'run_command',
-      script,
-      reason: `The agent wants to run the script "${script}".`,
-    });
-    if (!approved) {
-      return {
-        ok: false,
-        content: `The user did not allow the script "${script}".`,
-        error: 'the user rejected the command',
-      };
+    if (!approvedCategory) {
+      const approved = await context.requestApproval({
+        kind: 'command',
+        tool: 'run_command',
+        script,
+        reason: `The agent wants to run the script "${script}".`,
+      });
+      if (!approved) {
+        return {
+          ok: false,
+          content: `The user did not allow the script "${script}".`,
+          error: 'the user rejected the command',
+        };
+      }
     }
     if (context.signal.aborted) {
       return { ok: false, content: 'The run was stopped.', cancelled: true };
@@ -587,6 +612,7 @@ export class ToolExecutor {
   private async runArgv(
     argv: string[],
     context: ToolContext,
+    approvedCategory: boolean,
   ): Promise<ToolResult> {
     const { isForbiddenCommand } = await import('./permissions');
     if (isForbiddenCommand(argv)) {
@@ -598,18 +624,20 @@ export class ToolExecutor {
         error: 'the command is forbidden',
       };
     }
-    const approved = await context.requestApproval({
-      kind: 'command',
-      tool: 'run_command',
-      argv,
-      reason: `The agent wants to run "${argv.join(' ')}".`,
-    });
-    if (!approved) {
-      return {
-        ok: false,
-        content: `The user did not allow "${argv.join(' ')}".`,
-        error: 'the user rejected the command',
-      };
+    if (!approvedCategory) {
+      const approved = await context.requestApproval({
+        kind: 'command',
+        tool: 'run_command',
+        argv,
+        reason: `The agent wants to run "${argv.join(' ')}".`,
+      });
+      if (!approved) {
+        return {
+          ok: false,
+          content: `The user did not allow "${argv.join(' ')}".`,
+          error: 'the user rejected the command',
+        };
+      }
     }
     if (context.signal.aborted) {
       return { ok: false, content: 'The run was stopped.', cancelled: true };

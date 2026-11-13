@@ -82,6 +82,14 @@ describe('the permission of a tool', () => {
     expect(outcome.decision).toBe('allow');
   });
 
+  it('asks before a read when the user narrowed the read category', () => {
+    const outcome = checkToolPermission(tool('read_file'), {
+      allowedLevels: [],
+      allowCloudContext: false,
+    });
+    expect(outcome.decision).toBe('ask');
+  });
+
   it('refuses a tool that is not allowed at all', () => {
     const outcome = checkToolPermission(
       { ...tool('read_file'), name: 'delete_file' },

@@ -1,9 +1,10 @@
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import {
   IpcChannels,
   IpcPushChannels,
   type IpcInvokeMap,
 } from '../../shared/ipc-types';
+import type { AgentPermissionCategory } from '../../shared/agent-types';
 import { isAllowedChannel } from '../security/channels';
 import { isTrustedSender } from '../security/sender';
 import { FileSystemService } from '../services/fileSystemService';
@@ -30,6 +31,7 @@ import {
   assertConversationId,
   assertExternalUrl,
   assertOptionalString,
+  assertPermissionUpdate,
   assertProviderId,
   assertProposalId,
   assertProviderKey,
@@ -60,7 +62,12 @@ import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
 import { AgentService } from '../agent/agentService';
 import { ToolExecutor } from '../agent/toolExecutor';
-import { DEFAULT_PERMISSION_SETTINGS } from '../agent/permissions';
+import {
+  DEFAULT_PERMISSION_SETTINGS,
+  type AgentPermissionSettings,
+} from '../agent/permissions';
+import { PermissionController } from '../agent/permissionController';
+import { PermissionSettingsStore } from '../agent/permissionStore';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -88,6 +95,41 @@ function registerChannel<C extends keyof IpcInvokeMap & string>(
     validateArgs(rawArgs);
     return handler(...(rawArgs as IpcInvokeMap[C]['args']));
   });
+}
+
+/**
+ * Asks the user to confirm a wider permission (spec §12.3).
+ *
+ * The dialog is shown by the main process, so the renderer can never
+ * supply the confirmation itself. The safe answer is the default.
+ */
+async function confirmPermissionWidening(
+  category: AgentPermissionCategory,
+): Promise<boolean> {
+  const actions: Record<AgentPermissionCategory, string> = {
+    read: 'read files of the workspace without asking',
+    workspace: 'prepare changes of the workspace without asking',
+    command: 'run commands of the workspace without asking',
+  };
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  const options = {
+    type: 'warning' as const,
+    title: 'Allow a wider permission?',
+    message: `Allow the agent to ${actions[category]}?`,
+    detail:
+      'Every change of a file still needs your acceptance. Forbidden ' +
+      'operations (delete, install, git commit/push, shells and anything ' +
+      'outside the workspace) stay blocked.',
+    buttons: ['Allow', 'Keep the current setting'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const result =
+    window === undefined
+      ? await dialog.showMessageBox(options)
+      : await dialog.showMessageBox(window, options);
+  return result.response === 0;
 }
 
 /** Registers every validated IPC handler. Call once during app startup. */
@@ -211,13 +253,26 @@ export function registerIpcHandlers(): () => Promise<void> {
     git: gitService,
     tasks: taskService,
   });
+  // The permission preferences live in the main process; the object below
+  // is shared by the service and the tool context, so a change takes
+  // effect for the following tool calls (spec §12.3, §18.8).
+  const permissionStore = new PermissionSettingsStore();
+  const permissionSettings: AgentPermissionSettings = {
+    allowedLevels: [...DEFAULT_PERMISSION_SETTINGS.allowedLevels],
+    allowCloudContext: DEFAULT_PERMISSION_SETTINGS.allowCloudContext,
+  };
+  const permissionController = new PermissionController({
+    store: permissionStore,
+    settings: permissionSettings,
+    confirmWidening: confirmPermissionWidening,
+  });
   const agentService = new AgentService({
     providers: providerService,
     credentials: credentialStore,
     files: fileService,
     executor: agentExecutor,
     getRoot: () => workspaceService.getActiveRoot(),
-    permissions: DEFAULT_PERMISSION_SETTINGS,
+    permissions: permissionSettings,
     onEvent: (runId, event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(IpcPushChannels.agentEvent, { runId, event });
@@ -238,7 +293,7 @@ export function registerIpcHandlers(): () => Promise<void> {
       }
     },
   });
-  const agentHandlers = createAgentHandlers(agentService);
+  const agentHandlers = createAgentHandlers(agentService, permissionController);
   const aiHandlers = createAiHandlers(
     providerService,
     chatService,
@@ -456,6 +511,16 @@ export function registerIpcHandlers(): () => Promise<void> {
     agentHandlers.revert,
   );
   registerChannel(IpcChannels.agentAudit, assertNoArgs, agentHandlers.audit);
+  registerChannel(
+    IpcChannels.agentPermissionSettings,
+    assertNoArgs,
+    agentHandlers.permissionSettings,
+  );
+  registerChannel(
+    IpcChannels.agentPermissionUpdate,
+    assertPermissionUpdate,
+    agentHandlers.updatePermission,
+  );
 
   // AI providers
   registerChannel(IpcChannels.aiProviders, assertNoArgs, aiHandlers.providers);

@@ -6,6 +6,7 @@
  * are exported separately so they can be unit tested without Electron.
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
+import type { AgentPermissionCategory } from '../../shared/agent-types';
 
 /** Validates the argument list of a channel; throws on unexpected input. */
 export type ArgsValidator<C extends keyof IpcInvokeMap> = (
@@ -574,4 +575,29 @@ export function assertRevertRequest(
   }
   assertPathList(confirmedPaths);
   assertPathList(dirtyPaths);
+}
+
+/**
+ * A change of one permission category.
+ *
+ * The category is limited to the three the user may configure; `system`
+ * is not one of them and is therefore rejected here as well.
+ */
+export function assertPermissionUpdate(
+  args: unknown[],
+): asserts args is [category: AgentPermissionCategory, allowed: boolean] {
+  if (args.length !== 2) {
+    throw new Error('Expected (category, allowed)');
+  }
+  const [category, allowed] = args;
+  if (
+    category !== 'read' &&
+    category !== 'workspace' &&
+    category !== 'command'
+  ) {
+    throw new Error('Unknown permission category');
+  }
+  if (typeof allowed !== 'boolean') {
+    throw new Error('Expected the permission state');
+  }
 }

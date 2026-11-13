@@ -628,7 +628,7 @@ export class AgentService {
   private async askForApproval(
     runId: string,
     request: {
-      kind: 'command' | 'cloud-context';
+      kind: 'read' | 'command' | 'cloud-context';
       tool: string;
       argv?: string[];
       script?: string;

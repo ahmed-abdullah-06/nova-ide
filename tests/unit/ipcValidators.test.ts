@@ -16,6 +16,7 @@ import {
   assertOneString,
   assertOptionalCwd,
   assertPathAndBoolean,
+  assertPermissionUpdate,
   assertProposalId,
   assertProviderId,
   assertProviderKey,
@@ -218,6 +219,17 @@ describe('IPC argument validators', () => {
     expect(() =>
       assertRevertRequest(['run 1', [], []]),
     ).toThrow();
+  });
+
+  it('validates a permission change', () => {
+    expect(() => assertPermissionUpdate(['read', true])).not.toThrow();
+    expect(() => assertPermissionUpdate(['workspace', false])).not.toThrow();
+    expect(() => assertPermissionUpdate(['command', true])).not.toThrow();
+    expect(() => assertPermissionUpdate(['read'])).toThrow();
+    expect(() => assertPermissionUpdate(['read', 'yes'])).toThrow();
+    // `system` is not a category the renderer may configure.
+    expect(() => assertPermissionUpdate(['system', true])).toThrow();
+    expect(() => assertPermissionUpdate(['read', true, false])).toThrow();
   });
 });
 
