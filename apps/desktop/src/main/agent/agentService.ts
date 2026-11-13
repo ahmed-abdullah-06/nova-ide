@@ -40,6 +40,7 @@ import type { ProviderService } from '../providers/providerService';
 import { ProviderRouter } from '../providers/router';
 import { redact } from '../providers/redact';
 import { AgentLoop, AGENT_PROTOCOL, type ModelAnswer } from './agentLoop';
+import { contextBudgetFor } from './contextManager';
 import type { AgentPermissionSettings } from './permissions';
 import { ProposalStore } from './proposalStore';
 import { ToolExecutor } from './toolExecutor';
@@ -434,6 +435,7 @@ export class AgentService {
         this.publish();
       },
       proposals: { list: () => this.proposals.list(runId) },
+      contextBudget: contextBudgetFor(kind, this.model),
     });
 
     const result = await loop.run(signal);

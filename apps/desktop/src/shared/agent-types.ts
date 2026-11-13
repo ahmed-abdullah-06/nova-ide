@@ -23,6 +23,7 @@ export type AgentEventType =
   | 'tool-result'
   | 'approval-requested'
   | 'proposal-created'
+  | 'context-compacted'
   | 'run-finished'
   | 'run-failed'
   | 'run-cancelled';
@@ -189,6 +190,14 @@ export interface AgentRunSummary {
   errors: string[];
   /** The problems the agent could not solve. */
   unresolved: string[];
+  /**
+   * The notices of the context manager.
+   *
+   * Every time the history had to be shortened or omitted to fit the
+   * prompt budget, a notice is added here and shown in the timeline. The
+   * system rules and the task are never touched.
+   */
+  contextNotices?: string[];
   /** The final answer of the agent. */
   finalMessage: string;
   /** When the run started. */
@@ -238,6 +247,13 @@ export interface AgentLimits {
   maxCharacters: number;
   /** The maximum number of consecutive failures. */
   maxConsecutiveFailures: number;
+  /**
+   * The maximum number of characters of one prompt.
+   *
+   * When it is set, it can only LOWER the budget that the provider and
+   * the model already imply; it can never raise it.
+   */
+  maxPromptCharacters?: number;
 }
 
 /** The default limits of a run. */

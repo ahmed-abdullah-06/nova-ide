@@ -27,6 +27,11 @@ import type {
   AgentRunSummary,
 } from '../../shared/agent-types';
 import { MAX_REPAIR_ATTEMPTS } from '../../shared/agent-types';
+import {
+  compactContext,
+  DEFAULT_CONTEXT_BUDGET,
+  type ContextBudget,
+} from './contextManager';
 import { validateToolArguments } from './permissions';
 import type { ToolRegistry } from './tools';
 import type { ToolContext, ToolExecutor, ToolResult } from './toolExecutor';
@@ -70,6 +75,13 @@ export interface AgentLoopOptions {
   onEvent: (event: AgentEvent) => void;
   /** The proposals of the run (filled by the tools). */
   proposals: AgentLoopProposals;
+  /**
+   * The budget of one prompt.
+   *
+   * The service chooses it from the provider and the model; the tests
+   * can pass a small one. The default is the conservative cloud budget.
+   */
+  contextBudget?: ContextBudget;
 }
 
 /** The proposals the loop collects. */
@@ -205,6 +217,8 @@ export class AgentLoop {
   private finalMessage = '';
   /** The repair attempts that were used. */
   private repairAttempts = 0;
+  /** The visible notices of the context manager. */
+  private readonly contextNotices: string[] = [];
 
   constructor(options: AgentLoopOptions) {
     this.options = options;
@@ -219,6 +233,8 @@ export class AgentLoop {
       content: this.options.systemPrompt,
     });
     this.messages.push({ role: 'user', content: this.options.task });
+
+    const budget = this.effectiveBudget();
 
     let state: 'completed' | 'failed' | 'cancelled' = 'failed';
 
@@ -242,9 +258,22 @@ export class AgentLoop {
         summary: `Step ${this.step}`,
       });
 
+      const compacted = compactContext(this.messages, budget);
+      if (compacted.notice !== null) {
+        const previous = this.contextNotices[this.contextNotices.length - 1];
+        this.contextNotices.push(compacted.notice);
+        // A notice that does not change is not repeated in the timeline.
+        if (previous !== compacted.notice) {
+          this.emit({
+            type: 'context-compacted',
+            summary: compacted.notice,
+          });
+        }
+      }
+
       const answer = await this.options.callModel(
         `agent-model-${this.step}`,
-        this.messages,
+        compacted.messages,
         signal,
       );
       if (answer.error !== undefined) {
@@ -420,11 +449,30 @@ export class AgentLoop {
       commands: [...this.options.context.commands],
       errors: [...this.errors],
       unresolved: [...this.unresolved],
+      contextNotices: [...this.contextNotices],
       finalMessage: this.finalMessage,
       startedAt: started,
       finishedAt: Date.now(),
     };
     return { summary };
+  }
+
+  /**
+   * The budget of one prompt.
+   *
+   * The limit of the run may only lower the budget that the provider and
+   * the model imply; a user (or a renderer) can never widen it.
+   */
+  private effectiveBudget(): ContextBudget {
+    const base = this.options.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
+    const cap = this.options.limits.maxPromptCharacters;
+    if (cap === undefined || !Number.isFinite(cap) || cap <= 0) {
+      return base;
+    }
+    return {
+      ...base,
+      maxTotalCharacters: Math.min(base.maxTotalCharacters, Math.floor(cap)),
+    };
   }
 
   /** Emits an event of the run. */
