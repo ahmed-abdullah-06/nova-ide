@@ -18,10 +18,12 @@
 import type {
   AIStreamEvent,
   AiResult,
+  FinishReason,
   ProviderCapabilities,
   ProviderErrorInfo,
   ProviderModel,
   ProviderStatus,
+  TokenUsage,
 } from '../../../shared/ai-types';
 import type {
   AIProvider,
@@ -213,6 +215,7 @@ export class OpenAiCompatibleProvider implements AIProvider {
 
     const decoder = new TextDecoder();
     let buffer = '';
+    const accumulator = new ToolCallAccumulator();
 
     try {
       for (;;) {
@@ -227,14 +230,68 @@ export class OpenAiCompatibleProvider implements AIProvider {
           const line = buffer.slice(0, newline).trim();
           buffer = buffer.slice(newline + 1);
           if (line.length > 0) {
-            const event = parseStreamLine(line);
-            if (event.type === 'error') {
-              yield event;
+            const chunk = parseStreamChunk(line);
+            if (chunk.error !== undefined) {
+              yield { type: 'error', error: chunk.error };
+              void reader.cancel().catch(() => undefined);
               return;
             }
-            yield event;
+            if (chunk.usage !== undefined) {
+              yield { type: 'usage', usage: chunk.usage };
+            }
+            if (chunk.text.length > 0) {
+              yield { type: 'text', delta: chunk.text };
+            }
+            for (const delta of chunk.toolCallDeltas) {
+              accumulator.add(delta);
+            }
+            if (chunk.finish !== undefined) {
+              const flushed = accumulator.finish();
+              if (!flushed.ok) {
+                yield { type: 'error', error: failedToolCall(flushed.message) };
+                void reader.cancel().catch(() => undefined);
+                return;
+              }
+              for (const toolCall of flushed.calls) {
+                yield { type: 'toolCall', toolCall };
+              }
+              yield { type: 'finish', reason: chunk.finish };
+              void reader.cancel().catch(() => undefined);
+              return;
+            }
           }
           newline = buffer.indexOf('\n');
+        }
+      }
+
+      // A last line that was not terminated by a newline.
+      const leftover = buffer.trim();
+      if (leftover.length > 0) {
+        const chunk = parseStreamChunk(leftover);
+        if (chunk.error !== undefined) {
+          yield { type: 'error', error: chunk.error };
+          return;
+        }
+        if (chunk.usage !== undefined) {
+          yield { type: 'usage', usage: chunk.usage };
+        }
+        if (chunk.text.length > 0) {
+          yield { type: 'text', delta: chunk.text };
+        }
+        for (const delta of chunk.toolCallDeltas) {
+          accumulator.add(delta);
+        }
+        if (chunk.finish !== undefined) {
+          const flushed = accumulator.finish();
+          if (!flushed.ok) {
+            yield { type: 'error', error: failedToolCall(flushed.message) };
+            return;
+          }
+          for (const toolCall of flushed.calls) {
+            yield { type: 'toolCall', toolCall };
+          }
+          yield { type: 'finish', reason: chunk.finish };
+          return;
         }
       }
     } catch (error) {
@@ -258,6 +315,14 @@ export class OpenAiCompatibleProvider implements AIProvider {
     if (request.signal.aborted) {
       yield { type: 'finish', reason: 'cancelled' };
       return;
+    }
+    const flushed = accumulator.finish();
+    if (!flushed.ok) {
+      yield { type: 'error', error: failedToolCall(flushed.message) };
+      return;
+    }
+    for (const toolCall of flushed.calls) {
+      yield { type: 'toolCall', toolCall };
     }
     yield { type: 'finish', reason: 'stop' };
   }
@@ -456,23 +521,142 @@ async function readDetail(response: Response): Promise<string> {
   }
 }
 
+/** One fragment of a streamed tool call (spec §11.4). */
+export interface ToolCallDelta {
+  /** The position of the call in the answer (providers split the arguments). */
+  index: number;
+  /** The id of the call (only sent with the first fragment). */
+  id?: string;
+  /** A fragment of the name of the function. */
+  name?: string;
+  /** A fragment of the JSON arguments. */
+  arguments: string;
+}
+
+/** The normalized content of one line of the event stream. */
+interface ParsedChunk {
+  text: string;
+  usage?: TokenUsage;
+  finish?: FinishReason;
+  toolCallDeltas: ToolCallDelta[];
+  error?: ProviderErrorInfo;
+}
+
+/**
+ * Collects the fragments of the native tool calls of a stream.
+ *
+ * The OpenAI compatible API splits the name and the arguments of a tool
+ * call over many chunks; a single chunk usually carries only a fragment.
+ * The fragments are joined by their index, and the result is validated
+ * before it is given to the agent loop.
+ */
+export class ToolCallAccumulator {
+  private readonly calls = new Map<
+    number,
+    { id: string; name: string; argumentsText: string }
+  >();
+  private readonly order: number[] = [];
+
+  /** Adds one fragment. */
+  add(delta: ToolCallDelta): void {
+    let entry = this.calls.get(delta.index);
+    if (entry === undefined) {
+      entry = { id: '', name: '', argumentsText: '' };
+      this.calls.set(delta.index, entry);
+      this.order.push(delta.index);
+    }
+    if (delta.id !== undefined && delta.id.length > 0) {
+      entry.id = delta.id;
+    }
+    if (delta.name !== undefined) {
+      entry.name += delta.name;
+    }
+    entry.argumentsText += delta.arguments;
+  }
+
+  /**
+   * Validates and returns the calls.
+   *
+   * The agent supports one tool per answer, so more than one call is
+   * reported as an error instead of being silently reduced to the first.
+   */
+  finish():
+    | { ok: true; calls: { name: string; arguments: unknown }[] }
+    | { ok: false; message: string } {
+    const first = this.order[0];
+    if (first === undefined) {
+      return { ok: true, calls: [] };
+    }
+    if (this.order.length > 1) {
+      return {
+        ok: false,
+        message:
+          'The provider returned more than one tool call in one answer. ' +
+          'Only one tool per answer is supported.',
+      };
+    }
+    const entry = this.calls.get(first);
+    if (entry === undefined) {
+      return { ok: true, calls: [] };
+    }
+    const name = entry.name.trim();
+    if (name.length === 0) {
+      return {
+        ok: false,
+        message: 'The provider returned a tool call without a name.',
+      };
+    }
+    const text = entry.argumentsText.trim();
+    let args: unknown = {};
+    if (text.length > 0) {
+      try {
+        args = JSON.parse(text);
+      } catch {
+        return {
+          ok: false,
+          message:
+            'The provider returned a tool call with arguments that are ' +
+            'not valid JSON.',
+        };
+      }
+      if (typeof args !== 'object' || args === null || Array.isArray(args)) {
+        return {
+          ok: false,
+          message:
+            'The provider returned a tool call with arguments that are ' +
+            'not a JSON object.',
+        };
+      }
+    }
+    return { ok: true, calls: [{ name, arguments: args }] };
+  }
+}
+
+/** The error of a tool call that could not be read. */
+function failedToolCall(message: string): ProviderErrorInfo {
+  return { code: 'invalid-response', message };
+}
+
 /**
  * Parses one line of the server sent events of the provider.
  *
  * The lines look like `data: {"choices":[{"delta":{"content":"Hi"}}]}`;
- * the stream ends with `data: [DONE]`.
+ * the stream ends with `data: [DONE]`. A tool call is split over many
+ * lines, so the parser returns its fragments instead of one complete
+ * call; {@link ToolCallAccumulator} joins them.
  */
-export function parseStreamLine(line: string): AIStreamEvent {
+export function parseStreamChunk(line: string): ParsedChunk {
+  const empty: ParsedChunk = { text: '', toolCallDeltas: [] };
   if (!line.startsWith('data:')) {
     // A comment or an event of another type — ignored.
-    return { type: 'text', delta: '' };
+    return empty;
   }
   const payload = line.slice('data:'.length).trim();
   if (payload.length === 0) {
-    return { type: 'text', delta: '' };
+    return empty;
   }
   if (payload === '[DONE]') {
-    return { type: 'finish', reason: 'stop' };
+    return { text: '', finish: 'stop', toolCallDeltas: [] };
   }
 
   let parsed: unknown;
@@ -480,7 +664,8 @@ export function parseStreamLine(line: string): AIStreamEvent {
     parsed = JSON.parse(payload);
   } catch {
     return {
-      type: 'error',
+      text: '',
+      toolCallDeltas: [],
       error: {
         code: 'invalid-response',
         message: 'The provider returned an answer that could not be read.',
@@ -492,11 +677,11 @@ export function parseStreamLine(line: string): AIStreamEvent {
     choices?: {
       delta?: {
         content?: unknown;
-        tool_calls?: {
-          index?: unknown;
-          id?: unknown;
-          function?: { name?: unknown; arguments?: unknown };
-        }[];
+        tool_calls?: unknown;
+        function_call?: {
+          name?: unknown;
+          arguments?: unknown;
+        };
       };
       finish_reason?: unknown;
     }[];
@@ -508,52 +693,145 @@ export function parseStreamLine(line: string): AIStreamEvent {
     error?: unknown;
   };
 
-  if (typeof chunk.error === 'string' && chunk.error.length > 0) {
-    return {
-      type: 'error',
-      error: { code: 'unknown', message: redact(chunk.error.slice(0, 200)) },
-    };
+  const streamError = readStreamError(chunk.error);
+  if (streamError !== null) {
+    return { text: '', toolCallDeltas: [], error: streamError };
   }
+
+  const result: ParsedChunk = { text: '', toolCallDeltas: [] };
 
   const usage = chunk.usage;
   if (usage !== undefined && usage !== null) {
-    const promptTokens =
-      typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined;
-    const completionTokens =
-      typeof usage.completion_tokens === 'number'
-        ? usage.completion_tokens
-        : undefined;
-    const totalTokens =
-      typeof usage.total_tokens === 'number' ? usage.total_tokens : undefined;
-    return {
-      type: 'usage',
-      usage: { promptTokens, completionTokens, totalTokens },
+    result.usage = {
+      promptTokens:
+        typeof usage.prompt_tokens === 'number'
+          ? usage.prompt_tokens
+          : undefined,
+      completionTokens:
+        typeof usage.completion_tokens === 'number'
+          ? usage.completion_tokens
+          : undefined,
+      totalTokens:
+        typeof usage.total_tokens === 'number'
+          ? usage.total_tokens
+          : undefined,
     };
   }
 
-  const toolCalls = chunk.choices?.[0]?.delta?.tool_calls;
-  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-    const call = toolCalls[0];
-    const fn = call?.function;
-    let args: unknown = {};
-    if (typeof fn?.arguments === 'string' && fn.arguments.length > 0) {
-      try {
-        args = JSON.parse(fn.arguments);
-      } catch {
-        args = {};
+  const choice = chunk.choices?.[0];
+  const delta = choice?.delta;
+
+  const toolCalls = delta?.tool_calls;
+  if (Array.isArray(toolCalls)) {
+    for (const [position, rawCall] of toolCalls.entries()) {
+      if (typeof rawCall !== 'object' || rawCall === null) {
+        continue;
       }
+      const call = rawCall as {
+        index?: unknown;
+        id?: unknown;
+        function?: { name?: unknown; arguments?: unknown };
+      };
+      const rawIndex = call.index;
+      const index =
+        typeof rawIndex === 'number' &&
+        Number.isInteger(rawIndex) &&
+        rawIndex >= 0
+          ? rawIndex
+          : position;
+      const name = call.function?.name;
+      const argumentsFragment = call.function?.arguments;
+      result.toolCallDeltas.push({
+        index,
+        id: typeof call.id === 'string' ? call.id : undefined,
+        name: typeof name === 'string' ? name : undefined,
+        arguments:
+          typeof argumentsFragment === 'string' ? argumentsFragment : '',
+      });
     }
-    const name = typeof fn?.name === 'string' ? fn.name : '';
-    if (name.length > 0) {
-      return { type: 'toolCall', toolCall: { name, arguments: args } };
-    }
+  } else if (delta?.function_call !== undefined) {
+    // The legacy shape of the API: a single function call without index.
+    const legacy = delta.function_call;
+    result.toolCallDeltas.push({
+      index: 0,
+      name: typeof legacy.name === 'string' ? legacy.name : undefined,
+      arguments:
+        typeof legacy.arguments === 'string' ? legacy.arguments : '',
+    });
   }
 
-  const content = chunk.choices?.[0]?.delta?.content;
-  if (typeof content === 'string' && content.length > 0) {
-    return { type: 'text', delta: content };
+  const finish = mapFinishReason(choice?.finish_reason);
+  if (finish !== undefined) {
+    result.finish = finish;
   }
-  return { type: 'text', delta: '' };
+
+  const content = delta?.content;
+  if (typeof content === 'string' && content.length > 0) {
+    result.text = content;
+  }
+  return result;
+}
+
+/** Reads the error of a stream (a string or an `{ message }` object). */
+function readStreamError(error: unknown): ProviderErrorInfo | null {
+  if (typeof error === 'string' && error.length > 0) {
+    return { code: 'unknown', message: redact(error.slice(0, 200)) };
+  }
+  if (typeof error === 'object' && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.length > 0) {
+      return { code: 'unknown', message: redact(message.slice(0, 200)) };
+    }
+  }
+  return null;
+}
+
+/** Maps the finish reason of the service to the normalized type. */
+function mapFinishReason(value: unknown): FinishReason | undefined {
+  if (value === 'stop' || value === 'tool_calls' || value === 'function_call') {
+    return 'stop';
+  }
+  if (value === 'length') {
+    return 'length';
+  }
+  if (value === 'content_filter') {
+    return 'content-filter';
+  }
+  return undefined;
+}
+
+/**
+ * Parses one line into a single normalized event.
+ *
+ * A tool call that arrives in one line can be read directly; the
+ * streaming path uses {@link parseStreamChunk} and the accumulator,
+ * because a call may be split over many lines.
+ */
+export function parseStreamLine(line: string): AIStreamEvent {
+  const chunk = parseStreamChunk(line);
+  if (chunk.error !== undefined) {
+    return { type: 'error', error: chunk.error };
+  }
+  if (chunk.usage !== undefined) {
+    return { type: 'usage', usage: chunk.usage };
+  }
+  if (chunk.finish !== undefined) {
+    return { type: 'finish', reason: chunk.finish };
+  }
+  const delta = chunk.toolCallDeltas[0];
+  if (delta !== undefined) {
+    const accumulator = new ToolCallAccumulator();
+    accumulator.add(delta);
+    const flushed = accumulator.finish();
+    if (!flushed.ok) {
+      return { type: 'error', error: failedToolCall(flushed.message) };
+    }
+    const call = flushed.calls[0];
+    if (call !== undefined) {
+      return { type: 'toolCall', toolCall: call };
+    }
+  }
+  return { type: 'text', delta: chunk.text };
 }
 
 /** Waits for the given time (the wait is cut short by an abort). */

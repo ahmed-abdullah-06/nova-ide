@@ -8,6 +8,7 @@
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { AIStreamEvent } from '../../apps/desktop/src/shared/ai-types';
 import { OpenAiCompatibleProvider } from '../../apps/desktop/src/main/providers/openai/openaiCompatibleProvider';
 
 /** What the mock server answers. */
@@ -114,6 +115,27 @@ async function collect(
     }
   }
   return { events, text };
+}
+
+/** Collects every event of a streamed answer. */
+async function collectEvents(
+  provider: OpenAiCompatibleProvider,
+): Promise<AIStreamEvent[]> {
+  const events: AIStreamEvent[] = [];
+  for await (const event of provider.chat({
+    requestId: 'r1',
+    messages: [{ role: 'user', content: 'Hello' }],
+    options: { model: 'gpt-test' },
+    signal: new AbortController().signal,
+  })) {
+    events.push(event);
+  }
+  return events;
+}
+
+/** One server sent event of the mock server. */
+function sse(payload: unknown): string {
+  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
 describe('openai compatible provider', () => {
@@ -330,5 +352,165 @@ describe('openai compatible provider', () => {
     const status = await provider.checkConnection();
     expect(status.available).toBe(false);
     expect(status.message ?? '').not.toContain('sk-super-secret-key');
+  });
+
+  it('translates a native tool call that arrives in fragments', async () => {
+    mock.respondWith({
+      headers: { 'content-type': 'text/event-stream' },
+      chunks: [
+        sse({
+          choices: [
+            {
+              delta: {
+                role: 'assistant',
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'read_', arguments: '' },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    function: { name: 'file', arguments: '{"path":' },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { arguments: '"src/a.ts"}' } },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+        'data: [DONE]\n\n',
+      ],
+    });
+    const provider = new OpenAiCompatibleProvider({ baseUrl, apiKey: 'sk-test' });
+    const events = await collectEvents(provider);
+    const calls = events.filter((event) => event.type === 'toolCall');
+    expect(calls).toEqual([
+      {
+        type: 'toolCall',
+        toolCall: { name: 'read_file', arguments: { path: 'src/a.ts' } },
+      },
+    ]);
+    expect(events.some((event) => event.type === 'finish')).toBe(true);
+    // The name and the arguments of the request are advertised as well.
+    const body = JSON.parse(mock.requests[0]?.body ?? '{}') as {
+      stream?: boolean;
+    };
+    expect(body.stream).toBe(true);
+  });
+
+  it('reports a tool call with malformed arguments', async () => {
+    mock.respondWith({
+      headers: { 'content-type': 'text/event-stream' },
+      chunks: [
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { name: 'read_file', arguments: '{"path":' } },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { arguments: 'not-json}' } },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+      ],
+    });
+    const provider = new OpenAiCompatibleProvider({ baseUrl, apiKey: 'sk-test' });
+    const events = await collectEvents(provider);
+    expect(events.some((event) => event.type === 'toolCall')).toBe(false);
+    const error = events.find((event) => event.type === 'error');
+    expect(error?.type === 'error' ? error.error.code : null).toBe(
+      'invalid-response',
+    );
+  });
+
+  it('reports a tool call without a name', async () => {
+    mock.respondWith({
+      headers: { 'content-type': 'text/event-stream' },
+      chunks: [
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, function: { arguments: '{}' } }],
+              },
+            },
+          ],
+        }),
+        sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+      ],
+    });
+    const provider = new OpenAiCompatibleProvider({ baseUrl, apiKey: 'sk-test' });
+    const events = await collectEvents(provider);
+    const error = events.find((event) => event.type === 'error');
+    expect(error?.type === 'error' ? error.error.message : '').toContain(
+      'without a name',
+    );
+  });
+
+  it('rejects more than one tool call in one answer', async () => {
+    mock.respondWith({
+      headers: { 'content-type': 'text/event-stream' },
+      chunks: [
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { name: 'read_file', arguments: '{}' } },
+                  {
+                    index: 1,
+                    function: { name: 'list_directory', arguments: '{}' },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }),
+      ],
+    });
+    const provider = new OpenAiCompatibleProvider({ baseUrl, apiKey: 'sk-test' });
+    const events = await collectEvents(provider);
+    expect(events.some((event) => event.type === 'toolCall')).toBe(false);
+    const error = events.find((event) => event.type === 'error');
+    expect(error?.type === 'error' ? error.error.message : '').toContain(
+      'more than one tool call',
+    );
   });
 });

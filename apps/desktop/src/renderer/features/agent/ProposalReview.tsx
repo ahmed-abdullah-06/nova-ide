@@ -7,9 +7,12 @@
  * change is accepted.
  */
 import { useEffect, useRef, useState } from 'react';
-import type * as Monaco from 'monaco-editor';
 import type { AgentProposal } from '../../../shared/agent-types';
 import { loadMonaco } from '../editor/monacoSetup';
+import {
+  mountProposalDiff,
+  type MountedProposalDiff,
+} from './proposalDiff';
 
 export interface ProposalReviewProps {
   /** The proposal that is shown. */
@@ -29,7 +32,7 @@ export function ProposalReview({
   busy,
 }: ProposalReviewProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<Monaco.editor.IStandaloneDiffEditor | null>(null);
+  const mountRef = useRef<MountedProposalDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,47 +41,34 @@ export function ProposalReview({
       return;
     }
     let cancelled = false;
-    let original: Monaco.editor.ITextModel | null = null;
-    let modified: Monaco.editor.ITextModel | null = null;
+    setError(null);
 
-    void loadMonaco()
-      .then((monaco) => {
-        if (cancelled || container === null) {
-          return;
+    void mountProposalDiff(container, proposal, loadMonaco).then((mounted) => {
+      if (cancelled) {
+        if (mounted.ok) {
+          mounted.dispose();
         }
-        const language = languageOf(proposal.relativePath);
-        original = monaco.editor.createModel(
-          proposal.before,
-          language,
-        );
-        modified = monaco.editor.createModel(proposal.after, language);
-        const diffEditor = monaco.editor.createDiffEditor(container, {
-          readOnly: true,
-          renderSideBySide: true,
-          automaticLayout: true,
-          fontSize: 12,
-          originalEditable: false,
-          minimap: { enabled: false },
-        });
-        diffEditor.setModel({
-          original: original,
-          modified: modified,
-        });
-        editorRef.current = diffEditor;
-      })
-      .catch(() => {
-        // Without Monaco the unified diff is shown as text.
-        setError('The diff view is not available; the text diff is shown.');
-      });
+        return;
+      }
+      if (mounted.ok) {
+        mountRef.current = mounted;
+      } else {
+        setError(mounted.message);
+      }
+    });
 
     return () => {
       cancelled = true;
-      editorRef.current?.dispose();
-      editorRef.current = null;
-      original?.dispose();
-      modified?.dispose();
+      mountRef.current?.dispose();
+      mountRef.current = null;
     };
-  }, [proposal.id, proposal.before, proposal.after, proposal.relativePath]);
+  }, [
+    proposal.id,
+    proposal.before,
+    proposal.after,
+    proposal.diff,
+    proposal.relativePath,
+  ]);
 
   return (
     <section className="agent-proposal">
@@ -112,32 +102,4 @@ export function ProposalReview({
       ) : null}
     </section>
   );
-}
-
-/** The language of a file, derived from its extension. */
-function languageOf(filePath: string): string {
-  const extension = filePath.split('.').pop()?.toLowerCase() ?? '';
-  switch (extension) {
-    case 'ts':
-    case 'tsx':
-      return 'typescript';
-    case 'js':
-    case 'jsx':
-    case 'mjs':
-    case 'cjs':
-      return 'javascript';
-    case 'json':
-      return 'json';
-    case 'css':
-      return 'css';
-    case 'html':
-    case 'htm':
-      return 'html';
-    case 'md':
-      return 'markdown';
-    case 'py':
-      return 'python';
-    default:
-      return 'plaintext';
-  }
 }
