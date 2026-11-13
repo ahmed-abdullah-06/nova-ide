@@ -21,14 +21,29 @@ const CHECKPOINT_DIR = 'agent-checkpoints';
 /** The maximum number of checkpoints that are kept. */
 const MAX_CHECKPOINTS = 20;
 
-/** One checkpoint: the content of the files before a run changed them. */
+/** One checkpoint: the content of the files before and after a run. */
 export interface AgentCheckpoint {
   /** The id of the run. */
   runId: string;
   /** The files of the checkpoint (the content before the run). */
-  files: { path: string; content: string | null }[];
+  files: AgentCheckpointFile[];
   /** The time of the checkpoint. */
   createdAt: number;
+}
+
+/** One file of a checkpoint. */
+export interface AgentCheckpointFile {
+  /** The absolute path of the file. */
+  path: string;
+  /** The content before the run changed it (null when it did not exist). */
+  content: string | null;
+  /**
+   * The content the run wrote (the conflict check of a revert).
+   *
+   * A revert refuses to overwrite a file whose current content is not
+   * this value: the user edited it after the run.
+   */
+  after?: string | null;
 }
 
 export class ProposalStore {
@@ -100,7 +115,7 @@ export class ProposalStore {
    */
   async checkpoint(
     runId: string,
-    files: { path: string; content: string | null }[],
+    files: AgentCheckpointFile[],
   ): Promise<void> {
     const checkpoint: AgentCheckpoint = {
       runId,
@@ -119,12 +134,12 @@ export class ProposalStore {
    * original content and not an intermediate one.
    *
    * @param runId The run.
-   * @param file The path of the file and its content before the change
-   *   (null when the file did not exist).
+   * @param file The path of the file, its content before the change
+   *   (null when the file did not exist) and the content the run wrote.
    */
   async addToCheckpoint(
     runId: string,
-    file: { path: string; content: string | null },
+    file: AgentCheckpointFile,
   ): Promise<void> {
     const existing = this.checkpoints.get(runId);
     if (

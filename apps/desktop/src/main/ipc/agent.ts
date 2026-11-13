@@ -21,6 +21,7 @@ export interface AgentHandlers {
   rejectProposal: Handler<'agent:proposal-reject'>;
   acceptAll: Handler<'agent:proposals-accept-all'>;
   rejectAll: Handler<'agent:proposals-reject-all'>;
+  previewRevert: Handler<'agent:revert-preview'>;
   revert: Handler<'agent:revert'>;
   audit: Handler<'agent:audit'>;
 }
@@ -93,11 +94,25 @@ export function createAgentHandlers(agent: AgentService): AgentHandlers {
         ? { ok: true, value: undefined }
         : { ok: false, code: 'NOT_FOUND', message: 'The run is not active.' };
     },
-    revert: async (runId) => {
-      const result = await agent.revertRun(runId);
+    previewRevert: async (runId, dirtyPaths) => {
+      const result = await agent.previewRevert(runId, dirtyPaths);
       return result.ok
-        ? { ok: true, value: undefined }
-        : { ok: false, code: 'NOT_FOUND', message: 'The run is not active.' };
+        ? { ok: true, value: result.preview }
+        : { ok: false, code: 'NOT_FOUND', message: result.message };
+    },
+    revert: async (runId, confirmedPaths, dirtyPaths) => {
+      const result = await agent.revertRun(runId, confirmedPaths, dirtyPaths);
+      if (result.ok) {
+        return {
+          ok: true,
+          value: result.result ?? { restored: 0, skipped: [] },
+        };
+      }
+      return {
+        ok: false,
+        code: result.result === undefined ? 'NOT_FOUND' : 'CONFLICT',
+        message: result.message ?? 'The run could not be reverted.',
+      };
     },
     audit: async () => agent.getAudit(),
   };

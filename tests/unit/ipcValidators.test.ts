@@ -20,6 +20,8 @@ import {
   assertProviderId,
   assertProviderKey,
   assertRequestId,
+  assertRevertPreview,
+  assertRevertRequest,
   assertRunId,
   assertSearchQuery,
   assertSessionAndData,
@@ -190,6 +192,32 @@ describe('IPC argument validators', () => {
     expect(() => assertStringArray([['a', 'b']])).not.toThrow();
     expect(() => assertStringArray([['a', 1]])).toThrow();
     expect(() => assertStringArray(['a'])).toThrow();
+  });
+
+  it('validates a revert preview request', () => {
+    expect(() =>
+      assertRevertPreview(['run-1', ['C:\\work\\a.ts']]),
+    ).not.toThrow();
+    expect(() => assertRevertPreview(['run-1', []])).not.toThrow();
+    expect(() => assertRevertPreview(['run 1', []])).toThrow();
+    expect(() => assertRevertPreview(['run-1'])).toThrow();
+    expect(() => assertRevertPreview(['run-1', 'C:\\work\\a.ts'])).toThrow();
+    expect(() => assertRevertPreview(['run-1', [42]])).toThrow();
+    expect(() => assertRevertPreview(['run-1', ['']])).toThrow();
+  });
+
+  it('validates a revert request', () => {
+    expect(() =>
+      assertRevertRequest(['run-1', ['C:\\work\\a.ts'], ['C:\\work\\a.ts']]),
+    ).not.toThrow();
+    expect(() => assertRevertRequest(['run-1', [], []])).not.toThrow();
+    expect(() => assertRevertRequest(['run-1', []])).toThrow();
+    expect(() =>
+      assertRevertRequest(['run-1', ['C:\\work\\a.ts'], ['C:\\work\\a.ts', 1]]),
+    ).toThrow();
+    expect(() =>
+      assertRevertRequest(['run 1', [], []]),
+    ).toThrow();
   });
 });
 

@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
+import type { AgentRevertPreview } from '../../../shared/agent-types';
+import { useTabs } from '../../stores/tabs';
 import { ProposalReview } from './ProposalReview';
 import { useAgent } from './useAgent';
 
@@ -34,10 +36,15 @@ export function AgentPanel({
   onSelectModel,
 }: AgentPanelProps): React.JSX.Element {
   const agent = useAgent();
+  const tabs = useTabs();
   const [task, setTask] = useState('');
   const [approveCloud, setApproveCloud] = useState(false);
   const [busy, setBusy] = useState(false);
   const [openProposal, setOpenProposal] = useState<string | null>(null);
+  const [revertPreview, setRevertPreview] = useState<AgentRevertPreview | null>(
+    null,
+  );
+  const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
 
   const state = agent.state;
   const provider = providers.find((entry) => entry.id === providerId) ?? null;
@@ -47,6 +54,8 @@ export function AgentPanel({
   // The changes of the run are the ones of the active run.
   useEffect(() => {
     setOpenProposal(null);
+    setRevertPreview(null);
+    setConfirmed(new Set());
   }, [state.runId]);
 
   const handleStart = useCallback(async (): Promise<void> => {
@@ -75,6 +84,58 @@ export function AgentPanel({
     },
     [agent],
   );
+
+  /** The files with unsaved changes (the main process re-checks the disk). */
+  const dirtyPaths = useCallback(
+    (): string[] =>
+      tabs.state.tabs
+        .filter((tab) => tab.isDirty && tab.filePath !== null)
+        .map((tab) => tab.filePath as string),
+    [tabs.state.tabs],
+  );
+
+  const handlePreviewRevert = useCallback(async (): Promise<void> => {
+    setBusy(true);
+    const preview = await agent.previewRevert(dirtyPaths());
+    setBusy(false);
+    if (preview !== null) {
+      setRevertPreview(preview);
+      setConfirmed(new Set());
+    }
+  }, [agent, dirtyPaths]);
+
+  const handleToggleConfirm = useCallback((filePath: string): void => {
+    setConfirmed((current) => {
+      const next = new Set(current);
+      if (next.has(filePath)) {
+        next.delete(filePath);
+      } else {
+        next.add(filePath);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleConfirmRevert = useCallback(async (): Promise<void> => {
+    if (revertPreview === null) {
+      return;
+    }
+    setBusy(true);
+    const result = await agent.revert([...confirmed], dirtyPaths());
+    setBusy(false);
+    if (result !== null) {
+      setRevertPreview(null);
+      setConfirmed(new Set());
+    }
+  }, [agent, confirmed, dirtyPaths, revertPreview]);
+
+  const revertCount =
+    revertPreview === null
+      ? 0
+      : revertPreview.files.filter(
+          (file) =>
+            file.conflict === null || confirmed.has(file.path),
+        ).length;
 
   const shown =
     state.proposals.find((proposal) => proposal.id === openProposal) ??
@@ -286,12 +347,79 @@ export function AgentPanel({
             <button
               type="button"
               className="agent-panel__action"
-              onClick={() => void agent.revert()}
+              onClick={() => void handlePreviewRevert()}
               disabled={busy}
             >
-              Revert the changes of this run
+              Revert the changes of this run…
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {revertPreview !== null ? (
+        <div className="agent-panel__revert" role="dialog" aria-label="Revert the changes">
+          <h4 className="agent-panel__revert-title">
+            Revert {revertPreview.files.length} file
+            {revertPreview.files.length === 1 ? '' : 's'}
+          </h4>
+          <p className="agent-panel__revert-note">
+            A file that changed after the run is only overwritten when you
+            confirm it.
+          </p>
+          <ul className="agent-panel__revert-list">
+            {revertPreview.files.map((file) => (
+              <li
+                key={file.path}
+                className={`agent-panel__revert-file${
+                  file.conflict === null
+                    ? ''
+                    : ' agent-panel__revert-file--conflict'
+                }`}
+              >
+                <span className="agent-panel__revert-path">
+                  {file.relativePath}
+                </span>
+                <span className="agent-panel__revert-action">
+                  {file.action === 'delete' ? 'remove' : 'restore'}
+                </span>
+                {file.conflict === null ? (
+                  <span className="agent-panel__revert-safe">safe</span>
+                ) : (
+                  <label className="agent-panel__revert-confirm">
+                    <input
+                      type="checkbox"
+                      checked={confirmed.has(file.path)}
+                      onChange={() => handleToggleConfirm(file.path)}
+                    />
+                    {file.conflict === 'dirty-buffer'
+                      ? 'Overwrite my unsaved changes'
+                      : 'Overwrite the newer edit on disk'}
+                  </label>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="agent-panel__revert-actions">
+            <button
+              type="button"
+              className="agent-panel__action agent-panel__action--primary"
+              onClick={() => void handleConfirmRevert()}
+              disabled={busy || revertCount === 0}
+            >
+              Revert {revertCount} file{revertCount === 1 ? '' : 's'}
+            </button>
+            <button
+              type="button"
+              className="agent-panel__action"
+              onClick={() => {
+                setRevertPreview(null);
+                setConfirmed(new Set());
+              }}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : null}
 

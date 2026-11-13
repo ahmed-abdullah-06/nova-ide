@@ -511,3 +511,67 @@ export function assertProposalId(
     throw new Error('Invalid proposal id');
   }
 }
+
+/** A list of absolute paths from the renderer (the dirty editor buffers). */
+function assertPathList(value: unknown): asserts value is string[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Expected a list of paths');
+  }
+  if (value.length > 500) {
+    throw new Error('Too many paths');
+  }
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.length === 0 || entry.length > 4096) {
+      throw new Error('Invalid path');
+    }
+  }
+}
+
+/**
+ * The request of a revert preview: the run and the dirty buffers.
+ */
+export function assertRevertPreview(
+  args: unknown[],
+): asserts args is [runId: string, dirtyPaths: string[]] {
+  if (args.length !== 2) {
+    throw new Error('Expected (runId, dirtyPaths)');
+  }
+  const [runId, dirtyPaths] = args;
+  if (
+    typeof runId !== 'string' ||
+    runId.length === 0 ||
+    runId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(runId)
+  ) {
+    throw new Error('Invalid run id');
+  }
+  assertPathList(dirtyPaths);
+}
+
+/**
+ * The request of a revert: the run, the confirmed conflicts and the
+ * dirty buffers. The confirmed paths are only file names; the content
+ * never comes from the renderer.
+ */
+export function assertRevertRequest(
+  args: unknown[],
+): asserts args is [
+  runId: string,
+  confirmedPaths: string[],
+  dirtyPaths: string[],
+] {
+  if (args.length !== 3) {
+    throw new Error('Expected (runId, confirmedPaths, dirtyPaths)');
+  }
+  const [runId, confirmedPaths, dirtyPaths] = args;
+  if (
+    typeof runId !== 'string' ||
+    runId.length === 0 ||
+    runId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(runId)
+  ) {
+    throw new Error('Invalid run id');
+  }
+  assertPathList(confirmedPaths);
+  assertPathList(dirtyPaths);
+}

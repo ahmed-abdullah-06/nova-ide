@@ -35,6 +35,8 @@ import {
   assertProviderKey,
   assertProviderSettings,
   assertRequestId,
+  assertRevertPreview,
+  assertRevertRequest,
   assertRunId,
   assertSaveAsArgs,
   assertPathAndBoolean,
@@ -444,8 +446,13 @@ export function registerIpcHandlers(): () => Promise<void> {
     agentHandlers.rejectAll,
   );
   registerChannel(
+    IpcChannels.agentRevertPreview,
+    assertRevertPreview,
+    agentHandlers.previewRevert,
+  );
+  registerChannel(
     IpcChannels.agentRevert,
-    assertRunId,
+    assertRevertRequest,
     agentHandlers.revert,
   );
   registerChannel(IpcChannels.agentAudit, assertNoArgs, agentHandlers.audit);

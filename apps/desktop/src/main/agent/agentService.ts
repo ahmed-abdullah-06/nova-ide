@@ -28,6 +28,8 @@ import type {
   AgentCommandRecord,
   AgentEvent,
   AgentLimits,
+  AgentRevertPreview,
+  AgentRevertResult,
   AgentRunState,
   AgentRunSummary,
   AgentState,
@@ -43,6 +45,11 @@ import { AgentLoop, AGENT_PROTOCOL, type ModelAnswer } from './agentLoop';
 import { contextBudgetFor } from './contextManager';
 import type { AgentPermissionSettings } from './permissions';
 import { ProposalStore } from './proposalStore';
+import {
+  applyRevert,
+  previewRevert as buildRevertPreview,
+  publicPreview,
+} from './revertPlan';
 import { ToolExecutor } from './toolExecutor';
 import type { ToolContext } from './toolExecutor';
 import { ToolRegistry } from './tools';
@@ -289,6 +296,7 @@ export class AgentService {
     await this.proposals.addToCheckpoint(runId, {
       path: proposal.path,
       content: proposal.created ? null : proposal.before,
+      after: proposal.after,
     });
     this.revertibleRunId = runId;
     this.log('proposal', `the change of ${proposal.relativePath} was accepted`);
@@ -338,40 +346,113 @@ export class AgentService {
     return { ok: true };
   }
 
-  /** Reverts the changes of a run (the checkpoint of the run). */
-  async revertRun(runId: string): Promise<{ ok: boolean; message?: string }> {
+  /**
+   * Describes what a revert would do, without writing anything.
+   *
+   * @param runId The run of the checkpoint.
+   * @param dirtyPaths The files that have unsaved changes in an editor.
+   */
+  async previewRevert(
+    runId: string,
+    dirtyPaths: string[],
+  ): Promise<
+    { ok: true; preview: AgentRevertPreview } | { ok: false; message: string }
+  > {
     const checkpoint = this.proposals.checkpointOf(runId);
     if (checkpoint === undefined) {
       return { ok: false, message: 'This run has no checkpoint.' };
     }
-    this.revertibleRunId = null;
-    const files = this.options.files;
-    const restored: string[] = [];
-    for (const file of checkpoint.files) {
-      // The write goes through the file service of Milestone 2, so the
-      // boundary of the workspace and the protections apply.
-      const result =
-        file.content === null
-          ? await files.delete(file.path)
-          : await files.writeFile(file.path, file.content, null);
-      if (!result.ok) {
-        this.log('run', 'a file of the checkpoint could not be restored');
-        this.addError(
-          `The change of "${file.path}" could not be reverted: ${result.message}`,
-        );
-        continue;
-      }
-      restored.push(file.path);
+    const root = this.options.getRoot();
+    if (root === null) {
+      return { ok: false, message: 'No workspace is open.' };
     }
+    const preview = await buildRevertPreview(
+      checkpoint,
+      root,
+      dirtyPaths,
+      this.options.files,
+    );
+    return { ok: true, preview: publicPreview(preview) };
+  }
+
+  /**
+   * Reverts the changes of a run (the checkpoint of the run).
+   *
+   * A file that changed on the disk or in an editor buffer is only
+   * reverted when its path is in `confirmedPaths`; otherwise it is
+   * skipped and the checkpoint is kept for a later attempt.
+   */
+  async revertRun(
+    runId: string,
+    confirmedPaths: string[] = [],
+    dirtyPaths: string[] = [],
+  ): Promise<{
+    ok: boolean;
+    message?: string;
+    result?: AgentRevertResult;
+  }> {
+    const checkpoint = this.proposals.checkpointOf(runId);
+    if (checkpoint === undefined) {
+      return { ok: false, message: 'This run has no checkpoint.' };
+    }
+    const root = this.options.getRoot();
+    if (root === null) {
+      return { ok: false, message: 'No workspace is open.' };
+    }
+
+    const preview = await buildRevertPreview(
+      checkpoint,
+      root,
+      dirtyPaths,
+      this.options.files,
+    );
+    const outcome = await applyRevert(
+      checkpoint,
+      preview,
+      confirmedPaths,
+      this.options.files,
+    );
+
+    const skippedPaths = new Set(outcome.skipped.map((file) => file.path));
+    const restored = preview.files
+      .map((file) => file.path)
+      .filter((file) => !skippedPaths.has(file));
+
+    if (outcome.skipped.length > 0) {
+      // The checkpoint stays, so the user can confirm the conflicts and
+      // try again. The safe files were restored already.
+      this.revertibleRunId = runId;
+      for (const file of restored) {
+        this.options.onFileChanged(file);
+      }
+      this.log(
+        'run',
+        `the run was partly reverted (${outcome.restored} files, ` +
+          `${outcome.skipped.length} skipped)`,
+      );
+      this.publish();
+      return {
+        ok: false,
+        message:
+          `${outcome.skipped.length} file(s) were not reverted because ` +
+          'they changed after the run. Confirm the file(s) to overwrite them.',
+        result: outcome,
+      };
+    }
+
     await this.proposals.forget(runId);
+    if (this.revertibleRunId === runId) {
+      this.revertibleRunId = null;
+    }
     for (const file of restored) {
       this.options.onFileChanged(file);
     }
-    this.log('run', `the run was reverted (${restored.length} files)`);
+    this.log('run', `the run was reverted (${outcome.restored} files)`);
     this.publish();
     return {
-      ok: restored.length > 0,
-      message: `${restored.length} files were restored`,
+      ok: true,
+      message: `${outcome.restored} files were restored`,
+      result: outcome,
     };
   }
 
@@ -583,21 +664,6 @@ export class AgentService {
     return new Promise<boolean>((resolve) => {
       this.approvalResolve = resolve;
     });
-  }
-
-  /**
-   * Adds an error to the summary of the run.
-   *
-   * The summary is the report the user reads, so a problem that happens
-   * after the run (a failed revert) belongs there.
-   */
-  private addError(message: string): void {
-    if (this.summary !== null) {
-      this.summary = {
-        ...this.summary,
-        errors: [...this.summary.errors, message],
-      };
-    }
   }
 
   /** Emits an event of the run. */

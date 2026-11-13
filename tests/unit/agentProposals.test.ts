@@ -11,6 +11,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { diffLines, unifiedDiff } from '../../apps/desktop/src/main/agent/diff';
 import { ProposalStore } from '../../apps/desktop/src/main/agent/proposalStore';
+import {
+  applyRevert,
+  previewRevert,
+} from '../../apps/desktop/src/main/agent/revertPlan';
 
 /** The directory the store writes its checkpoints into. */
 let userData = '';
@@ -124,30 +128,203 @@ describe('the proposals of a run', () => {
 });
 
 describe('the checkpoint of a run', () => {
-  it('restores the files of the run', async () => {
+  /** A file service over the real temporary directory. */
+  function checkpointFiles() {
+    return {
+      readFile: async (file: string) => {
+        try {
+          const content = await readFile(file, 'utf8');
+          const { stat } = await import('node:fs/promises');
+          const info = await stat(file);
+          return {
+            ok: true as const,
+            value: {
+              path: file,
+              content,
+              mtimeMs: info.mtimeMs,
+              size: content.length,
+            },
+          };
+        } catch {
+          return {
+            ok: false as const,
+            code: 'NOT_FOUND' as const,
+            message: 'missing',
+          };
+        }
+      },
+      writeFile: async (
+        file: string,
+        content: string,
+        expectedMtimeMs: number | null,
+      ) => {
+        if (expectedMtimeMs !== null) {
+          const current = await checkpointFiles().readFile(file);
+          if (
+            current.ok &&
+            Math.abs(current.value.mtimeMs - expectedMtimeMs) > 1
+          ) {
+            return {
+              ok: false as const,
+              code: 'CONFLICT' as const,
+              message: 'the file changed',
+            };
+          }
+        }
+        await writeFile(file, content, 'utf8');
+        return {
+          ok: true as const,
+          value: { path: file, mtimeMs: Date.now(), size: content.length },
+        };
+      },
+      delete: async (file: string) => {
+        await rm(file, { force: true });
+        return { ok: true as const, value: { path: file } };
+      },
+    };
+  }
+
+  it('restores a file that was not changed after the run', async () => {
     const store = new ProposalStore();
     const file = path.join(root, 'src', 'app.ts');
-    await writeFile(file, 'changed by the agent\n', 'utf8');
-    await store.checkpoint('run-1', [{ path: file, content: 'const a = 1;\n' }]);
+    await writeFile(file, 'written by the run\n', 'utf8');
+    await store.checkpoint('run-1', [
+      {
+        path: file,
+        content: 'const a = 1;\n',
+        after: 'written by the run\n',
+      },
+    ]);
+    const checkpoint = store.checkpointOf('run-1');
+    expect(checkpoint).toBeDefined();
+    if (checkpoint === undefined) {
+      return;
+    }
 
-    const restored = await store.revert('run-1');
-    expect(restored).toEqual([file]);
+    const preview = await previewRevert(
+      checkpoint,
+      root,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(preview.files[0]?.conflict).toBeNull();
+    const result = await applyRevert(
+      checkpoint,
+      preview,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(result.restored).toBe(1);
+    expect(result.skipped).toHaveLength(0);
     expect(await readFile(file, 'utf8')).toBe('const a = 1;\n');
+  });
+
+  it('refuses a newer edit on the disk without a confirmation', async () => {
+    const store = new ProposalStore();
+    const file = path.join(root, 'src', 'app.ts');
+    await writeFile(file, 'written by the run\n', 'utf8');
+    await store.checkpoint('run-1', [
+      {
+        path: file,
+        content: 'const a = 1;\n',
+        after: 'written by the run\n',
+      },
+    ]);
+    const checkpoint = store.checkpointOf('run-1');
+    if (checkpoint === undefined) {
+      throw new Error('the checkpoint was not created');
+    }
+    // The user edits the file after the run finished.
+    await writeFile(file, 'my newer edit\n', 'utf8');
+
+    const preview = await previewRevert(
+      checkpoint,
+      root,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(preview.files[0]?.conflict).toBe('changed-on-disk');
+    const withoutConfirmation = await applyRevert(
+      checkpoint,
+      preview,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(withoutConfirmation.restored).toBe(0);
+    expect(withoutConfirmation.skipped).toHaveLength(1);
+    expect(await readFile(file, 'utf8')).toBe('my newer edit\n');
+
+    // Only an explicit confirmation of THAT file overwrites it.
+    const confirmed = await applyRevert(
+      checkpoint,
+      preview,
+      [file],
+      checkpointFiles() as never,
+    );
+    expect(confirmed.restored).toBe(1);
+    expect(await readFile(file, 'utf8')).toBe('const a = 1;\n');
+  });
+
+  it('treats an unsaved editor buffer as a conflict', async () => {
+    const store = new ProposalStore();
+    const file = path.join(root, 'src', 'app.ts');
+    // The disk still holds the content of the run.
+    await writeFile(file, 'written by the run\n', 'utf8');
+    await store.checkpoint('run-1', [
+      {
+        path: file,
+        content: 'const a = 1;\n',
+        after: 'written by the run\n',
+      },
+    ]);
+    const checkpoint = store.checkpointOf('run-1');
+    if (checkpoint === undefined) {
+      throw new Error('the checkpoint was not created');
+    }
+
+    const preview = await previewRevert(
+      checkpoint,
+      root,
+      [file],
+      checkpointFiles() as never,
+    );
+    expect(preview.files[0]?.conflict).toBe('dirty-buffer');
+    const result = await applyRevert(
+      checkpoint,
+      preview,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(result.restored).toBe(0);
+    expect(await readFile(file, 'utf8')).toBe('written by the run\n');
   });
 
   it('removes a file that the run created', async () => {
     const store = new ProposalStore();
     const file = path.join(root, 'created.ts');
     await writeFile(file, 'new\n', 'utf8');
-    await store.checkpoint('run-1', [{ path: file, content: null }]);
-
-    await store.revert('run-1');
+    await store.checkpoint('run-1', [
+      { path: file, content: null, after: 'new\n' },
+    ]);
+    const checkpoint = store.checkpointOf('run-1');
+    if (checkpoint === undefined) {
+      throw new Error('the checkpoint was not created');
+    }
+    const preview = await previewRevert(
+      checkpoint,
+      root,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(preview.files[0]?.action).toBe('delete');
+    const result = await applyRevert(
+      checkpoint,
+      preview,
+      [],
+      checkpointFiles() as never,
+    );
+    expect(result.restored).toBe(1);
     await expect(readFile(file, 'utf8')).rejects.toThrow();
-  });
-
-  it('reports nothing when there is no checkpoint', async () => {
-    const store = new ProposalStore();
-    expect(await store.revert('run-unknown')).toEqual([]);
   });
 
   it('collects the files of a run in the checkpoint', async () => {

@@ -122,7 +122,10 @@ const novaApi: NovaApi = {
       invoke(IpcChannels.agentRejectProposal, runId, proposalId),
     acceptAll: (runId) => invoke(IpcChannels.agentAcceptAll, runId),
     rejectAll: (runId) => invoke(IpcChannels.agentRejectAll, runId),
-    revert: (runId) => invoke(IpcChannels.agentRevert, runId),
+    previewRevert: (runId, dirtyPaths) =>
+      invoke(IpcChannels.agentRevertPreview, runId, dirtyPaths),
+    revert: (runId, confirmedPaths, dirtyPaths) =>
+      invoke(IpcChannels.agentRevert, runId, confirmedPaths, dirtyPaths),
     audit: () => invoke(IpcChannels.agentAudit),
     onEvent: (listener) =>
       subscribe<{ runId: string; event: AgentEvent }>(

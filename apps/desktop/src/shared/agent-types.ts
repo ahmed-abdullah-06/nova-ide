@@ -152,6 +152,44 @@ export interface AgentProposal {
 /** The state of a proposal. */
 export type AgentProposalState = 'pending' | 'accepted' | 'rejected';
 
+/**
+ * Why a file of a checkpoint cannot be reverted without an explicit
+ * confirmation of the user (M5 C1).
+ */
+export type AgentRevertConflict =
+  /** The file was edited on the disk after the run wrote it (or is missing). */
+  | 'changed-on-disk'
+  /** The file has unsaved changes in an editor buffer. */
+  | 'dirty-buffer';
+
+/** One file of a revert preview. */
+export interface AgentRevertFile {
+  /** The absolute path of the file. */
+  path: string;
+  /** The path relative to the workspace root (for display). */
+  relativePath: string;
+  /** What the revert does with the file. */
+  action: 'restore' | 'delete';
+  /** The conflict that needs a confirmation, or null when the file is safe. */
+  conflict: AgentRevertConflict | null;
+}
+
+/** The files a revert would touch, with the conflicts of the moment. */
+export interface AgentRevertPreview {
+  /** The run of the checkpoint. */
+  runId: string;
+  /** The files of the checkpoint. */
+  files: AgentRevertFile[];
+}
+
+/** The result of a revert. */
+export interface AgentRevertResult {
+  /** The number of files that were restored (or removed). */
+  restored: number;
+  /** The files that were skipped because a conflict was not confirmed. */
+  skipped: AgentRevertFile[];
+}
+
 /** One command that the agent ran. */
 export interface AgentCommandRecord {
   /** The command as an argument array. */

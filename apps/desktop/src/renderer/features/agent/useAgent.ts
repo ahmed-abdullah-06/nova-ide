@@ -6,7 +6,11 @@
  * channels.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentState } from '../../../shared/agent-types';
+import type {
+  AgentRevertPreview,
+  AgentRevertResult,
+  AgentState,
+} from '../../../shared/agent-types';
 
 export interface AgentController {
   /** The state of the agent (the main process is the source of truth). */
@@ -30,8 +34,13 @@ export interface AgentController {
   acceptAll: () => Promise<void>;
   /** Rejects every change proposal of the run. */
   rejectAll: () => Promise<void>;
-  /** Reverts the changes of the run. */
-  revert: () => Promise<void>;
+  /** Describes what a revert would touch. */
+  previewRevert: (dirtyPaths: string[]) => Promise<AgentRevertPreview | null>;
+  /** Reverts the changes of the run (only the confirmed conflicts are forced). */
+  revert: (
+    confirmedPaths: string[],
+    dirtyPaths: string[],
+  ) => Promise<AgentRevertResult | null>;
   /** The message of the last error. */
   error: string | null;
   /** Sets the message of the last error. */
@@ -190,20 +199,47 @@ export function useAgent(): AgentController {
     reload();
   }, [reload, state.runId]);
 
-  const revert = useCallback(async (): Promise<void> => {
-    const api = window.nova;
-    // The checkpoint belongs to the run that really changed a file, which
-    // is not always the run that is on the screen.
-    const target = state.revertibleRunId ?? state.runId;
-    if (!api || target === null) {
-      return;
-    }
-    const result = await api.agent.revert(target);
-    if (!result.ok) {
-      setError(result.message);
-    }
-    reload();
-  }, [reload, state.revertibleRunId, state.runId]);
+  const previewRevert = useCallback(
+    async (dirtyPaths: string[]): Promise<AgentRevertPreview | null> => {
+      const api = window.nova;
+      const target = state.revertibleRunId ?? state.runId;
+      if (!api || target === null) {
+        return null;
+      }
+      const result = await api.agent.previewRevert(target, dirtyPaths);
+      if (!result.ok) {
+        setError(result.message);
+        return null;
+      }
+      return result.value;
+    },
+    [state.revertibleRunId, state.runId],
+  );
+
+  const revert = useCallback(
+    async (
+      confirmedPaths: string[],
+      dirtyPaths: string[],
+    ): Promise<AgentRevertResult | null> => {
+      const api = window.nova;
+      // The checkpoint belongs to the run that really changed a file, which
+      // is not always the run that is on the screen.
+      const target = state.revertibleRunId ?? state.runId;
+      if (!api || target === null) {
+        return null;
+      }
+      const result = await api.agent.revert(target, confirmedPaths, dirtyPaths);
+      if (!result.ok) {
+        setError(result.message);
+        reload();
+        return null;
+      }
+      setError(null);
+      reload();
+      return result.value;
+    },
+    [reload, state.revertibleRunId, state.runId],
+  );
 
   return {
     state,
@@ -214,6 +250,7 @@ export function useAgent(): AgentController {
     rejectProposal,
     acceptAll,
     rejectAll,
+    previewRevert,
     revert,
     error,
     setError,

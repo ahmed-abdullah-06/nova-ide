@@ -11,6 +11,8 @@ import type {
 import type {
   AgentAuditEntry,
   AgentEvent,
+  AgentRevertPreview,
+  AgentRevertResult,
   AgentState,
 } from './agent-types';
 
@@ -82,6 +84,7 @@ export const IpcChannels = {
   agentRejectProposal: 'agent:proposal-reject',
   agentAcceptAll: 'agent:proposals-accept-all',
   agentRejectAll: 'agent:proposals-reject-all',
+  agentRevertPreview: 'agent:revert-preview',
   agentRevert: 'agent:revert',
   agentAudit: 'agent:audit',
 } as const;
@@ -599,8 +602,20 @@ export interface IpcInvokeMap {
     args: [runId: string];
     result: FsResult<void>;
   };
-  /** Reverts the changes of a run (the checkpoint of the run). */
-  'agent:revert': { args: [runId: string]; result: FsResult<void> };
+  /** Describes what a revert would touch (no file is written). */
+  'agent:revert-preview': {
+    args: [runId: string, dirtyPaths: string[]];
+    result: FsResult<AgentRevertPreview>;
+  };
+  /**
+   * Reverts the changes of a run (the checkpoint of the run).
+   *
+   * A file is only forced when its path is in `confirmedPaths`.
+   */
+  'agent:revert': {
+    args: [runId: string, confirmedPaths: string[], dirtyPaths: string[]];
+    result: FsResult<AgentRevertResult>;
+  };
   /** The audit log of the agent (metadata only). */
   'agent:audit': { args: []; result: AgentAuditEntry[] };
 }
@@ -789,8 +804,17 @@ export interface NovaAgentApi {
   acceptAll(runId: string): Promise<FsResult<void>>;
   /** Rejects every change proposal of the run. */
   rejectAll(runId: string): Promise<FsResult<void>>;
-  /** Reverts the changes of a run. */
-  revert(runId: string): Promise<FsResult<void>>;
+  /** Describes what a revert would touch (no file is written). */
+  previewRevert(
+    runId: string,
+    dirtyPaths: string[],
+  ): Promise<FsResult<AgentRevertPreview>>;
+  /** Reverts the changes of a run (only the confirmed conflicts are forced). */
+  revert(
+    runId: string,
+    confirmedPaths: string[],
+    dirtyPaths: string[],
+  ): Promise<FsResult<AgentRevertResult>>;
   /** The audit log of the agent (metadata only). */
   audit(): Promise<AgentAuditEntry[]>;
   /** Subscribes to the events of the agent. */
