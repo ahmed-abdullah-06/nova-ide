@@ -26,6 +26,7 @@ export type AgentEventType =
   | 'approval-requested'
   | 'proposal-created'
   | 'context-compacted'
+  | 'recovery'
   | 'plan-created'
   | 'plan-approved'
   | 'plan-rejected'
@@ -319,6 +320,48 @@ export interface AgentCommandRecord {
   exitCode: number | null;
   /** A short summary of the output. */
   summary: string;
+  /** When the command finished (used by the verification engine). */
+  at?: number;
+  /** 'test' when the command is the test suite of the workspace. */
+  kind?: 'command' | 'test';
+}
+
+/** One check of the verification engine. */
+export interface AgentVerificationCheck {
+  /** The kind of the check. */
+  kind: 'tests' | 'command';
+  /** What ran (a script name or a command line). */
+  label: string;
+  /** True when the check passed. */
+  ok: boolean;
+  /** The exit code (null when it was stopped). */
+  exitCode: number | null;
+}
+
+/**
+ * The result of the verification engine (spec §10.6).
+ *
+ * The engine inspects what the run changed, which checks ran, and reports
+ * honestly when a change is not verified. It never claims that a change
+ * works only because the model said so.
+ */
+export interface AgentVerification {
+  /** The files the run really wrote to the disk (relative paths). */
+  changedFiles: string[];
+  /** The proposed changes that are still waiting (not written). */
+  pendingProposals: string[];
+  /** Every check that ran during the run. */
+  checks: AgentVerificationCheck[];
+  /** The checks that failed (labels). */
+  failedChecks: string[];
+  /** The points that are not verified (shown to the user). */
+  unverified: string[];
+  /** Notes about the plan (advisory, never a failure by itself). */
+  notes: string[];
+  /** True when every change is backed by a check that ran after it. */
+  verified: boolean;
+  /** A one-line honest statement for the report. */
+  summary: string;
 }
 
 /** The final summary of a run (spec §13). */
@@ -361,6 +404,10 @@ export interface AgentRunSummary {
   plan?: AgentPlan | null;
   /** The actions that went outside the approved plan (advisory). */
   deviations?: string[];
+  /** The files the run really wrote to the disk (relative paths). */
+  changedFiles?: string[];
+  /** The verification of the run (spec §10.6). */
+  verification?: AgentVerification;
   /** When the run started. */
   startedAt: number;
   /** When the run ended (null while it runs). */

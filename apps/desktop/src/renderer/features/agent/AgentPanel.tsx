@@ -48,6 +48,7 @@ export function AgentPanel({
     null,
   );
   const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
+  const [showAudit, setShowAudit] = useState(false);
 
   const state = agent.state;
   const provider = providers.find((entry) => entry.id === providerId) ?? null;
@@ -240,6 +241,51 @@ export function AgentPanel({
         <AgentPermissionSettings />
       </details>
 
+      <div className="agent-panel__audit-slot">
+        <button
+          type="button"
+          className="agent-panel__action"
+          aria-expanded={showAudit}
+          onClick={() => {
+            if (!showAudit) {
+              void agent.loadAudit();
+            }
+            setShowAudit((current) => !current);
+          }}
+        >
+          {showAudit ? 'Hide audit history' : 'Show audit history'}
+        </button>
+        {showAudit ? (
+          agent.audit.length === 0 ? (
+            <p className="agent-panel__audit-empty">
+              The audit history is empty. It holds metadata only.
+            </p>
+          ) : (
+            <ol className="agent-panel__audit-list">
+              {agent.audit
+                .slice(-50)
+                .reverse()
+                .map((entry, index) => (
+                  <li
+                    key={`${entry.at}-${entry.step}-${index}`}
+                    className="agent-panel__audit-entry"
+                  >
+                    <span className="agent-panel__audit-time">
+                      {new Date(entry.at).toLocaleString()}
+                    </span>
+                    <span className="agent-panel__audit-kind">
+                      {entry.kind}
+                    </span>
+                    <span className="agent-panel__audit-summary">
+                      {entry.summary}
+                    </span>
+                  </li>
+                ))}
+            </ol>
+          )
+        ) : null}
+      </div>
+
       <div className="agent-panel__timeline">
         {state.events.map((event) => (
           <div
@@ -354,6 +400,17 @@ export function AgentPanel({
               {state.summary.finalMessage}
             </p>
           ) : null}
+          {state.summary.verification !== undefined ? (
+            <p
+              className={`agent-panel__verification${
+                state.summary.verification.verified
+                  ? ' agent-panel__verification--ok'
+                  : ' agent-panel__verification--unverified'
+              }`}
+            >
+              {state.summary.verification.summary}
+            </p>
+          ) : null}
           <ul className="agent-panel__report-list">
             {state.summary.plan !== undefined &&
             state.summary.plan !== null ? (
@@ -392,6 +449,21 @@ export function AgentPanel({
                 className="agent-panel__report-issue"
               >
                 Deviation from the plan: {deviation}
+              </li>
+            ))}
+            {(state.summary.verification?.unverified ?? []).map(
+              (point, index) => (
+                <li
+                  key={`unverified-${index}`}
+                  className="agent-panel__report-error"
+                >
+                  Not verified: {point}
+                </li>
+              ),
+            )}
+            {(state.summary.verification?.notes ?? []).map((note, index) => (
+              <li key={`note-${index}`} className="agent-panel__report-issue">
+                {note}
               </li>
             ))}
           </ul>

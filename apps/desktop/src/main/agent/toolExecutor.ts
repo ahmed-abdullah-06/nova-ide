@@ -153,6 +153,8 @@ export class ToolExecutor {
         // explicitly widened by the user (the forbidden programs stay
         // blocked in every case).
         return this.runCommand(args, context, permission.decision === 'allow');
+      case 'run_tests':
+        return this.runTests(args, context, permission.decision === 'allow');
       default:
         return {
           ok: false,
@@ -497,18 +499,69 @@ export class ToolExecutor {
     };
   }
 
+  /**
+   * Runs the test suite of the workspace.
+   *
+   * The script always comes from the `package.json` (the model can only
+   * name an existing script), and the command still needs the approval
+   * of the user unless the command category was widened. The result is
+   * recorded as a test, so the verification engine can use it.
+   */
+  private async runTests(
+    args: Record<string, unknown>,
+    context: ToolContext,
+    approvedCategory: boolean,
+  ): Promise<ToolResult> {
+    const requested =
+      typeof args.script === 'string' && args.script.trim().length > 0
+        ? args.script.trim()
+        : 'test';
+    if (
+      requested.length > 128 ||
+      !/^[A-Za-z0-9:_.-]+$/.test(requested)
+    ) {
+      return {
+        ok: false,
+        content: `"${requested.slice(0, 40)}" is not a valid test script name.`,
+        error: 'invalid arguments',
+      };
+    }
+    const result = await this.runScript(
+      requested,
+      context,
+      approvedCategory,
+      'run_tests',
+      'test',
+    );
+    if (result.ok) {
+      return {
+        ...result,
+        content: `The tests "${requested}" passed (exit code 0).\n${result.content}`,
+      };
+    }
+    return {
+      ...result,
+      content: `The tests "${requested}" did not pass.\n${result.content}`,
+    };
+  }
+
   /** Runs a script of the workspace through the task runner of Milestone 3. */
   private async runScript(
     script: string,
     context: ToolContext,
     approvedCategory: boolean,
+    tool = 'run_command',
+    kind: 'command' | 'test' = 'command',
   ): Promise<ToolResult> {
     if (!approvedCategory) {
       const approved = await context.requestApproval({
         kind: 'command',
-        tool: 'run_command',
+        tool,
         script,
-        reason: `The agent wants to run the script "${script}".`,
+        reason:
+          kind === 'test'
+            ? `The agent wants to run the tests (script "${script}").`
+            : `The agent wants to run the script "${script}".`,
       });
       if (!approved) {
         return {
@@ -538,6 +591,8 @@ export class ToolExecutor {
       script,
       exitCode: output.exitCode,
       summary: output.summary,
+      at: Date.now(),
+      kind,
     };
     context.commands.push(record);
     return {
@@ -648,6 +703,8 @@ export class ToolExecutor {
       argv,
       exitCode: outcome.exitCode,
       summary: outcome.summary,
+      at: Date.now(),
+      kind: 'command',
     };
     context.commands.push(record);
     return {

@@ -28,6 +28,7 @@ import type {
   AgentCommandRecord,
   AgentEvent,
   AgentLimits,
+  AgentPermissionCategory,
   AgentPlan,
   AgentPlanDecision,
   AgentPlanEdit,
@@ -45,6 +46,7 @@ import type { ProviderService } from '../providers/providerService';
 import { ProviderRouter } from '../providers/router';
 import { redact } from '../providers/redact';
 import { AgentLoop, AGENT_PROTOCOL, type ModelAnswer } from './agentLoop';
+import { AuditStore } from './auditStore';
 import { contextBudgetFor } from './contextManager';
 import { createPlan, decidePlan } from './planner';
 import type { AgentPermissionSettings } from './permissions';
@@ -57,6 +59,7 @@ import {
 import { ToolExecutor } from './toolExecutor';
 import type { ToolContext } from './toolExecutor';
 import { ToolRegistry } from './tools';
+import { buildVerification } from './verification';
 
 /** The options of the agent service. */
 export interface AgentServiceOptions {
@@ -72,6 +75,8 @@ export interface AgentServiceOptions {
   getRoot: () => string | null;
   /** The permission settings of the user. */
   permissions: AgentPermissionSettings;
+  /** The persistent audit history (metadata only). */
+  audit?: AuditStore;
   /** The limits of a run. */
   limits?: AgentLimits;
   /** Called for every event of the current run. */
@@ -88,14 +93,13 @@ interface PlanAnswer {
   plan: AgentPlan;
 }
 
-/** The maximum number of entries of the audit log. */
-const MAX_AUDIT_ENTRIES = 500;
-
 export class AgentService {
   private readonly options: AgentServiceOptions;
   private readonly registry = new ToolRegistry();
   private readonly proposals = new ProposalStore();
   private readonly router: ProviderRouter;
+  /** The persistent audit history (metadata only). */
+  private readonly auditStore: AuditStore;
   /** The events of the current run. */
   private events: AgentEvent[] = [];
   /** The approval the run is waiting for. */
@@ -122,8 +126,10 @@ export class AgentService {
   private inspected: string[] = [];
   /** The commands that ran. */
   private commands: AgentCommandRecord[] = [];
-  /** The audit log. */
-  private audit: AgentAuditEntry[] = [];
+  /** The files the run really wrote (relative paths). */
+  private changedFiles: string[] = [];
+  /** When the last file was written (null when no file changed). */
+  private lastChangeAt: number | null = null;
   /**
    * The run whose checkpoint can be reverted.
    *
@@ -138,6 +144,7 @@ export class AgentService {
 
   constructor(options: AgentServiceOptions) {
     this.options = options;
+    this.auditStore = options.audit ?? new AuditStore();
     this.router = new ProviderRouter({
       onEvent: (requestId, event) => {
         this.handleModelEvent(requestId, event);
@@ -166,7 +173,29 @@ export class AgentService {
 
   /** The audit log of the agent (metadata only). */
   getAudit(): AgentAuditEntry[] {
-    return [...this.audit];
+    return this.auditStore.list();
+  }
+
+  /** Waits until the audit history is written (the application quits). */
+  async flushAudit(): Promise<void> {
+    await this.auditStore.flush();
+  }
+
+  /**
+   * Records a change of a permission category (metadata only).
+   *
+   * The renderer can only ask the main process to change a category; the
+   * entry documents the resulting policy, never the content of a file.
+   */
+  recordPermissionChange(
+    category: AgentPermissionCategory,
+    allowed: boolean,
+  ): void {
+    this.log(
+      'permission',
+      `the "${category}" permission was ${allowed ? 'allowed' : 'not allowed'}`,
+      { decision: allowed ? 'allow' : 'deny' },
+    );
   }
 
   /**
@@ -233,6 +262,8 @@ export class AgentService {
     this.summary = null;
     this.inspected = [];
     this.commands = [];
+    this.changedFiles = [];
+    this.lastChangeAt = null;
     this.task = trimmed;
     this.providerId = providerId;
     this.model = model;
@@ -369,6 +400,10 @@ export class AgentService {
       after: proposal.after,
     });
     this.revertibleRunId = runId;
+    if (!this.changedFiles.includes(proposal.relativePath)) {
+      this.changedFiles.push(proposal.relativePath);
+    }
+    this.lastChangeAt = Date.now();
     this.log('proposal', `the change of ${proposal.relativePath} was accepted`);
     this.options.onFileChanged(proposal.path);
     this.publish();
@@ -753,6 +788,12 @@ export class AgentService {
       callModel: (requestId, messages, modelSignal) =>
         this.callModel(requestId, messages, modelSignal),
       onEvent: (event) => {
+        if (event.type === 'tool-called' && event.tool !== undefined) {
+          this.log('tool', `the tool "${event.tool}" was called`, {
+            tool: event.tool,
+            decision: event.decision ?? 'allow',
+          });
+        }
         this.emit(event);
         this.publish();
       },
@@ -770,6 +811,23 @@ export class AgentService {
     summary.proposals = this.proposals.list(runId);
     summary.commands = [...this.commands];
     summary.inspected = [...this.inspected];
+    summary.changedFiles = [...this.changedFiles];
+    summary.verification = buildVerification({
+      changedFiles: this.changedFiles,
+      pendingProposals: summary.proposals.map(
+        (proposal) => proposal.relativePath,
+      ),
+      commands: summary.commands,
+      plan: summary.plan ?? this.plan,
+      lastChangeAt: this.lastChangeAt,
+    });
+    for (const command of summary.commands) {
+      this.log(
+        'command',
+        `${command.argv.join(' ')} exited with ${command.exitCode ?? 'no code'}`,
+        { tool: command.kind === 'test' ? 'run_tests' : 'run_command' },
+      );
+    }
     this.summary = summary;
 
     if (summary.state === 'cancelled') {
@@ -949,16 +1007,13 @@ export class AgentService {
     summary: string,
     extra: { tool?: string; decision?: string } = {},
   ): void {
-    this.audit = [
-      ...this.audit,
-      {
-        runId: this.currentRunId ?? '',
-        step: this.events.length,
-        kind,
-        summary: redact(summary).slice(0, 400),
-        at: Date.now(),
-        ...extra,
-      },
-    ].slice(-MAX_AUDIT_ENTRIES);
+    this.auditStore.append({
+      runId: this.currentRunId ?? '',
+      step: this.events.length,
+      kind,
+      summary: redact(summary).slice(0, 400),
+      at: Date.now(),
+      ...extra,
+    });
   }
 }

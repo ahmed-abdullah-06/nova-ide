@@ -352,6 +352,69 @@
   margin-top: 4px;
 }
 
+/* The verification of the report and the audit history (M6) ------------ */
+
+.agent-panel__verification {
+  margin: 0 0 6px;
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__verification--ok {
+  color: var(--color-success);
+}
+
+.agent-panel__verification--unverified {
+  color: var(--color-warning);
+}
+
+.agent-panel__audit-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-panel__audit-empty {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__audit-list {
+  margin: 0;
+  padding: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-background);
+  list-style: none;
+}
+
+.agent-panel__audit-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-size-small);
+}
+
+.agent-panel__audit-time {
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.agent-panel__audit-kind {
+  color: var(--color-accent-text);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.agent-panel__audit-summary {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The preview of a revert (M5 C1) -------------------------------------- */
 
 .agent-panel__revert {

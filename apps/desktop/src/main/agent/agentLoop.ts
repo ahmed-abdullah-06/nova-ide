@@ -38,6 +38,9 @@ import { validateToolArguments } from './permissions';
 import type { ToolRegistry } from './tools';
 import type { ToolContext, ToolExecutor, ToolResult } from './toolExecutor';
 
+/** The maximum number of model-call recoveries of one run. */
+const MAX_MODEL_RECOVERIES = 2;
+
 /** The answer of the model, parsed. */
 export type AgentAction =
   | { kind: 'tool'; name: string; arguments: Record<string, unknown> }
@@ -226,6 +229,8 @@ export class AgentLoop {
   private finalMessage = '';
   /** The repair attempts that were used. */
   private repairAttempts = 0;
+  /** The bounded recovery attempts of a failed model call. */
+  private modelRecoveries = 0;
   /** The visible notices of the context manager. */
   private readonly contextNotices: string[] = [];
 
@@ -281,7 +286,7 @@ export class AgentLoop {
         }
       }
 
-      const answer = await this.options.callModel(
+      const answer = await this.callModelWithRecovery(
         `agent-model-${this.step}`,
         compacted.messages,
         signal,
@@ -477,6 +482,41 @@ export class AgentLoop {
       finishedAt: Date.now(),
     };
     return { summary };
+  }
+
+  /**
+   * Calls the model and recovers from a transient failure.
+   *
+   * A failed call is retried ONCE per event, at most twice per run. The
+   * retry is visible in the timeline, and it never happens when the run
+   * was stopped. A permanently broken provider still reaches the
+   * consecutive-failure limit of the run, so it can never loop forever.
+   */
+  private async callModelWithRecovery(
+    requestId: string,
+    messages: ChatMessage[],
+    signal: AbortSignal,
+  ): Promise<ModelAnswer> {
+    let answer = await this.options.callModel(requestId, messages, signal);
+    if (
+      answer.error === undefined ||
+      signal.aborted ||
+      this.modelRecoveries >= MAX_MODEL_RECOVERIES
+    ) {
+      return answer;
+    }
+    this.modelRecoveries += 1;
+    this.emit({
+      type: 'recovery',
+      summary: 'The model could not be reached; the call is retried once.',
+      error: answer.error,
+    });
+    answer = await this.options.callModel(
+      `${requestId}-retry-${this.modelRecoveries}`,
+      messages,
+      signal,
+    );
+    return answer;
   }
 
   /**

@@ -140,6 +140,7 @@ export function createAgentHandlers(
       if (!result.ok) {
         return { ok: false, code: 'CANCELLED', message: result.message };
       }
+      agent.recordPermissionChange(category, allowed);
       return { ok: true, value: result.view };
     },
   };

@@ -366,7 +366,7 @@ export class PlanTracker {
       return null;
     }
 
-    if (tool === 'run_command') {
+    if (tool === 'run_command' || tool === 'run_tests') {
       const planned = new Set(
         plan.steps
           .map((step) => step.command)

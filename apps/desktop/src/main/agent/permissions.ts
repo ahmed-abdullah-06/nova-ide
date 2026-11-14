@@ -37,6 +37,7 @@ export const AGENT_TOOL_NAMES = [
   'write_file',
   'apply_edit',
   'run_command',
+  'run_tests',
 ] as const;
 
 /** The name of a tool of the agent. */

@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AgentAuditEntry,
   AgentPlanDecision,
   AgentPlanEdit,
   AgentRevertPreview,
@@ -17,6 +18,10 @@ import type {
 export interface AgentController {
   /** The state of the agent (the main process is the source of truth). */
   state: AgentState;
+  /** The audit history of the agent (metadata only, loaded on demand). */
+  audit: AgentAuditEntry[];
+  /** Loads the audit history. */
+  loadAudit: () => Promise<void>;
   /** Starts a run. */
   start: (
     task: string,
@@ -73,6 +78,7 @@ const EMPTY_STATE: AgentState = {
 
 export function useAgent(): AgentController {
   const [state, setState] = useState<AgentState>(EMPTY_STATE);
+  const [audit, setAudit] = useState<AgentAuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback((): void => {
@@ -107,6 +113,23 @@ export function useAgent(): AgentController {
       unsubscribeState();
     };
   }, [reload]);
+
+  const loadAudit = useCallback(async (): Promise<void> => {
+    const api = window.nova;
+    if (!api) {
+      return;
+    }
+    try {
+      const entries = await api.agent.audit();
+      setAudit(entries);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : 'The audit history could not be loaded.',
+      );
+    }
+  }, []);
 
   const start = useCallback(
     async (
@@ -276,6 +299,8 @@ export function useAgent(): AgentController {
 
   return {
     state,
+    audit,
+    loadAudit,
     start,
     stop,
     approve,

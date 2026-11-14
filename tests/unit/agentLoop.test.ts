@@ -273,4 +273,83 @@ describe('the agent loop', () => {
     expect(DEFAULT_AGENT_LIMITS.maxSteps).toBeGreaterThan(0);
     expect(DEFAULT_AGENT_LIMITS.maxDurationMs).toBeGreaterThan(0);
   });
+
+  it('recovers once from a transient model failure', async () => {
+    const events: AgentEvent[] = [];
+    let calls = 0;
+    const loop = new AgentLoop({
+      task: 'do something',
+      systemPrompt: 'the system prompt',
+      limits: { ...LIMITS, maxSteps: 4 },
+      registry: new ToolRegistry(),
+      executor: fakeExecutor().executor as never,
+      context: fakeContext() as never,
+      callModel: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { text: '', toolCall: null, error: 'the connection timed out' };
+        }
+        return { text: '{"thought":"done","final":"finished"}', toolCall: null };
+      },
+      onEvent: (event) => {
+        events.push(event);
+      },
+      proposals: { list: () => [] },
+    });
+    const outcome = await loop.run(new AbortController().signal);
+    expect(calls).toBe(2);
+    expect(outcome.summary.state).toBe('completed');
+    expect(events.some((event) => event.type === 'recovery')).toBe(true);
+    expect(
+      events.find((event) => event.type === 'recovery')?.error,
+    ).toContain('timed out');
+  });
+
+  it('bounds the recovery attempts of a broken provider', async () => {
+    const events: AgentEvent[] = [];
+    let calls = 0;
+    const loop = new AgentLoop({
+      task: 'do something',
+      systemPrompt: 'the system prompt',
+      limits: { ...LIMITS, maxSteps: 8, maxConsecutiveFailures: 2 },
+      registry: new ToolRegistry(),
+      executor: fakeExecutor().executor as never,
+      context: fakeContext() as never,
+      callModel: async () => {
+        calls += 1;
+        return { text: '', toolCall: null, error: 'the provider is offline' };
+      },
+      onEvent: (event) => {
+        events.push(event);
+      },
+      proposals: { list: () => [] },
+    });
+    const outcome = await loop.run(new AbortController().signal);
+    expect(outcome.summary.state).toBe('failed');
+    expect(calls).toBe(4);
+    expect(events.filter((event) => event.type === 'recovery')).toHaveLength(2);
+  });
+
+  it('never retries a model call when the run was stopped', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const loop = new AgentLoop({
+      task: 'do something',
+      systemPrompt: 'the system prompt',
+      limits: { ...LIMITS, maxSteps: 4 },
+      registry: new ToolRegistry(),
+      executor: fakeExecutor().executor as never,
+      context: fakeContext() as never,
+      callModel: async () => {
+        calls += 1;
+        controller.abort();
+        return { text: '', toolCall: null, error: 'the connection was lost' };
+      },
+      onEvent: () => undefined,
+      proposals: { list: () => [] },
+    });
+    const outcome = await loop.run(controller.signal);
+    expect(calls).toBe(1);
+    expect(outcome.summary.state).toBe('cancelled');
+  });
 });

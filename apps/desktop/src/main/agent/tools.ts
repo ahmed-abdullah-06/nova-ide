@@ -13,7 +13,8 @@
  *  - workspace: write_file and apply_edit — they create a PROPOSAL, they
  *    never write to the disk (the user accepts the proposal),
  *  - command: run_command — the scripts of the workspace, or a command
- *    as an argument array after an explicit approval.
+ *    as an argument array after an explicit approval, and run_tests —
+ *    the test script of the workspace.
  */
 import type { AgentToolSchema } from '../../shared/agent-types';
 
@@ -149,6 +150,21 @@ export const AGENT_TOOLS: readonly AgentToolSchema[] = [
           'A command as an argument array (the first entry is the ' +
           'program). Never a shell string.',
         itemType: 'string',
+      },
+    },
+  },
+  {
+    name: 'run_tests',
+    description:
+      'Run the test suite of the workspace after a change. The script ' +
+      'comes from the package.json (the default is "test"); every test ' +
+      'command needs the approval of the user.',
+    level: 'command',
+    parameters: {
+      script: {
+        type: 'string',
+        description:
+          'The name of the test script of the package.json (the default is "test").',
       },
     },
   },

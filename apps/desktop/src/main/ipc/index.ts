@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import path from 'node:path';
 import {
   IpcChannels,
   IpcPushChannels,
@@ -62,6 +63,7 @@ import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
 import { AgentService } from '../agent/agentService';
+import { AuditStore } from '../agent/auditStore';
 import { ToolExecutor } from '../agent/toolExecutor';
 import {
   DEFAULT_PERMISSION_SETTINGS,
@@ -274,6 +276,9 @@ export function registerIpcHandlers(): () => Promise<void> {
     executor: agentExecutor,
     getRoot: () => workspaceService.getActiveRoot(),
     permissions: permissionSettings,
+    audit: new AuditStore(
+      path.join(app.getPath('userData'), 'agent-audit.json'),
+    ),
     onEvent: (runId, event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(IpcPushChannels.agentEvent, { runId, event });
@@ -613,7 +618,11 @@ export function registerIpcHandlers(): () => Promise<void> {
     // The running requests are aborted, so the providers stop generating.
     chatService.cancelAll();
     agentService.cancelAll();
-    await Promise.all([terminalService.killAll(), taskService.killAll()]);
+    await Promise.all([
+      terminalService.killAll(),
+      taskService.killAll(),
+      agentService.flushAudit(),
+    ]);
     watchdog.stop();
     watcher.clear();
   };
