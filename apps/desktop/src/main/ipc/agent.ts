@@ -18,6 +18,7 @@ export interface AgentHandlers {
   cancel: Handler<'agent:cancel'>;
   state: Handler<'agent:state'>;
   approve: Handler<'agent:approve'>;
+  answerPlan: Handler<'agent:plan-answer'>;
   acceptProposal: Handler<'agent:proposal-accept'>;
   rejectProposal: Handler<'agent:proposal-reject'>;
   acceptAll: Handler<'agent:proposals-accept-all'>;
@@ -64,6 +65,16 @@ export function createAgentHandlers(
             ok: false,
             code: 'NOT_FOUND',
             message: 'The approval request does not exist.',
+          };
+    },
+    answerPlan: async (runId, planId, decision, edits) => {
+      const result = agent.answerPlan(runId, planId, decision, edits);
+      return result.ok
+        ? { ok: true, value: undefined }
+        : {
+            ok: false,
+            code: 'NOT_FOUND',
+            message: result.message ?? 'The plan does not exist.',
           };
     },
     acceptProposal: async (runId, proposalId) => {

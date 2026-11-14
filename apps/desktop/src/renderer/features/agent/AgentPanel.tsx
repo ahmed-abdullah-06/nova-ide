@@ -2,8 +2,9 @@
  * The agent panel (spec §9, §13).
  *
  * The panel shows the task, the provider and the model (with the LOCAL
- * or CLOUD badge), the progress of the run, the approvals the user has
- * to give, the changes the agent proposes and the final report.
+ * or CLOUD badge), the plan the agent proposes, the progress of the run,
+ * the approvals the user has to give, the changes the agent proposes and
+ * the final report.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
@@ -11,6 +12,7 @@ import type { AgentRevertPreview } from '../../../shared/agent-types';
 import { useTabs } from '../../stores/tabs';
 import { ProposalReview } from './ProposalReview';
 import { AgentPermissionSettings } from './AgentPermissionSettings';
+import { PlanReview } from './PlanReview';
 import { useAgent } from './useAgent';
 
 export interface AgentPanelProps {
@@ -50,7 +52,11 @@ export function AgentPanel({
   const state = agent.state;
   const provider = providers.find((entry) => entry.id === providerId) ?? null;
   const isCloud = provider?.kind === 'cloud';
-  const running = state.state === 'running' || state.state === 'waitingForApproval';
+  const running =
+    state.state === 'planning' ||
+    state.state === 'waitingForPlan' ||
+    state.state === 'running' ||
+    state.state === 'waitingForApproval';
 
   // The changes of the run are the ones of the active run.
   useEffect(() => {
@@ -84,6 +90,21 @@ export function AgentPanel({
       }
     },
     [agent],
+  );
+
+  const handleAnswerPlan = useCallback(
+    async (
+      decision: 'approve' | 'reject',
+      edits: { stepId: string; description: string }[],
+    ): Promise<void> => {
+      if (state.plan === null) {
+        return;
+      }
+      setBusy(true);
+      await agent.answerPlan(state.plan.id, decision, edits);
+      setBusy(false);
+    },
+    [agent, state.plan],
   );
 
   /** The files with unsaved changes (the main process re-checks the disk). */
@@ -206,6 +227,14 @@ export function AgentPanel({
         </p>
       ) : null}
 
+      {state.plan !== null && state.plan.state === 'pending' ? (
+        <PlanReview
+          plan={state.plan}
+          busy={busy}
+          onAnswer={(decision, edits) => void handleAnswerPlan(decision, edits)}
+        />
+      ) : null}
+
       <details className="agent-panel__permissions-slot">
         <summary className="agent-panel__permissions-summary">Permissions</summary>
         <AgentPermissionSettings />
@@ -326,6 +355,15 @@ export function AgentPanel({
             </p>
           ) : null}
           <ul className="agent-panel__report-list">
+            {state.summary.plan !== undefined &&
+            state.summary.plan !== null ? (
+              <li>
+                Plan: {state.summary.plan.steps.length} step
+                {state.summary.plan.steps.length === 1 ? '' : 's'} (
+                {state.summary.plan.state}
+                {state.summary.plan.degraded ? ', minimal' : ''})
+              </li>
+            ) : null}
             <li>
               {state.summary.steps} step
               {state.summary.steps === 1 ? '' : 's'}, {state.summary.inspected.length}{' '}
@@ -346,6 +384,14 @@ export function AgentPanel({
             {state.summary.unresolved.map((issue, index) => (
               <li key={`issue-${index}`} className="agent-panel__report-issue">
                 {issue}
+              </li>
+            ))}
+            {(state.summary.deviations ?? []).map((deviation, index) => (
+              <li
+                key={`deviation-${index}`}
+                className="agent-panel__report-issue"
+              >
+                Deviation from the plan: {deviation}
               </li>
             ))}
           </ul>

@@ -24,6 +24,7 @@ import type {
 import type {
   AgentEvent,
   AgentLimits,
+  AgentPlan,
   AgentRunSummary,
 } from '../../shared/agent-types';
 import { MAX_REPAIR_ATTEMPTS } from '../../shared/agent-types';
@@ -32,6 +33,7 @@ import {
   DEFAULT_CONTEXT_BUDGET,
   type ContextBudget,
 } from './contextManager';
+import { PlanTracker } from './planner';
 import { validateToolArguments } from './permissions';
 import type { ToolRegistry } from './tools';
 import type { ToolContext, ToolExecutor, ToolResult } from './toolExecutor';
@@ -75,6 +77,13 @@ export interface AgentLoopOptions {
   onEvent: (event: AgentEvent) => void;
   /** The proposals of the run (filled by the tools). */
   proposals: AgentLoopProposals;
+  /**
+   * The plan the user approved (advisory).
+   *
+   * The loop reports a deviation but never lets the plan change the
+   * permission policy or the tool executor.
+   */
+  plan?: AgentPlan | null;
   /**
    * The budget of one prompt.
    *
@@ -235,6 +244,7 @@ export class AgentLoop {
     this.messages.push({ role: 'user', content: this.options.task });
 
     const budget = this.effectiveBudget();
+    const tracker = new PlanTracker(this.options.plan ?? null);
 
     let state: 'completed' | 'failed' | 'cancelled' = 'failed';
 
@@ -389,6 +399,16 @@ export class AgentLoop {
         decision: 'allow',
       });
 
+      // The plan is advisory: a deviation is reported, never blocked.
+      const deviation = tracker.observe(tool.name, checked.value);
+      if (deviation !== null) {
+        this.emit({
+          type: 'plan-deviation',
+          summary: deviation,
+          tool: tool.name,
+        });
+      }
+
       const result: ToolResult = await this.options.executor.execute(
         tool,
         checked.value,
@@ -451,6 +471,8 @@ export class AgentLoop {
       unresolved: [...this.unresolved],
       contextNotices: [...this.contextNotices],
       finalMessage: this.finalMessage,
+      plan: this.options.plan ?? null,
+      deviations: tracker.deviations,
       startedAt: started,
       finishedAt: Date.now(),
     };

@@ -601,3 +601,76 @@ export function assertPermissionUpdate(
     throw new Error('Expected the permission state');
   }
 }
+
+/**
+ * The answer of the user to the plan.
+ *
+ * Only descriptions can be edited; the validator refuses anything else,
+ * so a hostile renderer cannot change a command or a file of the plan.
+ */
+export function assertPlanAnswer(
+  args: unknown[],
+): asserts args is [
+  runId: string,
+  planId: string,
+  decision: 'approve' | 'reject',
+  edits: { stepId: string; description: string }[],
+] {
+  if (args.length !== 4) {
+    throw new Error('Expected (runId, planId, decision, edits)');
+  }
+  const [runId, planId, decision, edits] = args;
+  if (
+    typeof runId !== 'string' ||
+    runId.length === 0 ||
+    runId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(runId)
+  ) {
+    throw new Error('Invalid run id');
+  }
+  if (
+    typeof planId !== 'string' ||
+    planId.length === 0 ||
+    planId.length > 100 ||
+    !/^[A-Za-z0-9_-]+$/.test(planId)
+  ) {
+    throw new Error('Invalid plan id');
+  }
+  if (decision !== 'approve' && decision !== 'reject') {
+    throw new Error('Invalid plan decision');
+  }
+  if (!Array.isArray(edits) || edits.length > 20) {
+    throw new Error('Invalid plan edits');
+  }
+  for (const edit of edits) {
+    if (typeof edit !== 'object' || edit === null) {
+      throw new Error('Invalid plan edit');
+    }
+    const record = edit as { stepId?: unknown; description?: unknown };
+    // An edit is exactly a step id and a description: a command, a file
+    // or a permission can never be smuggled into an edit.
+    const keys = Object.keys(record);
+    if (
+      keys.length !== 2 ||
+      !keys.includes('stepId') ||
+      !keys.includes('description')
+    ) {
+      throw new Error('Invalid plan edit');
+    }
+    if (
+      typeof record.stepId !== 'string' ||
+      record.stepId.length === 0 ||
+      record.stepId.length > 64 ||
+      !/^[A-Za-z0-9_-]+$/.test(record.stepId)
+    ) {
+      throw new Error('Invalid step id');
+    }
+    if (
+      typeof record.description !== 'string' ||
+      record.description.trim().length === 0 ||
+      record.description.length > 500
+    ) {
+      throw new Error('Invalid step description');
+    }
+  }
+}

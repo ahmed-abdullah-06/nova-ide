@@ -77,6 +77,7 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.agentCancel,
       IpcChannels.agentState,
       IpcChannels.agentApprove,
+      IpcChannels.agentPlanAnswer,
       IpcChannels.agentAcceptProposal,
       IpcChannels.agentRejectProposal,
       IpcChannels.agentAcceptAll,

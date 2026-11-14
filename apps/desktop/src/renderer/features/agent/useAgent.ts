@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AgentPlanDecision,
+  AgentPlanEdit,
   AgentRevertPreview,
   AgentRevertResult,
   AgentState,
@@ -26,6 +28,12 @@ export interface AgentController {
   stop: () => Promise<void>;
   /** Answers an approval request. */
   approve: (approvalId: string, approved: boolean) => Promise<void>;
+  /** Approves, edits or rejects the plan of the run. */
+  answerPlan: (
+    planId: string,
+    decision: AgentPlanDecision,
+    edits: AgentPlanEdit[],
+  ) => Promise<void>;
   /** Accepts a change proposal (the file is written). */
   acceptProposal: (proposalId: string) => Promise<string | null>;
   /** Rejects a change proposal. */
@@ -58,6 +66,7 @@ const EMPTY_STATE: AgentState = {
   events: [],
   approval: null,
   proposals: [],
+  plan: null,
   revertibleRunId: null,
   summary: null,
 };
@@ -143,6 +152,30 @@ export function useAgent(): AgentController {
         return;
       }
       await api.agent.approve(state.runId, approvalId, approved);
+      reload();
+    },
+    [reload, state.runId],
+  );
+
+  const answerPlan = useCallback(
+    async (
+      planId: string,
+      decision: AgentPlanDecision,
+      edits: AgentPlanEdit[],
+    ): Promise<void> => {
+      const api = window.nova;
+      if (!api || state.runId === null) {
+        return;
+      }
+      const result = await api.agent.answerPlan(
+        state.runId,
+        planId,
+        decision,
+        edits,
+      );
+      if (!result.ok) {
+        setError(result.message);
+      }
       reload();
     },
     [reload, state.runId],
@@ -246,6 +279,7 @@ export function useAgent(): AgentController {
     start,
     stop,
     approve,
+    answerPlan,
     acceptProposal,
     rejectProposal,
     acceptAll,

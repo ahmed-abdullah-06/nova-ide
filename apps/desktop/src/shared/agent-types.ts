@@ -9,6 +9,8 @@
 /** The state of an agent run. */
 export type AgentRunState =
   | 'idle'
+  | 'planning'
+  | 'waitingForPlan'
   | 'running'
   | 'waitingForApproval'
   | 'completed'
@@ -24,6 +26,10 @@ export type AgentEventType =
   | 'approval-requested'
   | 'proposal-created'
   | 'context-compacted'
+  | 'plan-created'
+  | 'plan-approved'
+  | 'plan-rejected'
+  | 'plan-deviation'
   | 'run-finished'
   | 'run-failed'
   | 'run-cancelled';
@@ -166,6 +172,74 @@ export interface AgentApproval {
 }
 
 /**
+ * The lifecycle of the plan of a run.
+ *
+ * The plan is advisory only: the tool executor and the permission policy
+ * never read it. It documents what the agent intends to do, so the user
+ * can approve, edit or reject it before the first step.
+ */
+export type AgentPlanState = 'pending' | 'approved' | 'edited' | 'rejected';
+
+/** One step of the plan. */
+export interface AgentPlanStep {
+  /** Stable id of the step (used by an edit). */
+  id: string;
+  /** What the step does (the only field the user may edit). */
+  description: string;
+  /** The files the step probably touches (relative to the workspace). */
+  files: string[];
+  /** The command the step probably runs, or null. */
+  command: string | null;
+}
+
+/**
+ * The plan the agent proposes before it acts (spec §13).
+ *
+ * It is shown before the first tool call and can be approved, edited or
+ * rejected. An edit can only change a step description — never the
+ * permission of a tool, never a command and never a file.
+ */
+export interface AgentPlan {
+  /** The id of the plan (the renderer answers with it). */
+  id: string;
+  /** The run the plan belongs to. */
+  runId: string;
+  /** The task of the user. */
+  task: string;
+  /** The steps, in order. */
+  steps: AgentPlanStep[];
+  /** The state of the plan. */
+  state: AgentPlanState;
+  /**
+   * True when the model did not produce a usable plan and the minimal
+   * plan is shown instead. The user can still approve it.
+   */
+  degraded: boolean;
+  /** A visible notice about a degraded plan (null otherwise). */
+  notice: string | null;
+  /** When the plan was created. */
+  createdAt: number;
+}
+
+/** The maximum number of steps of a plan. */
+export const MAX_PLAN_STEPS = 20;
+/** The maximum number of characters of a step description. */
+export const MAX_PLAN_DESCRIPTION_CHARS = 500;
+/** The maximum number of files one step may name. */
+export const MAX_PLAN_FILES = 20;
+
+/** The answer of the user to a plan. */
+export type AgentPlanDecision = 'approve' | 'reject';
+
+/** One edit of a step description. */
+export interface AgentPlanEdit {
+  /** The step to change. */
+  stepId: string;
+  /** The new description (the only editable field). */
+  description: string;
+}
+
+/**
  * A change the agent proposes.
  *
  * A proposal is never written to the disk before the user accepts it
@@ -283,6 +357,10 @@ export interface AgentRunSummary {
   contextNotices?: string[];
   /** The final answer of the agent. */
   finalMessage: string;
+  /** The plan of the run (null when the run never had one). */
+  plan?: AgentPlan | null;
+  /** The actions that went outside the approved plan (advisory). */
+  deviations?: string[];
   /** When the run started. */
   startedAt: number;
   /** When the run ended (null while it runs). */
@@ -309,6 +387,8 @@ export interface AgentState {
   approval: AgentApproval | null;
   /** The proposals of the current run. */
   proposals: AgentProposal[];
+  /** The plan of the current run (null when there is none). */
+  plan: AgentPlan | null;
   /**
    * The run whose checkpoint can be reverted (null when there is none).
    *

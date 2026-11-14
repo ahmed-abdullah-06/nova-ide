@@ -116,6 +116,8 @@ const novaApi: NovaApi = {
     state: () => invoke(IpcChannels.agentState),
     approve: (runId, approvalId, approved) =>
       invoke(IpcChannels.agentApprove, runId, approvalId, approved),
+    answerPlan: (runId, planId, decision, edits) =>
+      invoke(IpcChannels.agentPlanAnswer, runId, planId, decision, edits),
     acceptProposal: (runId, proposalId) =>
       invoke(IpcChannels.agentAcceptProposal, runId, proposalId),
     rejectProposal: (runId, proposalId) =>

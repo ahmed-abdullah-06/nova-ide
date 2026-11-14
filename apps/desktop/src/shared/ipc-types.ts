@@ -13,6 +13,8 @@ import type {
   AgentEvent,
   AgentPermissionCategory,
   AgentPermissionView,
+  AgentPlanDecision,
+  AgentPlanEdit,
   AgentRevertPreview,
   AgentRevertResult,
   AgentState,
@@ -82,6 +84,7 @@ export const IpcChannels = {
   agentCancel: 'agent:cancel',
   agentState: 'agent:state',
   agentApprove: 'agent:approve',
+  agentPlanAnswer: 'agent:plan-answer',
   agentAcceptProposal: 'agent:proposal-accept',
   agentRejectProposal: 'agent:proposal-reject',
   agentAcceptAll: 'agent:proposals-accept-all',
@@ -586,6 +589,21 @@ export interface IpcInvokeMap {
     args: [runId: string, approvalId: string, approved: boolean];
     result: FsResult<void>;
   };
+  /**
+   * Answers the plan of the run.
+   *
+   * The edits can only change a step description; the commands and the
+   * file lists of the plan are never taken from the renderer.
+   */
+  'agent:plan-answer': {
+    args: [
+      runId: string,
+      planId: string,
+      decision: AgentPlanDecision,
+      edits: AgentPlanEdit[],
+    ];
+    result: FsResult<void>;
+  };
   /** Accepts a change proposal: the file is written. */
   'agent:proposal-accept': {
     args: [runId: string, proposalId: string];
@@ -811,6 +829,13 @@ export interface NovaAgentApi {
     runId: string,
     approvalId: string,
     approved: boolean,
+  ): Promise<FsResult<void>>;
+  /** Approves, edits or rejects the plan of the run. */
+  answerPlan(
+    runId: string,
+    planId: string,
+    decision: AgentPlanDecision,
+    edits: AgentPlanEdit[],
   ): Promise<FsResult<void>>;
   /** Accepts a change proposal (the file is written). */
   acceptProposal(runId: string, proposalId: string): Promise<FsResult<void>>;

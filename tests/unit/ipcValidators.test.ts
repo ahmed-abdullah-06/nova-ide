@@ -17,6 +17,7 @@ import {
   assertOptionalCwd,
   assertPathAndBoolean,
   assertPermissionUpdate,
+  assertPlanAnswer,
   assertProposalId,
   assertProviderId,
   assertProviderKey,
@@ -230,6 +231,82 @@ describe('IPC argument validators', () => {
     // `system` is not a category the renderer may configure.
     expect(() => assertPermissionUpdate(['system', true])).toThrow();
     expect(() => assertPermissionUpdate(['read', true, false])).toThrow();
+  });
+
+  it('validates a plan answer and only accepts description edits', () => {
+    expect(() =>
+      assertPlanAnswer(['run-1', 'plan-1', 'approve', []]),
+    ).not.toThrow();
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        [{ stepId: 'step-1', description: 'Read the parser' }],
+      ]),
+    ).not.toThrow();
+    expect(() => assertPlanAnswer(['run-1', 'plan-1', 'reject', []])).not.toThrow();
+    // The arguments are validated strictly.
+    expect(() => assertPlanAnswer(['run-1', 'plan-1', 'approve'])).toThrow();
+    expect(() =>
+      assertPlanAnswer(['run 1', 'plan-1', 'approve', []]),
+    ).toThrow();
+    expect(() => assertPlanAnswer(['run-1', '', 'approve', []])).toThrow();
+    expect(() => assertPlanAnswer(['run-1', 'plan 1', 'approve', []])).toThrow();
+    expect(() => assertPlanAnswer(['run-1', 'plan-1', 'maybe', []])).toThrow();
+    expect(() =>
+      assertPlanAnswer(['run-1', 'plan-1', 'approve', 'edits']),
+    ).toThrow();
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        Array.from({ length: 21 }, () => ({
+          stepId: 'step-1',
+          description: 'step',
+        })),
+      ]),
+    ).toThrow();
+    // An edit can never carry a command, a file or a permission.
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        [
+          {
+            stepId: 'step-1',
+            description: 'Read',
+            command: 'rm -rf /',
+          },
+        ],
+      ]),
+    ).toThrow();
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        [{ stepId: 'step 1', description: 'Read' }],
+      ]),
+    ).toThrow();
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        [{ stepId: 'step-1', description: '   ' }],
+      ]),
+    ).toThrow();
+    expect(() =>
+      assertPlanAnswer([
+        'run-1',
+        'plan-1',
+        'approve',
+        [{ stepId: 'step-1', description: 'x'.repeat(501) }],
+      ]),
+    ).toThrow();
   });
 });
 

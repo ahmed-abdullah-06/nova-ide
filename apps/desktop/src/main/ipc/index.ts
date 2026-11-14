@@ -32,6 +32,7 @@ import {
   assertExternalUrl,
   assertOptionalString,
   assertPermissionUpdate,
+  assertPlanAnswer,
   assertProviderId,
   assertProposalId,
   assertProviderKey,
@@ -479,6 +480,11 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.agentApprove,
     assertApprovalAnswer,
     agentHandlers.approve,
+  );
+  registerChannel(
+    IpcChannels.agentPlanAnswer,
+    assertPlanAnswer,
+    agentHandlers.answerPlan,
   );
   registerChannel(
     IpcChannels.agentAcceptProposal,
