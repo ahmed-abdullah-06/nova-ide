@@ -254,6 +254,110 @@ describe('the catalog of the local models', () => {
     ]);
   });
 
+  it('reports the facts of the machine and the fit of a model', async () => {
+    mock.respondWith({
+      tags: { models: [{ name: 'tiny', size: 1_000_000 }] },
+    });
+    const result = await service().catalog();
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.hardware.totalRamBytes).toBeGreaterThan(0);
+    expect(result.value.hardware.cpuCores).toBeGreaterThan(0);
+    expect(result.value.installed[0]?.fit).toBeDefined();
+    expect(result.value.installed[0]?.fitNote).toBeTruthy();
+  });
+
+  it('reports that too many large models are loaded', async () => {
+    mock.respondWith({
+      tags: { models: [] },
+      ps: {
+        models: [
+          { name: 'big-a', size: 9_000_000_000 },
+          { name: 'big-b', size: 9_000_000_000 },
+        ],
+      },
+    });
+    const result = await service().catalog();
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.tooManyLoaded).toBe(true);
+    expect(result.value.maxConcurrentLoaded).toBe(1);
+  });
+
+  it('does not complain when only one large model is loaded', async () => {
+    mock.respondWith({
+      tags: { models: [] },
+      ps: {
+        models: [
+          { name: 'big-a', size: 9_000_000_000 },
+          { name: 'small', size: 1_000_000 },
+        ],
+      },
+    });
+    const result = await service().catalog();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.tooManyLoaded).toBe(false);
+    }
+  });
+
+  it('unloads a second large model before a local request', async () => {
+    mock.respondWith({
+      tags: { models: [] },
+      ps: {
+        models: [
+          { name: 'big-a', size: 9_000_000_000 },
+          { name: 'big-b', size: 9_000_000_000 },
+        ],
+      },
+    });
+    const service = new LocalModelService({
+      target: async () => ({ baseUrl, remoteConfirmed: false }),
+      getActiveModels: () => [],
+    });
+    await service.ensureSingleLoadedModel('big-c');
+    const generate = mock.requests.find(
+      (request) => request.url === '/api/generate',
+    );
+    expect(generate).toBeDefined();
+    expect(JSON.parse(generate?.body ?? '{}')).toEqual({
+      model: 'big-a',
+      keep_alive: 0,
+    });
+  });
+
+  it('never unloads a model that a running request uses', async () => {
+    mock.respondWith({
+      tags: { models: [] },
+      ps: {
+        models: [
+          { name: 'big-a', size: 9_000_000_000 },
+          { name: 'big-b', size: 9_000_000_000 },
+        ],
+      },
+    });
+    const service = new LocalModelService({
+      target: async () => ({ baseUrl, remoteConfirmed: false }),
+      getActiveModels: () => ['big-a'],
+    });
+    await service.ensureSingleLoadedModel('big-c');
+    const generate = mock.requests.find(
+      (request) => request.url === '/api/generate',
+    );
+    // The model of the running request is never unloaded; the other one
+    // is released, so only one large model stays in the memory.
+    if (generate !== undefined) {
+      expect(JSON.parse(generate.body).model).toBe('big-b');
+    }
+    expect(
+      mock.requests.filter((request) => request.url === '/api/generate'),
+    ).toHaveLength(1);
+  });
+
   it('reports a service that does not run', async () => {
     const result = await service('http://127.0.0.1:1').catalog();
     expect(result.ok).toBe(false);

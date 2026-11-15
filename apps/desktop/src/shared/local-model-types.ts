@@ -23,6 +23,38 @@
  */
 export type ModelCapability = boolean | undefined;
 
+/**
+ * How well a model fits into the free memory of the machine.
+ *
+ * The value is an estimate, never a promise: the panel labels it as
+ * such. The `unknown` value means that the size of the model or the
+ * free memory could not be determined.
+ */
+export type ModelFit = 'likely-fine' | 'slow' | 'may-not-fit' | 'unknown';
+
+/** The facts about the machine that the main process read. */
+export interface HardwareFacts {
+  /** The total memory of the machine (bytes). */
+  totalRamBytes: number;
+  /** The free memory of the machine (bytes). */
+  freeRamBytes: number;
+  /**
+   * The number of processors the system reports.
+   *
+   * Node.js cannot tell the physical cores from the threads, so this
+   * is the number of logical processors.
+   */
+  cpuCores: number;
+  /** The free space of the drive of the models (bytes). */
+  diskFreeBytes?: number;
+  /** The directory that holds the models of Ollama. */
+  diskPath?: string;
+  /** False when the drive of the models could not be determined. */
+  diskKnown: boolean;
+  /** The honest remarks about the facts (for example "no GPU is assumed"). */
+  notes: string[];
+}
+
 /** One model that is installed on this machine. */
 export interface LocalModelEntry {
   /** The id of the model (the name Ollama knows it under). */
@@ -51,6 +83,10 @@ export interface LocalModelEntry {
   expiresAt?: string;
   /** The context length of the running model (when Ollama reports it). */
   contextLength?: number;
+  /** The fit of the model into the free memory (an estimate). */
+  fit: ModelFit;
+  /** The short explanation of the fit. */
+  fitNote?: string;
 }
 
 /**
@@ -98,6 +134,10 @@ export interface LocalModelDetails {
   supportsThinking?: ModelCapability;
   /** The context length of the model (when Ollama reports it). */
   contextLength?: number;
+  /** The fit of the model into the free memory (an estimate). */
+  fit: ModelFit;
+  /** The short explanation of the fit. */
+  fitNote?: string;
 }
 
 /** The state of the local Ollama service. */
@@ -116,6 +156,8 @@ export interface LocalModelCatalog {
   installed: LocalModelEntry[];
   /** The models that are currently loaded in the memory. */
   running: LocalModelEntry[];
+  /** The facts about the machine. */
+  hardware: HardwareFacts;
   /** The state of the local Ollama service. */
   service: LocalServiceState;
   /**

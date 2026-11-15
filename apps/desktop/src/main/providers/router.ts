@@ -30,6 +30,7 @@ export const MAX_RESPONSE_CHARS = 1_000_000;
 interface RunningRequest {
   controller: AbortController;
   providerId: string;
+  model: string;
 }
 
 export interface ProviderRouterOptions {
@@ -58,6 +59,22 @@ export class ProviderRouter {
   /** True when a request with the given id is running. */
   isRunning(requestId: string): boolean {
     return this.running.has(requestId);
+  }
+
+  /**
+   * The models of the requests that are running right now.
+   *
+   * The model management uses the list: a model that is in use cannot
+   * be deleted or unloaded (Milestone 7).
+   */
+  runningModels(): string[] {
+    const models: string[] = [];
+    for (const request of this.running.values()) {
+      if (request.model.length > 0 && !models.includes(request.model)) {
+        models.push(request.model);
+      }
+    }
+    return models;
   }
 
   /**
@@ -105,7 +122,7 @@ export class ProviderRouter {
     }
 
     const controller = new AbortController();
-    this.running.set(requestId, { controller, providerId });
+    this.running.set(requestId, { controller, providerId, model: options.model });
 
     // The stream is consumed in the background: the renderer receives the
     // events through the push channel.

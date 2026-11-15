@@ -237,6 +237,10 @@ export function registerIpcHandlers(): () => Promise<void> {
   // The management of the local models (Milestone 7). The service talks
   // to the local Ollama service; the renderer only sends the name of a
   // model and never gains network access.
+  //
+  // The list of the models that a running request uses is filled in
+  // below, when the chat service and the agent service exist.
+  let activeModels: () => string[] = () => [];
   const localModelService = new LocalModelService({
     target: async () => {
       const settings = await providerService.settingsOf('ollama');
@@ -245,6 +249,7 @@ export function registerIpcHandlers(): () => Promise<void> {
         remoteConfirmed: settings.remoteConfirmed,
       };
     },
+    getActiveModels: () => activeModels(),
   });
   const chatService = new ChatService({
     providers: providerService,
@@ -255,6 +260,8 @@ export function registerIpcHandlers(): () => Promise<void> {
         window.webContents.send(IpcPushChannels.aiStream, { requestId, event });
       }
     },
+    beforeLocalRequest: (model) =>
+      localModelService.ensureSingleLoadedModel(model),
   });
   const conversationStore = new ConversationStore();
 
@@ -314,6 +321,8 @@ export function registerIpcHandlers(): () => Promise<void> {
         });
       }
     },
+    beforeLocalRequest: (model) =>
+      localModelService.ensureSingleLoadedModel(model),
   });
   const agentHandlers = createAgentHandlers(agentService, permissionController);
   const aiHandlers = createAiHandlers(
@@ -323,6 +332,13 @@ export function registerIpcHandlers(): () => Promise<void> {
     conversationStore,
   );
   const localModelHandlers = createLocalModelHandlers(localModelService);
+
+  // The models that a running request uses are known now: a model that
+  // is in use cannot be deleted or unloaded.
+  activeModels = () => [
+    ...chatService.runningModels(),
+    ...agentService.runningModels(),
+  ];
 
 
 

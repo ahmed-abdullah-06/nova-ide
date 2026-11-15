@@ -39,6 +39,13 @@ export interface ChatServiceOptions {
   getRoot: () => string | null;
   /** Called for every event of every running request. */
   onEvent: (requestId: string, event: AIStreamEvent) => void;
+  /**
+   * Called before a request loads a local model (Milestone 7).
+   *
+   * The hook makes sure that only one large model is loaded at the
+   * same time. A failure of the hook never blocks the request.
+   */
+  beforeLocalRequest?: (model: string) => Promise<void>;
 }
 
 export class ChatService {
@@ -98,7 +105,23 @@ export class ChatService {
     const context = await this.buildContext(attachments);
     const messages = buildMessages(history, context.attachments, context.text);
 
+    if (provider.kind === 'local') {
+      // The machine must not hold several large models at the same time
+      // (spec §2.1). The advice never blocks the request.
+      await this.options.beforeLocalRequest?.(model);
+    }
+
     return this.router.start(requestId, providerId, messages, { model });
+  }
+
+  /**
+   * The models of the requests that are running right now.
+   *
+   * The model management uses the list: a model that is in use cannot
+   * be deleted or unloaded.
+   */
+  runningModels(): string[] {
+    return this.router.runningModels();
   }
 
   /** The root of the active workspace (null when there is none). */

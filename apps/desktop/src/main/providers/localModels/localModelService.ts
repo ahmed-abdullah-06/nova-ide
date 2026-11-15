@@ -21,8 +21,10 @@ import type {
 } from '../../../shared/ai-types';
 import {
   MAX_LISTED_MODELS,
+  type HardwareFacts,
   type LocalModelCatalog,
   type LocalModelDetails,
+  type LocalModelEntry,
   type LocalModelEntryDraft,
 } from '../../../shared/local-model-types';
 import {
@@ -36,6 +38,12 @@ import {
   parseModelDetails,
   parseRunningModels,
 } from './catalog';
+import {
+  describeFit,
+  estimateFit,
+  LARGE_MODEL_BYTES,
+  readHardwareFacts,
+} from './hardware';
 import { validateModelName } from './modelNames';
 
 /** The maximum number of bytes of an answer that is read. */
@@ -81,6 +89,7 @@ export class LocalModelService {
    * model.
    */
   async catalog(): Promise<AiResult<LocalModelCatalog>> {
+    const hardware = await readHardwareFacts();
     const target = await this.options.target();
 
     const installed = await this.readInstalled(target);
@@ -103,13 +112,19 @@ export class LocalModelService {
     const truncated = entries.length > MAX_LISTED_MODELS;
     const visible = entries.slice(0, MAX_LISTED_MODELS);
 
+    // Only one large model may be loaded at the same time (spec §2.1).
+    const largeLoaded = runningModels.filter(
+      (entry) => (entry.sizeBytes ?? 0) > LARGE_MODEL_BYTES,
+    );
+
     return {
       ok: true,
       value: {
-        installed: visible,
-        running: runningModels,
+        installed: visible.map((entry) => this.withFit(entry, hardware)),
+        running: runningModels.map((entry) => this.withFit(entry, hardware)),
+        hardware,
         service: { available: true },
-        tooManyLoaded: false,
+        tooManyLoaded: largeLoaded.length > MAX_CONCURRENT_LOADED_MODELS,
         maxConcurrentLoaded: MAX_CONCURRENT_LOADED_MODELS,
         truncated,
       },
@@ -163,13 +178,16 @@ export class LocalModelService {
       installed.ok
         ? installed.value.find((entry) => entry.id === model)
         : undefined;
+    const hardware = await readHardwareFacts();
+    const sizeBytes = summary?.sizeBytes;
+    const fit = estimateFit(sizeBytes, hardware);
 
     return {
       ok: true,
       value: {
         id: model,
         name: model,
-        sizeBytes: summary?.sizeBytes,
+        sizeBytes,
         parameterSize: parsed.parameterSize ?? summary?.parameterSize,
         quantization: parsed.quantization ?? summary?.quantization,
         family: parsed.family ?? summary?.family,
@@ -182,7 +200,85 @@ export class LocalModelService {
         supportsVision: parsed.supportsVision,
         supportsThinking: parsed.supportsThinking,
         contextLength: parsed.contextLength,
+        fit,
+        fitNote: describeFit(fit, sizeBytes, hardware),
       },
+    };
+  }
+
+  /**
+   * Makes sure that only one large model is loaded (spec §2.1).
+   *
+   * The method is called before a local request loads a model. A large
+   * model that is loaded and not used by a running request is unloaded
+   * first, so the machine never holds two of them at the same time.
+   * A failure is ignored: the request must never be blocked by it.
+   */
+  async ensureSingleLoadedModel(model: string): Promise<void> {
+    try {
+      const target = await this.options.target();
+      const guard = this.checkTarget(target);
+      if (guard !== null) {
+        return;
+      }
+      const running = await this.readRunning(target);
+      if (!running.ok) {
+        return;
+      }
+      const active = this.options.getActiveModels?.() ?? [];
+      const large = running.value.filter(
+        (entry) => (entry.sizeBytes ?? 0) > LARGE_MODEL_BYTES,
+      );
+      if (large.length <= MAX_CONCURRENT_LOADED_MODELS) {
+        return;
+      }
+      let remaining = large.length;
+      for (const entry of large) {
+        if (remaining <= MAX_CONCURRENT_LOADED_MODELS) {
+          break;
+        }
+        if (entry.id === model || active.includes(entry.id)) {
+          continue;
+        }
+        await this.unloadModel(target, entry.id);
+        remaining -= 1;
+      }
+    } catch {
+      // The advice must never break a request.
+    }
+  }
+
+  /**
+   * Unloads a model from the memory.
+   *
+   * The file of the model stays on the disk; only the copy in the
+   * memory is released (Ollama unloads a model with `keep_alive: 0`).
+   */
+  private async unloadModel(
+    target: LocalModelTarget,
+    model: string,
+  ): Promise<void> {
+    await ollamaRequest({
+      baseUrl: target.baseUrl,
+      remoteConfirmed: target.remoteConfirmed,
+      method: 'POST',
+      endpoint: '/api/generate',
+      body: JSON.stringify({ model, keep_alive: 0 }),
+      timeoutMs: 60_000,
+      fetchImpl: this.options.fetchImpl,
+    });
+  }
+
+  /** Adds the fit of a model to its entry. */
+  private withFit(
+    entry: LocalModelEntryDraft,
+    hardware: HardwareFacts,
+  ): LocalModelEntry {
+    const fit = estimateFit(entry.sizeBytes, hardware);
+    return {
+      ...entry,
+      fit,
+      fitNote: describeFit(fit, entry.sizeBytes, hardware),
     };
   }
 

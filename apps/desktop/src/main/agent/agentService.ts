@@ -85,6 +85,13 @@ export interface AgentServiceOptions {
   onState: (state: AgentState) => void;
   /** Called when a file of the workspace was changed (the renderer reloads it). */
   onFileChanged: (path: string) => void;
+  /**
+   * Called before a run loads a local model (Milestone 7).
+   *
+   * The hook makes sure that only one large model is loaded at the
+   * same time. A failure of the hook never blocks the run.
+   */
+  beforeLocalRequest?: (model: string) => Promise<void>;
 }
 
 /** The answer of the user to the plan of the run. */
@@ -252,6 +259,12 @@ export class AgentService {
     );
     if (gate !== null) {
       return { ok: false, message: gate.message };
+    }
+
+    if (provider.kind === 'local') {
+      // The machine must not hold several large models at the same time
+      // (spec §2.1). The advice never blocks the run.
+      await this.options.beforeLocalRequest?.(model);
     }
 
     this.currentRunId = `run-${randomUUID()}`;
@@ -569,6 +582,16 @@ export class AgentService {
     this.planResolve = null;
     resolvePlan?.(null);
     this.state = 'cancelled';
+  }
+
+  /**
+   * The models of the requests that are running right now.
+   *
+   * The model management uses the list: a model that is in use cannot
+   * be deleted or unloaded.
+   */
+  runningModels(): string[] {
+    return this.router.runningModels();
   }
 
   // -------------------------------------------------------------------------
