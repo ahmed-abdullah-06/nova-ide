@@ -12,6 +12,8 @@
  *  - the source control panel reports the repository state,
  *  - the problems panel shows the diagnostics of the editor,
  *  - a task can be started and stopped again,
+ *  - the agent plans, proposes, reverts with a conflict confirmation and
+ *    applies a narrowed permission,
  *  - the renderer produces no console errors.
  *
  * Usage:
@@ -85,10 +87,25 @@ async function startMockOllama() {
       });
       request.on('end', () => {
         const body = chunks.join('');
-        // The agent uses a different system prompt, so the mock can tell
-        // the two flows apart.
+        // The planner and the agent use different system prompts, so the
+        // mock can tell the three flows apart.
+        const isPlanner = body.includes('You are planning a coding task');
         const isAgent = body.includes('You are a coding agent');
         response.writeHead(200, { 'content-type': 'application/x-ndjson' });
+        if (isPlanner) {
+          const answer = planAnswers.shift() ?? DEFAULT_PLAN_ANSWER;
+          // The plan is fast: the run only waits for the user after it.
+          setTimeout(() => {
+            response.write(
+              '{"message":{"role":"assistant","content":' +
+                JSON.stringify(answer) +
+                '},"done":false}\n',
+            );
+            response.write('{"done":true,"eval_count":7}\n');
+            response.end();
+          }, 50);
+          return;
+        }
         if (isAgent) {
           const answer = agentAnswers.shift() ?? agentAnswers[0] ??
             '{"thought":"done","final":"The agent is finished."}';
@@ -127,6 +144,30 @@ async function startMockOllama() {
     },
   };
 }
+
+/**
+ * The scripted plan of the planner.
+ *
+ * The mock service returns them one after the other; the default plan is
+ * used once the queue is empty, so every run gets a usable plan.
+ */
+const planAnswers = [];
+
+/** The plan that is used when no scripted plan is queued. */
+const DEFAULT_PLAN_ANSWER = JSON.stringify({
+  steps: [
+    {
+      description: 'Read the notes of the project',
+      files: ['notes.txt'],
+      command: null,
+    },
+    {
+      description: 'Update the notes of the project',
+      files: ['notes.txt'],
+      command: null,
+    },
+  ],
+});
 
 /**
  * The scripted answers of the agent.
@@ -190,6 +231,31 @@ async function waitFor(session, expression, timeoutMs = 30000) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return last;
+}
+
+/**
+ * Waits for the plan of the active run and approves it unchanged.
+ *
+ * @param {import('./cdp.mjs').DevToolsSession} session The session.
+ * @returns {Promise<boolean>} True when the plan was approved.
+ */
+async function approvePlan(session) {
+  const clicked = await waitFor(
+    session,
+    `(() => {
+      const plan = document.querySelector('.agent-panel__plan');
+      if (plan === null) return false;
+      const buttons = [...plan.querySelectorAll('.agent-panel__action')];
+      const approve = buttons.find(
+        (button) => button.textContent.trim() === 'Approve plan',
+      );
+      if (approve === undefined || approve.disabled) return false;
+      approve.click();
+      return true;
+    })()`,
+    30000,
+  );
+  return clicked === true;
 }
 
 /**
@@ -1201,6 +1267,69 @@ async function main() {
     );
     check('the agent run starts', started === true);
 
+    // The plan is shown before the first tool call and can be edited.
+    const planShown = await waitFor(
+      session,
+      `(() => {
+        const plan = document.querySelector('.agent-panel__plan');
+        if (plan === null) return false;
+        return plan.querySelectorAll('.agent-panel__plan-step').length;
+      })()`,
+      30000,
+    );
+    check(
+      'the run shows a plan before it acts',
+      typeof planShown === 'number' && planShown > 0,
+      String(planShown),
+    );
+
+    const planEdited = await session.evaluate(
+      `(() => {
+        const plan = document.querySelector('.agent-panel__plan');
+        if (plan === null) return false;
+        const textarea = plan.querySelector('.agent-panel__plan-description');
+        if (textarea === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(textarea, 'Read the notes of the project carefully');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    check('a plan step can be edited', planEdited === true);
+
+    const planApproved = await waitFor(
+      session,
+      `(() => {
+        const plan = document.querySelector('.agent-panel__plan');
+        if (plan === null) return false;
+        const buttons = [...plan.querySelectorAll('.agent-panel__action')];
+        const approve = buttons.find(
+          (button) => button.textContent.trim() === 'Approve edited plan',
+        );
+        if (approve === undefined || approve.disabled) return false;
+        approve.click();
+        return true;
+      })()`,
+      10000,
+    );
+    check('the edited plan can be approved', planApproved === true);
+
+    const editedEvent = await waitFor(
+      session,
+      `(() => {
+        const events = [...document.querySelectorAll('.agent-panel__event')];
+        const text = events.map((event) => event.textContent).join(' | ');
+        return text.includes('approved the edited plan') ? text : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the approval of the edited plan is reported',
+      typeof editedEvent === 'string',
+      String(editedEvent).slice(0, 120),
+    );
+
     // The progress of the run must be visible.
     const timeline = await waitFor(
       session,
@@ -1317,6 +1446,7 @@ async function main() {
       })()`,
     );
     check('the second run starts', secondStarted === true);
+    check('the second plan can be approved', await approvePlan(session));
 
     const secondProposal = await waitFor(
       session,
@@ -1353,8 +1483,10 @@ async function main() {
       JSON.stringify(unchanged),
     );
 
-    // The checkpoint of the run: the accepted change can be reverted.
-    const reverted = await session.evaluate(
+    // The checkpoint of the run: a file that changed after the run must be
+    // confirmed before the revert overwrites it (carry-over C1).
+    writeFileSync(path.join(fixture, 'notes.txt'), 'a newer edit\n');
+    const previewed = await session.evaluate(
       `(() => {
         const buttons = [...document.querySelectorAll('.agent-panel__action')];
         const revert = buttons.find(
@@ -1365,18 +1497,62 @@ async function main() {
         return true;
       })()`,
     );
-    check('the run can be reverted', reverted === true);
+    check('the revert preview opens', previewed === true);
 
-    const revertedFile = await waitFor(
+    const conflict = await waitFor(
       session,
       `(() => {
-        const state = document.querySelector('.agent-panel__state');
-        if (state === null) return false;
-        return state.textContent.trim() !== 'running';
+        const input = document.querySelector(
+          '.agent-panel__revert-confirm input[type="checkbox"]',
+        );
+        const primary = document.querySelector(
+          '.agent-panel__revert-actions .agent-panel__action--primary',
+        );
+        if (input === null || primary === null) return false;
+        return { disabled: primary.disabled, text: primary.textContent.trim() };
       })()`,
       20000,
     );
-    check('the revert finished', revertedFile !== false);
+    check(
+      'a newer edit is reported as a conflict',
+      typeof conflict === 'object' &&
+        conflict !== null &&
+        conflict.disabled === true,
+      JSON.stringify(conflict),
+    );
+
+    const confirmed = await session.evaluate(
+      `(() => {
+        const input = document.querySelector(
+          '.agent-panel__revert-confirm input[type="checkbox"]',
+        );
+        if (input === null) return false;
+        input.click();
+        return true;
+      })()`,
+    );
+    check('the conflict can be confirmed', confirmed === true);
+
+    const revertClicked = await waitFor(
+      session,
+      `(() => {
+        const primary = document.querySelector(
+          '.agent-panel__revert-actions .agent-panel__action--primary',
+        );
+        if (primary === null || primary.disabled) return false;
+        primary.click();
+        return true;
+      })()`,
+      10000,
+    );
+    check('the confirmed revert runs', revertClicked === true);
+
+    const dialogClosed = await waitFor(
+      session,
+      `(() => document.querySelector('.agent-panel__revert') === null)()`,
+      20000,
+    );
+    check('the revert dialog closes after the revert', dialogClosed === true);
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
     check(
@@ -1384,6 +1560,77 @@ async function main() {
       !existsSync(path.join(fixture, 'notes.txt')),
       'the file was not removed',
     );
+
+    // A rejected plan stops the run before the first tool call.
+    const thirdStarted = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.agent-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Do something that must not run');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const start = buttons.find((b) => b.textContent.trim() === 'Start');
+        if (start === undefined || start.disabled) return false;
+        start.click();
+        return true;
+      })()`,
+    );
+    check('a third run starts', thirdStarted === true);
+
+    const planRejected = await waitFor(
+      session,
+      `(() => {
+        const plan = document.querySelector('.agent-panel__plan');
+        if (plan === null) return false;
+        const buttons = [...plan.querySelectorAll('.agent-panel__action')];
+        const reject = buttons.find(
+          (button) => button.textContent.trim() === 'Reject',
+        );
+        if (reject === undefined || reject.disabled) return false;
+        reject.click();
+        return true;
+      })()`,
+      30000,
+    );
+    check('the plan can be rejected', planRejected === true);
+
+    const planRejectedEvent = await waitFor(
+      session,
+      `(() => {
+        const events = [...document.querySelectorAll('.agent-panel__event')];
+        const text = events.map((event) => event.textContent).join(' | ');
+        return text.includes('rejected the plan') ? text : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the rejected plan is reported',
+      typeof planRejectedEvent === 'string',
+      String(planRejectedEvent).slice(0, 120),
+    );
+
+    const noToolAfterReject = await session.evaluate(
+      `(() => document.querySelectorAll('.agent-panel__event--tool-called').length === 0)()`,
+    );
+    check(
+      'a rejected plan runs no tool',
+      noToolAfterReject === true,
+      'a tool ran after the plan was rejected',
+    );
+
+    const rejectedState = await waitFor(
+      session,
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        if (state === null) return false;
+        const text = state.textContent.trim();
+        return text === 'cancelled' ? text : false;
+      })()`,
+      30000,
+    );
+    check('a rejected plan cancels the run', rejectedState === 'cancelled');
 
     // The stop button must work while a run is in progress.
     agentAnswers.length = 0;
@@ -1408,6 +1655,7 @@ async function main() {
         return true;
       })()`,
     );
+    check('the plan of the last run can be approved', await approvePlan(session));
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const stopped = await session.evaluate(
       `(() => {
@@ -1431,6 +1679,35 @@ async function main() {
       30000,
     );
     check('the stopped run reports that it was cancelled', cancelled === 'cancelled');
+
+    // A permission can be narrowed at once; the main process applies it.
+    const narrowed = await session.evaluate(
+      `(() => {
+        const box = document.querySelector(
+          '.agent-panel__permission input[type="checkbox"]',
+        );
+        if (box === null || !box.checked) return false;
+        box.click();
+        return true;
+      })()`,
+    );
+    check('the read permission can be narrowed', narrowed === true);
+
+    const persisted = await waitFor(
+      session,
+      `(async () => {
+        const view = await window.nova.agent.permissionSettings();
+        return view.current.read === false ? view.current : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the narrowed permission is applied in the main process',
+      typeof persisted === 'object' &&
+        persisted !== null &&
+        persisted.read === false,
+      JSON.stringify(persisted),
+    );
 
     mockOllama.stop();
 
