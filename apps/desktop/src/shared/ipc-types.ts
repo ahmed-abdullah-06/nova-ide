@@ -19,6 +19,10 @@ import type {
   AgentRevertResult,
   AgentState,
 } from './agent-types';
+import type {
+  LocalModelCatalog,
+  LocalModelDetails,
+} from './local-model-types';
 
 /**
  * Typed IPC contract between the renderer and the Electron main process.
@@ -80,6 +84,8 @@ export const IpcChannels = {
   aiProviderRemove: 'ai:provider-remove',
   aiPickFiles: 'ai:pick-files',
   aiContextPreview: 'ai:context-preview',
+  aiLocalModels: 'ai:local-models',
+  aiLocalModelDetails: 'ai:local-model-details',
   agentStart: 'agent:start',
   agentCancel: 'agent:cancel',
   agentState: 'agent:state',
@@ -566,6 +572,20 @@ export interface IpcInvokeMap {
     result: AiResult<ContextPreview[]>;
   };
   /**
+   * The catalog of the local models: the installed models, the models
+   * that are loaded and the facts of the machine.
+   */
+  'ai:local-models': { args: []; result: AiResult<LocalModelCatalog> };
+  /**
+   * The details of one local model (its capabilities, its size).
+   *
+   * The renderer only sends the *name* of the model.
+   */
+  'ai:local-model-details': {
+    args: [model: string];
+    result: AiResult<LocalModelDetails>;
+  };
+  /**
    * Starts an agent run.
    *
    * The approval of the user for a cloud provider is never remembered
@@ -873,6 +893,20 @@ export interface NovaAgentApi {
   onState(listener: (state: AgentState) => void): () => void;
 }
 
+/**
+ * The management of the local models (spec §11.3, §2.1).
+ *
+ * The renderer only ever sends the *name* of a model. The address, the
+ * request and the progress all live in the main process, so the
+ * renderer never gains network access.
+ */
+export interface NovaLocalModelsApi {
+  /** The catalog of the local models (installed, loaded). */
+  catalog(): Promise<AiResult<LocalModelCatalog>>;
+  /** The details of one model. */
+  details(model: string): Promise<AiResult<LocalModelDetails>>;
+}
+
 /** Public API exposed on `window.nova` by the preload bridge. */
 export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
@@ -886,6 +920,7 @@ export interface NovaApi {
   task: NovaTaskApi;
   ai: NovaAiApi;
   agent: NovaAgentApi;
+  localModels: NovaLocalModelsApi;
 }
 
 /**

@@ -24,15 +24,14 @@ import type {
   AIProvider,
   ProviderChatRequest,
 } from '../interfaces/provider';
-import { redact } from '../redact';
+import { DEFAULT_OLLAMA_URL, normalizeBaseUrl } from '../urlPolicy';
 import {
-  DEFAULT_OLLAMA_URL,
-  isLoopbackUrl,
-  normalizeBaseUrl,
-} from '../urlPolicy';
+  DEFAULT_OLLAMA_TIMEOUT_MS,
+  ollamaRequest,
+  type OllamaResult,
+} from './http';
 
-/** The default timeout of a request to the local model (milliseconds). */
-export const DEFAULT_OLLAMA_TIMEOUT_MS = 300_000;
+export { DEFAULT_OLLAMA_TIMEOUT_MS };
 
 export interface OllamaProviderOptions {
   /** The address of the Ollama service. */
@@ -312,100 +311,40 @@ export class OllamaProvider implements AIProvider {
     | { ok: true; value: Response }
     | { ok: false; error: ProviderErrorInfo }
   > {
-    if (!this.remoteConfirmed && !isLoopbackUrl(this.baseUrl)) {
+    const result: OllamaResult = await ollamaRequest({
+      baseUrl: this.baseUrl,
+      remoteConfirmed: this.remoteConfirmed,
+      method,
+      endpoint,
+      body: options.body,
+      signal: options.request?.signal,
+      timeoutMs: this.timeoutMs,
+      fetchImpl: this.fetchImpl,
+    });
+    if (result.ok) {
+      return { ok: true, value: result.value };
+    }
+    if (result.status === 404) {
       return {
         ok: false,
         error: {
-          code: 'not-running',
+          code: 'not-installed',
           message:
-            'The address of Ollama is not on this machine. ' +
-            'Confirm the address before it can be used.',
+            'Ollama does not seem to be installed at ' +
+            `${this.baseUrl}. Start Ollama and try again.`,
         },
       };
     }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, this.timeoutMs);
-    const signal = options.request?.signal;
-    const onAbort = (): void => {
-      controller.abort();
-    };
-    signal?.addEventListener('abort', onAbort);
-
-    try {
-      const response = await this.fetchImpl(`${this.baseUrl}${endpoint}`, {
-        method,
-        headers:
-          options.body === undefined
-            ? undefined
-            : { 'content-type': 'application/json' },
-        body: options.body,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const detail = await readErrorDetail(response);
-        if (response.status === 404) {
-          return {
-            ok: false,
-            error: {
-              code: 'not-installed',
-              message:
-                'Ollama does not seem to be installed at ' +
-                `${this.baseUrl}. Start Ollama and try again.`,
-            },
-          };
-        }
-        if (response.status === 404 || detail.includes('not found')) {
-          return {
-            ok: false,
-            error: {
-              code: 'model-not-found',
-              message: detail || 'The model was not found.',
-            },
-          };
-        }
-        return {
-          ok: false,
-          error: {
-            code: 'unknown',
-            message: detail || `Ollama answered with the status ${response.status}.`,
-          },
-        };
-      }
-      return { ok: true, value: response };
-    } catch (error) {
-      if (signal?.aborted === true) {
-        return {
-          ok: false,
-          error: { code: 'cancelled', message: 'The request was cancelled.' },
-        };
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('abort')) {
-        return {
-          ok: false,
-          error: {
-            code: 'timeout',
-            message: 'The request to Ollama timed out.',
-          },
-        };
-      }
+    if (result.detail !== undefined && result.detail.includes('not found')) {
       return {
         ok: false,
         error: {
-          code: 'not-running',
-          message:
-            'Ollama does not seem to be running. ' +
-            'Start the Ollama application and try again.',
+          code: 'model-not-found',
+          message: result.detail || 'The model was not found.',
         },
       };
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', onAbort);
     }
+    return { ok: false, error: result.error };
   }
 }
 
@@ -485,26 +424,4 @@ function parseChatChunk(line: string): ParsedChunk {
     text: typeof content === 'string' ? content : undefined,
     usage: Object.keys(usage).length > 0 ? usage : undefined,
   };
-}
-
-/** Reads the error detail of a failed response (never a secret). */
-async function readErrorDetail(response: Response): Promise<string> {
-  try {
-    const text = await response.text();
-    if (text.length === 0) {
-      return '';
-    }
-    try {
-      const parsed: unknown = JSON.parse(text);
-      const message = (parsed as { error?: unknown }).error;
-      if (typeof message === 'string') {
-        return redact(message);
-      }
-    } catch {
-      // Not JSON — the raw text is used (it is short and local).
-    }
-    return redact(text.slice(0, 200));
-  } catch {
-    return '';
-  }
 }

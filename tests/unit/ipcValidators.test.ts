@@ -12,6 +12,7 @@ import {
   assertAgentTask,
   assertApprovalAnswer,
   assertChatRequest,
+  assertModelName,
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
@@ -37,6 +38,19 @@ describe('IPC argument validators', () => {
   it('rejects arguments on a channel that takes none', () => {
     expect(() => assertNoArgs([])).not.toThrow();
     expect(() => assertNoArgs(['x'])).toThrow();
+  });
+
+  it('validates the name of a local model', () => {
+    expect(() => assertModelName(['qwen2.5:7b'])).not.toThrow();
+    expect(() => assertModelName(['library/llama3:8b'])).not.toThrow();
+    // A URL, a path or a shell fragment is never a model name.
+    expect(() => assertModelName(['http://example.com/m'])).toThrow();
+    expect(() => assertModelName(['../../etc/passwd'])).toThrow();
+    expect(() => assertModelName(['model; rm -rf /'])).toThrow();
+    expect(() => assertModelName([''])).toThrow();
+    expect(() => assertModelName([])).toThrow();
+    expect(() => assertModelName(['a', 'b'])).toThrow();
+    expect(() => assertModelName([42])).toThrow();
   });
 
   it('validates a single string argument', () => {

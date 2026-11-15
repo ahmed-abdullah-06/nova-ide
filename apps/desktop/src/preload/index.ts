@@ -197,6 +197,11 @@ const novaApi: NovaApi = {
     onExit: (listener) => subscribe<TerminalExit>(IpcPushChannels.terminalExit, listener),
   },
 
+  localModels: {
+    catalog: () => invoke(IpcChannels.aiLocalModels),
+    details: (model) => invoke(IpcChannels.aiLocalModelDetails, model),
+  },
+
 };
 
 contextBridge.exposeInMainWorld('nova', novaApi);

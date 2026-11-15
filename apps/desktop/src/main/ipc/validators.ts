@@ -7,6 +7,7 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { AgentPermissionCategory } from '../../shared/agent-types';
+import { validateModelName } from '../providers/localModels/modelNames';
 
 /** Validates the argument list of a channel; throws on unexpected input. */
 export type ArgsValidator<C extends keyof IpcInvokeMap> = (
@@ -599,6 +600,23 @@ export function assertPermissionUpdate(
   }
   if (typeof allowed !== 'boolean') {
     throw new Error('Expected the permission state');
+  }
+}
+
+/**
+ * The name of a local model.
+ *
+ * The renderer only sends a name; the main process builds the request
+ * itself. The name is nevertheless validated strictly, so a URL, a
+ * path or a shell fragment can never reach Ollama (spec §19.2).
+ */
+export function assertModelName(args: unknown[]): asserts args is [model: string] {
+  if (args.length !== 1 || typeof args[0] !== 'string') {
+    throw new Error('Expected the name of a model');
+  }
+  const problem = validateModelName(args[0]);
+  if (problem !== null) {
+    throw new Error(problem);
   }
 }
 

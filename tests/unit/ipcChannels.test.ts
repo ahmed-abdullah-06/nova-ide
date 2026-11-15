@@ -86,6 +86,8 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.agentAudit,
       IpcChannels.agentPermissionSettings,
       IpcChannels.agentPermissionUpdate,
+      IpcChannels.aiLocalModels,
+      IpcChannels.aiLocalModelDetails,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

@@ -20,6 +20,7 @@ import { createGitHandlers } from './git';
 import { createTaskHandlers } from './tasks';
 import { createAiHandlers } from './ai';
 import { createAgentHandlers } from './agent';
+import { createLocalModelHandlers } from './localModels';
 import {
   assertNoArgs,
   assertOneString,
@@ -31,6 +32,7 @@ import {
   assertConversation,
   assertConversationId,
   assertExternalUrl,
+  assertModelName,
   assertOptionalString,
   assertPermissionUpdate,
   assertPlanAnswer,
@@ -62,6 +64,7 @@ import { ConversationStore } from '../providers/conversationStore';
 import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
+import { LocalModelService } from '../providers/localModels/localModelService';
 import { AgentService } from '../agent/agentService';
 import { AuditStore } from '../agent/auditStore';
 import { ToolExecutor } from '../agent/toolExecutor';
@@ -230,6 +233,19 @@ export function registerIpcHandlers(): () => Promise<void> {
   const providerService = new ProviderService(providerSettings, (providerId) =>
     credentialStore.getKey(providerId),
   );
+
+  // The management of the local models (Milestone 7). The service talks
+  // to the local Ollama service; the renderer only sends the name of a
+  // model and never gains network access.
+  const localModelService = new LocalModelService({
+    target: async () => {
+      const settings = await providerService.settingsOf('ollama');
+      return {
+        baseUrl: settings.baseUrl,
+        remoteConfirmed: settings.remoteConfirmed,
+      };
+    },
+  });
   const chatService = new ChatService({
     providers: providerService,
     credentials: credentialStore,
@@ -306,6 +322,7 @@ export function registerIpcHandlers(): () => Promise<void> {
     credentialStore,
     conversationStore,
   );
+  const localModelHandlers = createLocalModelHandlers(localModelService);
 
 
 
@@ -599,6 +616,20 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.aiContextPreview,
     assertContextAttachments,
     aiHandlers.previewContext,
+  );
+
+  // The management of the local models (Milestone 7). The renderer only
+  // sends the name of a model; the main process builds the request and
+  // sends it to the configured Ollama host.
+  registerChannel(
+    IpcChannels.aiLocalModels,
+    assertNoArgs,
+    localModelHandlers.catalog,
+  );
+  registerChannel(
+    IpcChannels.aiLocalModelDetails,
+    assertModelName,
+    localModelHandlers.details,
   );
 
 
