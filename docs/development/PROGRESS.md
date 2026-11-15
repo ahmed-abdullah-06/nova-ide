@@ -271,11 +271,67 @@ extension marketplace (see spec §23).
 - [x] No dependency was added: the diff generator, the agent loop and the
       protocol are part of the application
 
-**M5 implemented — awaiting review.** Out of scope for M5 (planned):
-multi-agent systems, the planner of Milestone 6, the local model management
-of Milestone 7, voice, the extension marketplace (see spec §23).
+**M5 implemented — awaiting review.** Out of scope for M5 (planned): multi-agent
+systems, the local model management of Milestone 7, voice, the extension
+marketplace (see spec §23). The planner and the verification layer were
+implemented in Milestone 6.
 
-## Milestones 6–10
+## Milestone 6 — Planning, Permissions, and Verification
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| P.1 | The planner (`main/agent/planner.ts`) | Completed | A separate module with an injected model call: it never calls a provider directly and never calls a tool. A strict JSON protocol (`steps[].description/files/command`), a bounded number of steps and files, one repair attempt and a visible minimal (degraded) plan instead of a silent failure (spec §13) |
+| P.2 | The plan lifecycle | Completed | New states `planning` and `waitingForPlan`: the first tool call happens only after an answer. Approve, edit-then-approve and reject. Only step descriptions can be edited; files, commands and permissions never come from the renderer. A rejected plan cancels the run before it acts |
+| P.3 | The plan interface | Completed | `PlanReview` shows the steps, the files, the command and the degraded notice; a step description is editable; the primary action becomes "Approve edited plan" only when an edit is valid |
+| P.4 | Deviations | Completed | `PlanTracker` reports a file write or a command that is outside the plan in the timeline and in the final report. The plan is advisory and never blocks; reads are not reported |
+| Q.1 | Permission categories | Completed | Read the workspace, prepare file changes and run commands. Defaults are shown next to each category; the settings are persisted in `agent-permissions.json` in the user data directory |
+| Q.2 | Main-side widening | Completed | Narrowing is applied directly; widening opens a native dialog of the main process. The renderer can only ask; the model can never change the policy. `system` and the forbidden operations have no category and stay impossible |
+| Q.3 | Permission settings interface | Completed | The Agent panel lists the three categories with their defaults, the result message and the error when a native confirmation is declined; every change is an audit entry |
+| R.1 | Verification engine (`main/agent/verification.ts`) | Completed | A pure builder of the final report: a change is verified only by a command that passed and ran after the last accepted change. Pending proposals, failed/stopped commands, plan differences and untested changes are reported as unresolved; a legacy command without a timestamp never verifies anything (spec §10.6) |
+| R.2 | Test execution | Completed | The `run_tests` tool runs a script of the workspace `package.json` (validated name, default `test`, no shell, no arbitrary arguments) through the task runner and behind the command permission; it is recorded as a test with its own kind |
+| R.3 | Error recovery | Completed | A failed model call is retried once, at most twice per run, with a visible `recovery` event. A cancelled run is never retried; the consecutive-failure limit still stops a provider that keeps failing (spec §19.6) |
+| R.4 | Persistent audit history | Completed | Metadata-only entries (run, tool calls, commands, permission changes, approvals, proposals) are validated, bounded to 500 and written atomically to `agent-audit.json`; the panel shows them. No file content, secret or model reasoning is stored |
+| S.1 | Carry-over C1: revert conflicts | Completed | A revert preview lists each file with a `safe` marker or a conflict (newer disk edit or dirty editor buffer). Nothing is overwritten before a per-file confirmation; safe files are restored, the checkpoint is kept while a conflict remains |
+| S.2 | Carry-over C2: bounded context | Completed | `contextManager.ts` bounds the prompt per provider and model (48 000 characters for a cloud model, 24 000 for a local one), shortens old tool results, emits a visible notice, keeps the system rules and the task intact and never drops a safety rule silently |
+| S.3 | Carry-over C3: permission settings UI | Completed | Covered by Q.1–Q.3: explicit defaults, free narrowing, native confirmation for widening, main-side validation, forbidden tools impossible |
+| S.4 | Carry-over C4: adapter and fallback tests | Completed | The OpenAI-compatible adapter accumulates a native tool call across stream chunks (name and arguments), rejects malformed arguments and handles multiple calls explicitly; the Monaco loader of the proposal diff is injectable and the text fallback is tested |
+| S.5 | Carry-over C5: real-model procedure | Completed | `docs/development/REAL_MODEL_TESTING.md` documents the manual Ollama and cloud-key procedure. Automated tests use mock servers only and never make a paid call |
+| T.1 | Unit tests | Tested | 470/470 tests pass (34 files). New: planner (29), permission settings/controller (33), context manager (8), verification engine, audit store, revert conflicts, split tool calls, text fallback and the IPC validators |
+| T.2 | Typecheck | Tested | `pnpm typecheck` exit 0 |
+| T.3 | Production build | Tested | `pnpm package` and `pnpm make` succeed |
+| T.4 | Runtime verification (CDP, packaged app) | Tested | 94/94 checks — the harness now edits and approves a plan, rejects a plan, confirms a revert conflict and narrows a permission category against a mock provider; no console errors |
+| T.5 | Crash hygiene and fuses | Tested | `pnpm verify:fuses` and `pnpm verify:quitcleanup` pass; the audit is flushed before the child processes are stopped |
+| T.6 | Documentation | Completed | README, CHANGELOG, this file and the real-model procedure are updated |
+
+### Milestone 6 Definition of Done
+
+- [x] The agent states a plan before it acts; the plan is shown and can be
+      approved, edited (descriptions only) or rejected
+- [x] A rejected plan stops the run before any tool call; a plan can never
+      grant a permission or inject a command or a file
+- [x] The permission categories are configurable, persisted and validated in
+      the main process; narrowing is free and widening needs a native
+      confirmation that the renderer cannot bypass
+- [x] The final report separates changes from verification and never claims a
+      success that no command proved; test execution is available through
+      `run_tests`
+- [x] A failed model call recovers once (bounded), and the audit history
+      survives a restart with metadata only
+- [x] A revert never overwrites a newer edit without an explicit per-file
+      confirmation; the context of a run is bounded with a visible notice
+- [x] Unit tests pass (470/470), typecheck clean, `pnpm package`/`pnpm make`
+      succeed, the packaged runtime verification passes with the new flows
+- [x] The real-model procedure is documented; no automated test makes a paid
+      API call or needs a network connection
+- [x] No dependency was added and every new IPC channel is whitelisted,
+      trusted-sender checked and validated; security flags, fuses and CSP are
+      unchanged
+
+**M6 implemented — awaiting review.** Out of scope for M6 (planned): the local
+model management of Milestone 7, voice, advanced computer control, the
+extension architecture and release automation of Milestones 8–10.
+
+## Milestones 7–10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
 

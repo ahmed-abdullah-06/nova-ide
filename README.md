@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 5 — AI Coding Agent (implemented, awaiting review).
+**Status:** Milestone 6 — Planning, Permissions, and Verification (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -43,7 +43,9 @@ pnpm verify         # runtime verification of the packaged app (Chrome DevTools 
 The runtime verification drives the real application: it starts the packaged
 build, opens a workspace, uses the terminal, the search, the source control, the
 problems panel, the task runner, the chat and the coding agent (against a mock
-provider), and reports every check it performed.
+provider), approves and edits a plan, changes a permission category, reviews a
+revert conflict and checks the verification report, and reports every check it
+performed.
 
 Every run uses its own, temporary profile directory, which is deleted
 afterwards — the settings, the API keys and the conversations of the user are
@@ -62,10 +64,10 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 5)
+## Features (Milestone 6)
 
-Milestone 4 (the provider layer and the chat) and Milestone 3 (terminal,
-search, Git, problems, tasks) are still in place:
+Milestone 5 (the coding agent), Milestone 4 (the provider layer and the chat)
+and Milestone 3 (terminal, search, Git, problems, tasks) are still in place:
 
 - Open a workspace folder through the native folder picker; recent workspaces
   are remembered between launches.
@@ -160,6 +162,54 @@ Milestone 5 adds the coding agent:
   the errors and the problems the agent could not solve. The agent never
   claims a success that no command proved.
 
+Milestone 6 adds planning, permissions and verification:
+
+- **An explicit plan before the agent acts**: a separate planner asks the
+  model for a short plan (steps, likely files, expected command) and the run
+  waits in `waitingForPlan`. The plan is shown before the first tool call and
+  can be approved, edited or rejected. Only the step descriptions are
+  editable — a plan can never change a permission, a command or a file. A
+  rejected plan stops the run; an unusable plan is repaired once and then a
+  visible minimal plan is shown instead of failing silently.
+- **Deviations are reported**: the plan is advisory. When the agent changes a
+  file or runs a command that is not in the approved plan, the timeline and
+  the final report say so; nothing is blocked or hidden.
+- **Permission categories**: *Read the workspace*, *Prepare file changes* and
+  *Run commands*. Each shows its default. Narrowing a category is applied at
+  once; widening one asks for a native confirmation of the main process,
+  which the renderer and the model cannot bypass. Forbidden operations
+  (delete, install, git commit/push, shells, anything outside the workspace)
+  have no category and stay impossible.
+- **A verification engine**: the report separates what was changed from what
+  was verified. A change is only called verified when a command that passed
+  ran after the last accepted change; pending proposals, failed or stopped
+  commands and plan differences are reported as unresolved.
+- **Test execution**: the `run_tests` tool runs a script of the workspace
+  `package.json` only (a safe name, never an arbitrary shell string), through
+  the existing task runner and its approval, and records it as a test.
+- **Bounded error recovery**: a failed model call is retried once, at most
+  twice per run, with a visible `recovery` event. Recovery never retries a
+  cancelled run and the consecutive-failure limit still stops a broken
+  provider.
+- **Persistent audit history**: the metadata-only log (tool calls, commands,
+  permission changes, approvals, proposals, runs) is written to
+  `agent-audit.json` in the application data directory, bounded to 500
+  entries, and shown in the agent panel. It never contains file content, a
+  secret or the reasoning of the model.
+- **Conflict-aware revert (M5 carry-over)**: a file that changed on the disk
+  or in a dirty editor buffer after the run is only reverted after an
+  explicit per-file confirmation. The revert dialog shows each conflict, only
+  the confirmed conflicts are overwritten, and the safe files are restored by
+  the same action.
+- **Bounded context (M5 carry-over)**: the history sent to the model is
+  bounded per provider and model, older tool results are shortened, a
+  visible notice records it, and the system rules and the task are never
+  dropped.
+- **Real-model procedure**: the manual check with Ollama and with a cloud key
+  is documented in
+  [`docs/development/REAL_MODEL_TESTING.md`](./docs/development/REAL_MODEL_TESTING.md);
+  automated tests use mock servers only and never make a paid call.
+
 Not yet implemented (planned for later milestones): multi-agent systems,
 local model management, voice, the extension marketplace (see spec §23).
 
@@ -198,9 +248,18 @@ local model management, voice, the extension marketplace (see spec §23).
   accepts them, the file service of Milestone 2 detects a conflict, and the
   audit log of the agent holds metadata only — never a secret, never the
   content of a file, never the reasoning of the model.
+- Permission categories are stored and validated in the main process. The
+  renderer can only ask for a change; narrowing is applied directly, while
+  widening opens a native dialog of the main process. The plan of a run is
+  advisory: it is displayed and can be edited in its descriptions only, and
+  every tool call still passes the one central permission policy.
+- Reverting a run never overwrites a file that changed after the run unless
+  the user confirms that file in the revert dialog; the main process checks
+  the disk itself and also accepts the paths of dirty editor buffers.
 
 ## Documentation
 
 - [Product specification](./NOVA_IDE_SPEC.md)
 - [Development progress](./docs/development/PROGRESS.md)
+- [Real-model testing (manual)](./docs/development/REAL_MODEL_TESTING.md)
 - [Changelog](./CHANGELOG.md)

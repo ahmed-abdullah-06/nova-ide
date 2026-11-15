@@ -196,8 +196,85 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     timeline, the proposal, the diff review, the accept writes the file, the
     reject leaves the disk unchanged, the Stop cancels the run and the
     checkpoint of the run can be reverted.
+- **Milestone 6 — Planning, Permissions, and Verification:**
+  - Explicit plan before the agent acts: a separate planner module produces
+    a short plan (steps, likely files, expected command) with a strict JSON
+    protocol, one repair attempt and a visible degraded plan instead of a
+    silent failure. The run waits in `waitingForPlan`; the plan is shown
+    before the first tool call and can be approved, edited or rejected. Only
+    step descriptions are editable — a plan can never grant a permission or
+    change a command or a file. A rejected plan stops the run before any tool
+    call.
+  - Deviations from the approved plan are advisory and visible: a file
+    change or a command outside the plan is reported in the timeline and in
+    the final report; reads are not treated as deviations.
+  - Permission categories in the agent panel: read the workspace, prepare
+    file changes, run commands. The defaults are shown; narrowing is applied
+    immediately, widening needs a native confirmation of the main process.
+    The settings are persisted in `agent-permissions.json` and validated in
+    the main process. `system` and the forbidden operations have no category
+    and stay impossible.
+  - Verification engine in the final report: a change is only reported as
+    verified when a command that passed ran after the last accepted change.
+    Pending proposals, failed or stopped commands and differences from the
+    plan are reported as unresolved; a legacy command without a timestamp
+    never verifies anything.
+  - Test execution: the `run_tests` tool runs a script of the workspace
+    `package.json` only (validated name, no shell, no arbitrary arguments),
+    through the existing task runner and its approval, and records it as a
+    test in the report.
+  - Bounded error recovery: a failed model call is retried once (at most two
+    recoveries per run), with a visible `recovery` event. A cancelled run is
+    never retried, and the consecutive-failure limit still stops a provider
+    that keeps failing.
+  - Persistent audit history: the metadata-only entries (run, tool calls,
+    commands, permission changes, approvals, proposals) are written to
+    `agent-audit.json` in the application data directory (bounded to 500),
+    loaded at start and shown in the agent panel. The audit never contains
+    file content, a secret or the reasoning of the model.
+  - Five new IPC channels (plan answer, revert preview, permission settings
+    and permission update, audit) are whitelisted, trusted-sender checked and
+    validated per channel, with the compile-time channel coverage guard.
+    Plan edits and permission updates are re-validated in the main process.
+  - Unit tests: planner (29), permission settings and controller (33), the
+    context manager (8), the OpenAI-compatible tool-call translation, the
+    text-diff fallback, the verification engine, the audit store and the
+    revert conflicts — 470/470 tests passing in total.
+  - Runtime verification of the packaged application now also edits and
+    approves a plan, rejects a plan, confirms a revert conflict and narrows a
+    permission category (against a mock provider).
+  - The manual real-model procedure (Ollama and a cloud key) is documented
+    in `docs/development/REAL_MODEL_TESTING.md`. Automated tests still call
+    mock servers only; no paid API call is made by a test.
 
 ### Fixed
+
+- Reverting the changes of a run overwrote a file that the user (or another
+  program) edited after the run. The revert now previews every file, reports
+  a newer disk edit and every dirty editor buffer as a conflict, and only
+  overwrites a conflict whose file was explicitly confirmed. The safe files
+  are restored; the checkpoint is kept while a conflict remains.
+- The context of an agent run grew without a bound, so a long run could
+  exceed the window of the model. The history sent to the model is now
+  bounded per provider and model (48 000 characters for a cloud model,
+  24 000 for a local one), older tool results are shortened, a visible notice
+  records the compaction, and the system rules and the task are never
+  dropped.
+- The permission settings of the agent could only be changed in the code,
+  and a change would not have been validated by the main process. The three
+  categories are configurable in the panel, persisted, re-validated in the
+  main process; the renderer can narrow a permission but a widening requires
+  a native confirmation and can never come from the model.
+- The OpenAI-compatible adapter dropped the name and the arguments of a
+  native tool call when the service split them across stream chunks, and it
+  accepted malformed arguments. The call is now accumulated by index, a
+  missing name or malformed arguments are reported as an error, and multiple
+  calls are handled explicitly. A Monaco failure in the proposal review
+  falls back to a text diff, and the fallback is tested.
+- Reviewing a proposal depended on Monaco loading successfully; a missing
+  chunk or a broken worker left the review empty. The loader is now
+  injectable, a mount failure falls back to the plain unified diff with a
+  visible message, and the fallback is covered by a test.
 
 - Cancelling a request of the provider router aborted the underlying request
   but never settled the promise of the caller, so a consumer that waited for
@@ -242,7 +319,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M3 — Developer Tools (Terminal, Search, Git, Problems, Tasks) | Implemented (awaiting review) |
 | M4 — AI Providers and Chat | Implemented (awaiting review) |
 | M5 — AI Coding Agent (single bounded agent) | Implemented (awaiting review) |
-| M6 — Planning, Permissions, and Verification | Not Started |
+| M6 — Planning, Permissions, and Verification | Implemented (awaiting review) |
 | M7 — Local AI and Model Management | Not Started |
 | M8 — Voice Assistant | Not Started |
 | M9 — Advanced Computer-Control Agent | Not Started |
