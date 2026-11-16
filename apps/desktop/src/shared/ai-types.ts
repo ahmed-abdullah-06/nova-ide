@@ -107,6 +107,8 @@ export type ProviderErrorCode =
   | 'cancelled'
   | 'disabled'
   | 'no-context-approval'
+  // The management of the local models (Milestone 7).
+  | 'busy'
   | 'unknown';
 
 /** A user-facing description of a failed request. */

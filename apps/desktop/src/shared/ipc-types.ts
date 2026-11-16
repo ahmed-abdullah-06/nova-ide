@@ -20,6 +20,7 @@ import type {
   AgentState,
 } from './agent-types';
 import type {
+  LocalDownloadProgress,
   LocalModelCatalog,
   LocalModelDetails,
 } from './local-model-types';
@@ -86,6 +87,8 @@ export const IpcChannels = {
   aiContextPreview: 'ai:context-preview',
   aiLocalModels: 'ai:local-models',
   aiLocalModelDetails: 'ai:local-model-details',
+  aiLocalModelPull: 'ai:local-model-pull',
+  aiLocalModelCancelPull: 'ai:local-model-cancel-pull',
   agentStart: 'agent:start',
   agentCancel: 'agent:cancel',
   agentState: 'agent:state',
@@ -117,6 +120,7 @@ export const IpcPushChannels = {
   taskOutput: 'task:output',
   taskStatus: 'task:status',
   aiStream: 'ai:stream',
+  aiLocalModelProgress: 'ai:local-model-progress',
   agentEvent: 'agent:event',
   agentStateChanged: 'agent:state-changed',
 } as const;
@@ -586,6 +590,22 @@ export interface IpcInvokeMap {
     result: AiResult<LocalModelDetails>;
   };
   /**
+   * Starts the download of a local model.
+   *
+   * The download only starts when the user confirmed it: it reaches
+   * out into the registry of Ollama over the internet. The main
+   * process generates the id of the download.
+   */
+  'ai:local-model-pull': {
+    args: [model: string, confirmed: boolean];
+    result: AiResult<{ downloadId: string }>;
+  };
+  /** Stops a running download (only a download that exists). */
+  'ai:local-model-cancel-pull': {
+    args: [downloadId: string];
+    result: AiResult<void>;
+  };
+  /**
    * Starts an agent run.
    *
    * The approval of the user for a cloud provider is never remembered
@@ -901,10 +921,24 @@ export interface NovaAgentApi {
  * renderer never gains network access.
  */
 export interface NovaLocalModelsApi {
-  /** The catalog of the local models (installed, loaded). */
+  /** The catalog of the local models (installed, loaded, hardware). */
   catalog(): Promise<AiResult<LocalModelCatalog>>;
   /** The details of one model. */
   details(model: string): Promise<AiResult<LocalModelDetails>>;
+  /**
+   * Starts the download of a model.
+   *
+   * `confirmed` must be true: the download reaches out into the
+   * registry of Ollama over the internet.
+   */
+  pull(
+    model: string,
+    confirmed: boolean,
+  ): Promise<AiResult<{ downloadId: string }>>;
+  /** Stops a running download. */
+  cancelPull(downloadId: string): Promise<AiResult<void>>;
+  /** Subscribes to the progress of a download; returns unsubscribe. */
+  onProgress(listener: (progress: LocalDownloadProgress) => void): () => void;
 }
 
 /** Public API exposed on `window.nova` by the preload bridge. */

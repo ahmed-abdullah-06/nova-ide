@@ -245,3 +245,61 @@ function readContextLength(
   }
   return undefined;
 }
+
+/** One status line of `/api/pull`. */
+export interface ParsedPullStatus {
+  /** The status message of Ollama. */
+  status?: string;
+  /** The digest of the layer that is transferred. */
+  digest?: string;
+  /** The bytes that are expected. */
+  total?: number;
+  /** The bytes that were transferred. */
+  completed?: number;
+  /** The error message of Ollama (when it answered with one). */
+  error?: string;
+}
+
+/**
+ * Parses one status line of the answer of `/api/pull`.
+ *
+ * Ollama answers with newline delimited JSON: `{ status, digest, total,
+ * completed }` for every layer of the model.
+ *
+ * @param line The line of the stream (without the line break).
+ * @returns The status, or null when the line could not be read.
+ */
+export function parsePullStatus(line: string): ParsedPullStatus | null {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return null;
+  }
+  const entry = parsed as {
+    status?: unknown;
+    digest?: unknown;
+    total?: unknown;
+    completed?: unknown;
+    error?: unknown;
+  };
+  const status = readText(entry.status);
+  const error = readText(entry.error);
+  if (status === undefined && error === undefined) {
+    return null;
+  }
+  return {
+    status,
+    digest: readText(entry.digest),
+    total: readNumber(entry.total),
+    completed: readNumber(entry.completed),
+    error,
+  };
+}

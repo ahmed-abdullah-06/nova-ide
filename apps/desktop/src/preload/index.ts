@@ -12,6 +12,7 @@ import {
   type TerminalExit,
 } from '../shared/ipc-types';
 import type { AIStreamEvent } from '../shared/ai-types';
+import type { LocalDownloadProgress } from '../shared/local-model-types';
 import type { AgentEvent, AgentState } from '../shared/agent-types';
 
 /** Typed `ipcRenderer.invoke` restricted to the shared channel contract. */
@@ -200,6 +201,15 @@ const novaApi: NovaApi = {
   localModels: {
     catalog: () => invoke(IpcChannels.aiLocalModels),
     details: (model) => invoke(IpcChannels.aiLocalModelDetails, model),
+    pull: (model, confirmed) =>
+      invoke(IpcChannels.aiLocalModelPull, model, confirmed),
+    cancelPull: (downloadId) =>
+      invoke(IpcChannels.aiLocalModelCancelPull, downloadId),
+    onProgress: (listener) =>
+      subscribe<LocalDownloadProgress>(
+        IpcPushChannels.aiLocalModelProgress,
+        listener,
+      ),
   },
 
 };

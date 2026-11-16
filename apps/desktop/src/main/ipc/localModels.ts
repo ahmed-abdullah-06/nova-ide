@@ -18,6 +18,8 @@ type Handler<C extends keyof IpcInvokeMap> = (
 export interface LocalModelHandlers {
   catalog: Handler<'ai:local-models'>;
   details: Handler<'ai:local-model-details'>;
+  pull: Handler<'ai:local-model-pull'>;
+  cancelPull: Handler<'ai:local-model-cancel-pull'>;
 }
 
 export function createLocalModelHandlers(
@@ -26,5 +28,7 @@ export function createLocalModelHandlers(
   return {
     catalog: async () => models.catalog(),
     details: async (model) => models.details(model),
+    pull: async (model, confirmed) => models.pull(model, confirmed),
+    cancelPull: async (downloadId) => models.cancelPull(downloadId),
   };
 }

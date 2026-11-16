@@ -12,7 +12,9 @@ import {
   assertAgentTask,
   assertApprovalAnswer,
   assertChatRequest,
+  assertDownloadId,
   assertModelName,
+  assertModelPull,
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
@@ -51,6 +53,25 @@ describe('IPC argument validators', () => {
     expect(() => assertModelName([])).toThrow();
     expect(() => assertModelName(['a', 'b'])).toThrow();
     expect(() => assertModelName([42])).toThrow();
+  });
+
+  it('validates the request of a download', () => {
+    expect(() => assertModelPull(['qwen2.5:7b', true])).not.toThrow();
+    expect(() => assertModelPull(['qwen2.5:7b', false])).not.toThrow();
+    // The confirmation of the user must travel with the request.
+    expect(() => assertModelPull(['qwen2.5:7b'])).toThrow();
+    expect(() => assertModelPull(['qwen2.5:7b', 'yes'])).toThrow();
+    expect(() => assertModelPull(['http://example.com/m', true])).toThrow();
+    expect(() => assertModelPull([])).toThrow();
+  });
+
+  it('validates the id of a download', () => {
+    expect(() => assertDownloadId(['pull-0123456789abcdef'])).not.toThrow();
+    expect(() => assertDownloadId(['pull-0123456789abcdef', 'x'])).toThrow();
+    expect(() => assertDownloadId(['../etc'])).toThrow();
+    expect(() => assertDownloadId(['pull 1'])).toThrow();
+    expect(() => assertDownloadId([''])).toThrow();
+    expect(() => assertDownloadId([42])).toThrow();
   });
 
   it('validates a single string argument', () => {

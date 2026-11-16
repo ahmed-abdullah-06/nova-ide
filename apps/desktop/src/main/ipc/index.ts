@@ -31,8 +31,10 @@ import {
   assertContextAttachments,
   assertConversation,
   assertConversationId,
+  assertDownloadId,
   assertExternalUrl,
   assertModelName,
+  assertModelPull,
   assertOptionalString,
   assertPermissionUpdate,
   assertPlanAnswer,
@@ -250,6 +252,11 @@ export function registerIpcHandlers(): () => Promise<void> {
       };
     },
     getActiveModels: () => activeModels(),
+    onProgress: (progress) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcPushChannels.aiLocalModelProgress, progress);
+      }
+    },
   });
   const chatService = new ChatService({
     providers: providerService,
@@ -647,6 +654,16 @@ export function registerIpcHandlers(): () => Promise<void> {
     assertModelName,
     localModelHandlers.details,
   );
+  registerChannel(
+    IpcChannels.aiLocalModelPull,
+    assertModelPull,
+    localModelHandlers.pull,
+  );
+  registerChannel(
+    IpcChannels.aiLocalModelCancelPull,
+    assertDownloadId,
+    localModelHandlers.cancelPull,
+  );
 
 
 
@@ -665,6 +682,9 @@ export function registerIpcHandlers(): () => Promise<void> {
     // The running requests are aborted, so the providers stop generating.
     chatService.cancelAll();
     agentService.cancelAll();
+    // A running download is aborted too: no request outlives the
+    // application (spec §19.6).
+    localModelService.cancelAll();
     await Promise.all([
       terminalService.killAll(),
       taskService.killAll(),
