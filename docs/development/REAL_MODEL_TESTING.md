@@ -80,7 +80,30 @@ Switch the AI panel to **Agent** and run the steps in order.
 | 8 | Give a long task (many reads or a long prompt) with the local model. | If the context has to be shortened, a visible notice appears and the summary lists it. The safety rules of the system prompt are never dropped. |
 | 9 | Open **Audit** in the agent panel. | Entries for the run, the tool calls, the approvals, the commands and the permission changes — metadata only, no file content, no secret. |
 
-### 3.3 Model-specific notes
+### 3.3 The management of the local models (Milestone 7)
+
+This part of the checklist is **not part of the automated suites**: it
+downloads a real model from the registry of Ollama and therefore needs an
+internet connection and disk space. It was **not run** during the
+implementation of Milestone 7 — the automated tests use a mock Ollama
+server that never downloads a model.
+
+| # | What to do | Expected result |
+|---|---|---|
+| 1 | Start Ollama (`ollama serve`) and open the AI panel → **Settings**. | The section **Models** shows the facts of the machine (memory, processors, free space of the drive of the models) and the list of the installed models with their size, parameters, quantization and family. |
+| 2 | Click **Details** on a model. | The license, the context length and the capabilities appear. A capability that Ollama does not report reads *unknown* — the panel never claims that the model can call tools. |
+| 3 | Read the line under the name of the model. | The fit (*likely fine*, *slow*, *may not fit*) is shown as an **estimate** and compares the size of the model with the free memory. |
+| 4 | Type the name of a model that is **not** installed (for example `qwen2.5:0.5b`) into the download field. | The **Download** button stays disabled until the confirmation is ticked. The confirmation states that the model comes from the registry of Ollama over the internet. |
+| 5 | Tick the confirmation and click **Download**. | The progress shows the status, the bytes and the share. The download ends with a success message and the new model appears in the list of the chat without a restart. |
+| 6 | Start a second download of a bigger model and click **Stop the download** while it runs. | The transfer stops at once (check `ollama ps` and the network), the panel reports the download as cancelled, and the partially downloaded layers are not listed as a model. |
+| 7 | Send a chat message to the downloaded model. | The answer streams into the panel. The model is marked as **loaded**. |
+| 8 | Click **Unload** on the model. | The model is released from the memory (the file stays on the disk) and the badge disappears. |
+| 9 | Click **Delete** on a model. | A confirmation appears with the name and the size of the model. **Keep the model** leaves it installed; **Delete the model** removes it from the list. |
+| 10 | Start a chat with the model and delete it while the answer is coming in. | The deletion is refused with a clear message ("used by a running request"). Stop the request first, then delete. |
+| 11 | Set a **default chat model** and a **default agent model**, restart the application and open the panel. | The defaults are remembered. The chat starts with the default of the chat, the agent with its own default. If Ollama does not report that the agent model can call tools, the panel says so. |
+| 12 | Load a large model and then load a second one. | Only one large model stays in the memory: the panel warns and offers the unload. |
+
+### 3.4 Model-specific notes
 
 - A model with native tool calling (the OpenAI-compatible path) uses the
   native `tool_call` stream; a model without it uses the JSON protocol
@@ -149,6 +172,11 @@ relying on the manual run.
 | Context bounding and the safety rules | `pnpm test` (context manager and loop) | Step 8 |
 | Verification engine, test execution, recovery, audit | `pnpm test`, `pnpm verify` | Steps 1, 5, 9 |
 | End-to-end plan answer, settings change and revert conflict in the packaged app | `pnpm verify` (mock provider) | The whole checklist |
+| Catalog, details, capabilities and running models of Ollama | `pnpm test` (mock Ollama) | Steps 1–3 |
+| Validation of a model name, loopback policy, limits and redaction | `pnpm test` | — |
+| Download with progress, stop, partial failure, deletion and unload | `pnpm test` (mock Ollama), `pnpm verify` (mock Ollama) | Steps 4–6, 9–10 |
+| Defaults of the chat and of the agent | `pnpm test` (the store), `pnpm verify` (the packaged app) | Step 11 |
+| A **real** download from the registry of Ollama | — (never automated) | Steps 4–6, 12 |
 
 The manual procedure is the only place where a real network request and a
 real model are used. Everything else must pass without a network and

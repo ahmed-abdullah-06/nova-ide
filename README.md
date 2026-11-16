@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 6 — Planning, Permissions, and Verification (implemented, awaiting review).
+**Status:** Milestone 7 - Local Model Management (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -44,8 +44,10 @@ The runtime verification drives the real application: it starts the packaged
 build, opens a workspace, uses the terminal, the search, the source control, the
 problems panel, the task runner, the chat and the coding agent (against a mock
 provider), approves and edits a plan, changes a permission category, reviews a
-revert conflict and checks the verification report, and reports every check it
-performed.
+revert conflict and checks the verification report, manages the local models
+(the list, the details, a download with its progress, the stop of a download,
+the confirmation of a deletion and the new model in the list of the chat), and
+reports every check it performed.
 
 Every run uses its own, temporary profile directory, which is deleted
 afterwards — the settings, the API keys and the conversations of the user are
@@ -64,10 +66,11 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 6)
+## Features (Milestone 7)
 
-Milestone 5 (the coding agent), Milestone 4 (the provider layer and the chat)
-and Milestone 3 (terminal, search, Git, problems, tasks) are still in place:
+Milestone 6 (planning, permissions and verification), Milestone 5 (the coding
+agent), Milestone 4 (the provider layer and the chat) and Milestone 3
+(terminal, search, Git, problems, tasks) are still in place:
 
 - Open a workspace folder through the native folder picker; recent workspaces
   are remembered between launches.
@@ -210,8 +213,46 @@ Milestone 6 adds planning, permissions and verification:
   [`docs/development/REAL_MODEL_TESTING.md`](./docs/development/REAL_MODEL_TESTING.md);
   automated tests use mock servers only and never make a paid call.
 
+Milestone 7 adds the management of the local models:
+
+- **A catalog of the installed models** in the settings of the AI panel: the
+  name, the size on the disk, the parameter size, the quantization, the
+  family and the day the model was changed - read from the HTTP API of
+  Ollama (`/api/tags`). The models that are loaded in the memory come from
+  `/api/ps` and are marked as such.
+- **The details of a model** come from `/api/show`: the license, the context
+  length and the capabilities that Ollama reports. A capability that Ollama
+  did not report is shown as *unknown* - the application never claims that a
+  model can call tools when it does not know it.
+- **Hardware-aware guidance**: the main process reads the real facts of the
+  machine (total and free memory, processors, free space of the drive that
+  holds the models). Every model gets a fit estimate - *likely fine*, *slow*
+  or *may not fit* - that compares its size with the free memory. The
+  estimate is advice only and never blocks the user. No graphics card is
+  assumed.
+- **Only one large model at a time**: before a local request loads a model, a
+  large model that is loaded and not used by a running request is unloaded.
+  A model that a running chat or agent run uses is never unloaded.
+- **Downloading a model**: the panel asks for the name, shows the free space
+  of the drive and states that the model comes from the registry of Ollama
+  over the internet. The download starts only after the user confirms it. The
+  progress (percent, bytes, speed) is throttled, one download runs at a
+  time, and the button that stops it really aborts the transfer.
+- **Deleting and unloading**: the deletion asks for a confirmation that shows
+  the name and the size of the model; the unload releases the copy in the
+  memory and keeps the file on the disk. A model that a running request uses
+  cannot be deleted or unloaded.
+- **Defaults per use**: a default model for the chat and one for the agent,
+  stored in the application data directory. The panel warns when Ollama does
+  not report that the model of the agent can call tools, and it says that
+  small models are unreliable for agent work.
+- **The management is a user action**: the agent has no tool that downloads,
+  deletes or unloads a model, and the permission policy of the agent is
+  unchanged.
+
 Not yet implemented (planned for later milestones): multi-agent systems,
-local model management, voice, the extension marketplace (see spec §23).
+voice, the advanced computer control of Milestone 9, the extension
+marketplace and the release automation (see spec §23).
 
 ## Security model
 
@@ -256,6 +297,12 @@ local model management, voice, the extension marketplace (see spec §23).
 - Reverting a run never overwrites a file that changed after the run unless
   the user confirms that file in the revert dialog; the main process checks
   the disk itself and also accepts the paths of dirty editor buffers.
+- The management of the local models happens in the main process only. The
+  renderer sends a *name* - never an address, a path or a command - and the
+  name is validated before the request is built, so a URL, a path or a shell
+  fragment can never reach Ollama. The address must point at this machine
+  unless the user confirmed it explicitly, a download only starts after the
+  user confirmed it, and the agent has no tool that manages a model.
 
 ## Documentation
 

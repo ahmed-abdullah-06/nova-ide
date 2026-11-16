@@ -246,6 +246,63 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
   - The manual real-model procedure (Ollama and a cloud key) is documented
     in `docs/development/REAL_MODEL_TESTING.md`. Automated tests still call
     mock servers only; no paid API call is made by a test.
+- **Milestone 7 — Local Model Management:**
+  - Catalog of the local models in the main process, read from the documented
+    HTTP API of Ollama: `/api/tags` for the installed models (size, parameter
+    size, quantization, family, format, modification date, digest),
+    `/api/ps` for the models that are loaded in the memory (memory use,
+    expiry, context length) and `/api/show` for the details and the
+    capabilities of a model. A field that the service does not report stays
+    unknown; the parser survives a broken or old answer.
+  - The chat provider and the model management now share one request module
+    (`providers/ollama/http.ts`), so the address, the loopback policy, the
+    timeout, the abort and the redaction of the errors can never drift apart.
+  - Strict validation of a model name: a URL, a path, a shell fragment, a
+    control character and an over-long name are refused before a request is
+    built. The renderer only ever sends the name.
+  - Hardware-aware guidance: the main process reads the real facts of the
+    machine (total and free memory, processors, free space of the drive of
+    the models) and estimates the fit of every model (*likely fine*, *slow*,
+    *may not fit*). The estimate is advice only and no graphics card is
+    assumed.
+  - Only one large model is loaded at a time (spec §2.1): before a local
+    request loads a model, a large model that is loaded and not used by a
+    running request is unloaded. A model of a running request is never
+    unloaded.
+  - Download of a model with a streaming progress (percent, bytes, speed),
+    a button that stops the transfer (the HTTP stream is really aborted) and
+    one download at a time. The download only starts after the user
+    confirmed it; the panel states that the model comes from the registry of
+    Ollama over the internet.
+  - Deletion of a model behind a confirmation that shows the name and the
+    size, and an unload that releases the copy in the memory and keeps the
+    file on the disk. A model that a running chat or agent run uses cannot
+    be deleted or unloaded.
+  - A "Models" section in the settings of the AI panel: the installed models,
+    the loaded state, the details, the fit, the download box with its
+    progress, the delete and unload buttons and a refresh. The default model
+    of the chat and the default model of the agent are stored in the
+    application data directory; the panel warns when Ollama does not report
+    that the agent model can call tools.
+  - Ten new IPC channels (catalog, details, pull, cancel pull, delete,
+    unload, defaults, defaults set) are whitelisted, trusted-sender checked
+    and validated per channel, with the compile-time channel coverage guard.
+    The progress arrives through a typed push channel that is keyed by the
+    id of the download; only a download that exists can be stopped.
+  - The agent has no tool that downloads, deletes or unloads a model: the
+    management is a user action in the settings and the permission policy of
+    the agent is unchanged.
+  - Limits: at most 200 listed models, at most 4 MB per answer, progress
+    updates throttled to 250 ms, and the error messages are redacted.
+  - Unit tests: the parser of the catalog, the running models, the hardware
+    fit (including the edge cases), the validation of the names, the download
+    against a mock Ollama (progress, cancel, partial failure), the deletion
+    and the unload, the loopback policy, the IPC validators and the
+    persistence of the defaults — 551/551 tests passing in total.
+  - Runtime verification of the packaged application now also lists the
+    models of a mock service, opens the details of a model, starts a
+    download, shows its progress, stops it, confirms a deletion and finds
+    the new model in the list of the chat.
 
 ### Fixed
 

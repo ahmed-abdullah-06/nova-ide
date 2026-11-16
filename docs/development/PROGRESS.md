@@ -331,7 +331,68 @@ implemented in Milestone 6.
 model management of Milestone 7, voice, advanced computer control, the
 extension architecture and release automation of Milestones 8–10.
 
-## Milestones 7–10
+## Milestone 7 - Local Model Management
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| A.1 | The catalog of the installed models | Completed | The main process reads `/api/tags`: name, size on the disk, parameter size, quantization, family, format, modification date, digest. A field that the service does not report stays unknown; the parser survives a broken or old answer |
+| A.2 | The models that are loaded | Completed | `/api/ps` lists the loaded models with their memory use, their expiry and their context length; the catalog marks the loaded models |
+| A.3 | The details of a model | Completed | `/api/show` reports the license, the parameters, the context length and the capabilities. A capability that Ollama did not report reads "unknown" — the application never claims that a model can call tools |
+| A.4 | The shared request module | Completed | `providers/ollama/http.ts` builds every request to Ollama (address, loopback policy, timeout, abort, redaction, size limits). The chat provider uses it too, so the two cannot drift apart |
+| B.1 | The facts of the machine | Completed | Total and free memory, processors, free space of the drive that holds the models (`OLLAMA_MODELS` or `~/.ollama/models`). No graphics card is assumed; the panel says so |
+| B.2 | The fit of a model | Completed | An estimate that compares the size of the model (with the overhead of the runtime) with the free memory: *likely fine*, *slow*, *may not fit*. Advice only, it never blocks the user |
+| B.3 | Only one large model at a time | Completed | Before a local request loads a model, a large model that is loaded and not used by a running request is unloaded. A model of a running request is never unloaded (spec §2.1) |
+| C.1 | The download | Completed | `POST /api/pull` with a streaming progress (status, bytes, share, speed). The updates are throttled to 250 ms, one download runs at a time |
+| C.2 | The confirmation | Completed | The download only starts when the user confirmed it. The panel states that the model comes from the registry of Ollama over the internet and shows the free space of the drive |
+| C.3 | Stopping and the failures | Completed | Stopping aborts the HTTP stream; a download that does not exist cannot be stopped; every download is aborted when the application quits. Ollama is not running, an unknown model, a broken connection and a cancelled download are reported honestly |
+| C.4 | The validation of a name | Completed | A URL, a path, a shell fragment, a control character and an over-long name are refused before a request is built. The renderer only ever sends the name |
+| D.1 | The deletion | Completed | `DELETE /api/delete` behind a confirmation that shows the name and the size of the model |
+| D.2 | The refusal while in use | Completed | A model that a running chat or agent run uses cannot be deleted or unloaded: the service refuses it with a clear message |
+| D.3 | The unload | Completed | `POST /api/generate` with `keep_alive: 0` — the file stays on the disk, only the copy in the memory is released |
+| E.1 | The section "Models" | Completed | The settings of the AI panel show the installed models, the loaded state, the details, the fit, the download box with the progress, the delete and unload buttons and a refresh |
+| E.2 | The integration with the model list | Completed | A model that was just downloaded appears in the list of the chat without a restart; the catalog is read again when the address of the provider changed |
+| E.3 | The defaults per use | Completed | A default model for the chat and one for the agent, stored in `local-model-defaults.json` in the user data directory. The panel warns when Ollama does not report that the agent model can call tools, and it says that small models are unreliable for agent work |
+| E.4 | The empty and the error states | Completed | "No model is installed", "Ollama does not seem to be running" and a broken answer are shown honestly; no fake data is ever displayed |
+| F.1 | The loopback policy | Completed | The management of the models refuses an address outside of this machine with the same confirmation as the chat; nothing is sent to a remote address without it |
+| F.2 | The redaction | Completed | The messages of the user interface reuse `redact`; a secret that Ollama puts into an error never reaches the panel |
+| F.3 | The limits | Completed | At most 200 listed models, at most 4 MB per answer, progress updates throttled to 250 ms |
+| F.4 | The agent stays out | Completed | The agent has no tool that downloads, deletes or unloads a model. The management is a user action in the settings; the permission policy is unchanged |
+| G.1 | Unit tests | Tested | 551/551 tests pass (41 files). New: the catalog (parsing, missing fields, running models, capabilities), the hardware fit (including the edge cases), the validation of the names, the download against a mock Ollama (progress, cancel, partial failure), the deletion and the unload, the loopback policy, the limits, the redaction, the IPC validators and the persistence of the defaults |
+| G.2 | Typecheck | Tested | `pnpm typecheck` exit 0 |
+| G.3 | Production build | Tested | `pnpm package` and `pnpm make` succeed |
+| G.4 | Runtime verification (CDP, packaged app) | Tested | 113/113 checks - the new section of the settings is driven against a mock Ollama: the list, the facts of the machine, the details, the confirmation of a download, the progress, the stop of a download, the confirmation of a deletion and the new model in the list of the chat; no console errors |
+| G.5 | Fuses and crash hygiene | Tested | `pnpm verify:fuses` and `pnpm verify:quitcleanup` pass; the fuses and the CSP are unchanged |
+| G.6 | Documentation | Completed | README, CHANGELOG, this file and the manual real-model procedure are updated |
+
+### Milestone 7 Definition of Done
+
+- [x] The installed models are listed with their real facts (size, parameters,
+      quantization, family, modification date) and the loaded models are marked
+- [x] The capabilities of a model are only shown as Ollama reports them;
+      "unknown" is shown when Ollama does not report them
+- [x] The real facts of the machine are read in the main process and every
+      model gets a fit estimate that is labelled as an estimate
+- [x] Only one large model is loaded at a time; a model of a running request
+      is never unloaded
+- [x] A model can be downloaded with a streaming progress, can be stopped, and
+      the download only starts after the user confirmed it
+- [x] A model can be deleted behind a confirmation and unloaded on request;
+      a model that is in use cannot be deleted or unloaded
+- [x] The models appear in the list of the chat without a restart, and the
+      defaults of the chat and of the agent are persisted
+- [x] Every new IPC channel is whitelisted, trusted-sender checked and
+      validated; the renderer sends only a name and gains no network access
+- [x] The agent cannot download, delete or unload a model by itself
+- [x] Unit tests pass (551/551), typecheck clean, `pnpm package`/`pnpm make`
+      succeed, the packaged runtime verification passes with the new flows
+- [x] The real-model procedure is documented; the real download was **not**
+      run — every automated test uses a mock Ollama server
+
+**M7 implemented - awaiting review.** Out of scope for M7 (planned): the
+voice assistant of Milestone 8, the advanced computer control of Milestone 9,
+the extension architecture and the release automation of Milestone 10.
+
+## Milestones 8-10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
 
