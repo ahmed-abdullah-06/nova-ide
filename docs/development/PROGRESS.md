@@ -357,10 +357,11 @@ extension architecture and release automation of Milestones 8–10.
 | F.2 | The redaction | Completed | The messages of the user interface reuse `redact`; a secret that Ollama puts into an error never reaches the panel |
 | F.3 | The limits | Completed | At most 200 listed models, at most 4 MB per answer, progress updates throttled to 250 ms |
 | F.4 | The agent stays out | Completed | The agent has no tool that downloads, deletes or unloads a model. The management is a user action in the settings; the permission policy is unchanged |
-| G.1 | Unit tests | Tested | 551/551 tests pass (41 files). New: the catalog (parsing, missing fields, running models, capabilities), the hardware fit (including the edge cases), the validation of the names, the download against a mock Ollama (progress, cancel, partial failure), the deletion and the unload, the loopback policy, the limits, the redaction, the IPC validators and the persistence of the defaults |
+| F.5 | The IPC contract | Completed | Eight new invoke channels (catalog, details, pull, cancel pull, delete, unload, defaults, defaults set) and one typed push channel for the progress. Every channel is whitelisted, trusted-sender checked and validated; the compile-time coverage guard compiles |
+| G.1 | Unit tests | Tested | 552/552 tests pass (41 files). New: the catalog (parsing, missing fields, running models, capabilities), the hardware fit (including the edge cases), the validation of the names, the download against a mock Ollama (progress, cancel, partial failure), the deletion and the unload, the loopback policy, the limits, the redaction, the IPC validators and the persistence of the defaults |
 | G.2 | Typecheck | Tested | `pnpm typecheck` exit 0 |
 | G.3 | Production build | Tested | `pnpm package` and `pnpm make` succeed |
-| G.4 | Runtime verification (CDP, packaged app) | Tested | 113/113 checks - the new section of the settings is driven against a mock Ollama: the list, the facts of the machine, the details, the confirmation of a download, the progress, the stop of a download, the confirmation of a deletion and the new model in the list of the chat; no console errors |
+| G.4 | Runtime verification (CDP, packaged app) | Tested | 117/117 checks - the new section of the settings is driven against a mock Ollama: the list, the facts of the machine, the details, the confirmation of a download, the progress, the stop of a download, the confirmation of a deletion and the new model in the list of the chat; no console errors |
 | G.5 | Fuses and crash hygiene | Tested | `pnpm verify:fuses` and `pnpm verify:quitcleanup` pass; the fuses and the CSP are unchanged |
 | G.6 | Documentation | Completed | README, CHANGELOG, this file and the manual real-model procedure are updated |
 
@@ -383,7 +384,7 @@ extension architecture and release automation of Milestones 8–10.
 - [x] Every new IPC channel is whitelisted, trusted-sender checked and
       validated; the renderer sends only a name and gains no network access
 - [x] The agent cannot download, delete or unload a model by itself
-- [x] Unit tests pass (551/551), typecheck clean, `pnpm package`/`pnpm make`
+- [x] Unit tests pass (552/552), typecheck clean, `pnpm package`/`pnpm make`
       succeed, the packaged runtime verification passes with the new flows
 - [x] The real-model procedure is documented; the real download was **not**
       run — every automated test uses a mock Ollama server

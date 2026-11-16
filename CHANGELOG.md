@@ -284,7 +284,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     of the chat and the default model of the agent are stored in the
     application data directory; the panel warns when Ollama does not report
     that the agent model can call tools.
-  - Ten new IPC channels (catalog, details, pull, cancel pull, delete,
+  - Eight new IPC channels (catalog, details, pull, cancel pull, delete,
     unload, defaults, defaults set) are whitelisted, trusted-sender checked
     and validated per channel, with the compile-time channel coverage guard.
     The progress arrives through a typed push channel that is keyed by the
@@ -298,7 +298,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     fit (including the edge cases), the validation of the names, the download
     against a mock Ollama (progress, cancel, partial failure), the deletion
     and the unload, the loopback policy, the IPC validators and the
-    persistence of the defaults — 551/551 tests passing in total.
+    persistence of the defaults — 552/552 tests passing in total.
   - Runtime verification of the packaged application now also lists the
     models of a mock service, opens the details of a model, starts a
     download, shows its progress, stops it, confirms a deletion and finds
