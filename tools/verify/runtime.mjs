@@ -42,6 +42,7 @@ import {
   createIsolatedProfile,
   profileFingerprint,
   realUserDataPath,
+  seedProviderAddress,
   userDataArgument,
 } from './isolation.mjs';
 
@@ -474,9 +475,19 @@ async function main() {
   // The application runs with an isolated profile: a test run must never
   // touch the settings, the keys or the conversations of the user.
   const profile = createIsolatedProfile();
+
+  // The mock of the local service starts BEFORE the application, and its
+  // address is written into the isolated profile. The application
+  // therefore never knows the default address of Ollama and can never
+  // contact the real service of the user — not even with its first
+  // request.
+  const mockOllama = await startMockOllama();
+  seedProviderAddress(profile.dir, mockOllama.url);
+  console.log(`Profile of the application: ${profile.dir}\n`);
+  console.log(`Mock service: ${mockOllama.url}\n`);
+
   const userProfile = realUserDataPath();
   const fingerprintBefore = profileFingerprint(userProfile);
-  console.log(`Profile of the application: ${profile.dir}\n`);
 
   const app = startApp(profile.dir);
   let session = null;
@@ -1161,24 +1172,33 @@ async function main() {
       `document.querySelectorAll('.editor-tab').length`,
     );
 
-    // On a fresh profile the local provider points at the default
-    // address of Ollama.
-    const defaultProviders = await session.evaluate(
+    // The application only knows the mock service: the address was
+    // written into the isolated profile before the application started,
+    // so the real service of the user is never contacted — not even
+    // with the first request.
+    const knownProviders = await session.evaluate(
       `window.nova.ai.providers().then((r) =>
          r.ok
            ? r.value.map((p) => p.id + '=' + p.baseUrl).join(',')
            : 'ERROR')`,
     );
     check(
-      'the default address of the local provider is the default of Ollama',
-      typeof defaultProviders === 'string' &&
-        defaultProviders.includes('ollama=http://127.0.0.1:11434'),
-      String(defaultProviders),
+      'the application only knows the mock service',
+      typeof knownProviders === 'string' &&
+        knownProviders.includes(`ollama=${mockOllama.url}`) &&
+        !knownProviders.includes('127.0.0.1:11434'),
+      String(knownProviders),
+    );
+
+    // The mock must have received the requests of the application.
+    check(
+      'the mock service received the requests of the application',
+      mockOllama.seen.length > 0,
+      `${mockOllama.seen.length} requests`,
     );
 
     // The chat panel must be able to talk to a provider. The harness
     // hosts a mock of the local Ollama service.
-    const mockOllama = await startMockOllama();
 
     // The address is changed through the settings of the panel, the way a
     // user would do it.

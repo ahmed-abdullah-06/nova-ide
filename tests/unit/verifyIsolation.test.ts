@@ -12,6 +12,7 @@ import {
   createIsolatedProfile,
   profileFingerprint,
   realUserDataPath,
+  seedProviderAddress,
   userDataArgument,
 } from '../../tools/verify/isolation.mjs';
 
@@ -76,6 +77,62 @@ describe('the isolation of the verification runs', () => {
   it('reports a profile that does not exist', () => {
     expect(profileFingerprint(null)).toBe('missing');
     expect(profileFingerprint('C:\\does\\not\\exist')).toBe('missing');
+  });
+});
+
+describe('the verification never contacts a real service', () => {
+  it('writes the address of the mock into the isolated profile', () => {
+    const profile = createIsolatedProfile();
+    try {
+      const file = seedProviderAddress(profile.dir, 'http://127.0.0.1:55555');
+      expect(file).toContain('providers.json');
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as {
+        version: number;
+        providers: {
+          id: string;
+          enabled: boolean;
+          baseUrl: string;
+          encryptedKey: string | null;
+        }[];
+      };
+      expect(raw.version).toBe(1);
+      const ollama = raw.providers.find((entry) => entry.id === 'ollama');
+      expect(ollama?.baseUrl).toBe('http://127.0.0.1:55555');
+      expect(ollama?.enabled).toBe(true);
+      // The cloud provider stays off and has no key.
+      const cloud = raw.providers.find(
+        (entry) => entry.id === 'openai-compatible',
+      );
+      expect(cloud?.enabled).toBe(false);
+      expect(cloud?.encryptedKey).toBeNull();
+    } finally {
+      profile.cleanup();
+    }
+  });
+
+  it('never writes the default address of Ollama', () => {
+    const profile = createIsolatedProfile();
+    try {
+      const file = seedProviderAddress(profile.dir, 'http://127.0.0.1:55555');
+      const raw = readFileSync(file, 'utf8');
+      expect(raw).not.toContain('127.0.0.1:11434');
+    } finally {
+      profile.cleanup();
+    }
+  });
+
+  it('the harness seeds the profile before it starts the application', () => {
+    const text = readFileSync('tools/verify/runtime.mjs', 'utf8');
+    const seed = text.indexOf('seedProviderAddress(');
+    const start = text.indexOf('const app = startApp(');
+    expect(seed).toBeGreaterThan(-1);
+    expect(start).toBeGreaterThan(-1);
+    // The address must be written before the application is started.
+    expect(seed).toBeLessThan(start);
+    // The mock must be started before the profile is seeded.
+    expect(text.indexOf('const mockOllama = await startMockOllama()')).toBeLessThan(
+      seed,
+    );
   });
 });
 

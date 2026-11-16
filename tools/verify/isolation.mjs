@@ -13,9 +13,11 @@
  */
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -126,4 +128,43 @@ export function profileFingerprint(dir) {
 /** The command line argument that isolates the profile of the application. */
 export function userDataArgument(dir) {
   return `--user-data-dir=${dir}`;
+}
+
+/**
+ * Writes the settings of the providers into an isolated profile.
+ *
+ * The application must never talk to a real service during a
+ * verification run — not even to the local Ollama of the user. The
+ * address of the mock is therefore written into the profile *before* the
+ * application starts, so the very first request already goes to the
+ * mock and the default address is never used.
+ *
+ * @param {string} dir The directory of the isolated profile.
+ * @param {string} baseUrl The address of the mock service.
+ * @returns {string} The path of the file that was written.
+ */
+export function seedProviderAddress(dir, baseUrl) {
+  const file = path.join(dir, 'providers.json');
+  const settings = {
+    version: 1,
+    providers: [
+      {
+        id: 'ollama',
+        enabled: true,
+        baseUrl,
+        encryptedKey: null,
+        remoteConfirmed: false,
+      },
+      {
+        id: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.openai.com/v1',
+        encryptedKey: null,
+        remoteConfirmed: false,
+      },
+    ],
+  };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  return file;
 }
