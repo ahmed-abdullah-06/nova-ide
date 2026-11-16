@@ -10,6 +10,7 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { LocalModelService } from '../providers/localModels/localModelService';
+import type { ModelDefaultsStore } from '../providers/localModels/modelDefaultsStore';
 
 type Handler<C extends keyof IpcInvokeMap> = (
   ...args: IpcInvokeMap[C]['args']
@@ -22,10 +23,13 @@ export interface LocalModelHandlers {
   cancelPull: Handler<'ai:local-model-cancel-pull'>;
   delete: Handler<'ai:local-model-delete'>;
   unload: Handler<'ai:local-model-unload'>;
+  defaults: Handler<'ai:local-model-defaults'>;
+  setDefaults: Handler<'ai:local-model-defaults-set'>;
 }
 
 export function createLocalModelHandlers(
   models: LocalModelService,
+  defaults: ModelDefaultsStore,
 ): LocalModelHandlers {
   return {
     catalog: async () => models.catalog(),
@@ -34,5 +38,7 @@ export function createLocalModelHandlers(
     cancelPull: async (downloadId) => models.cancelPull(downloadId),
     delete: async (model) => models.delete(model),
     unload: async (model) => models.unload(model),
+    defaults: async () => defaults.get(),
+    setDefaults: async (next) => defaults.set(next),
   };
 }

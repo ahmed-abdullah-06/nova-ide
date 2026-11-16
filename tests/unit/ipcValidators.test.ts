@@ -13,6 +13,7 @@ import {
   assertApprovalAnswer,
   assertChatRequest,
   assertDownloadId,
+  assertModelDefaults,
   assertModelName,
   assertModelPull,
   assertNoArgs,
@@ -72,6 +73,24 @@ describe('IPC argument validators', () => {
     expect(() => assertDownloadId(['pull 1'])).toThrow();
     expect(() => assertDownloadId([''])).toThrow();
     expect(() => assertDownloadId([42])).toThrow();
+  });
+
+  it('validates the defaults of the models', () => {
+    expect(() =>
+      assertModelDefaults([{ chatModel: 'qwen2.5:7b', agentModel: '' }]),
+    ).not.toThrow();
+    expect(() =>
+      assertModelDefaults([{ chatModel: '', agentModel: 'qwen2.5:7b' }]),
+    ).not.toThrow();
+    expect(() =>
+      assertModelDefaults([{ chatModel: 'http://example.com/m', agentModel: '' }]),
+    ).toThrow();
+    expect(() =>
+      assertModelDefaults([{ chatModel: '', agentModel: '../../etc' }]),
+    ).toThrow();
+    expect(() => assertModelDefaults([{ chatModel: 1, agentModel: '' }])).toThrow();
+    expect(() => assertModelDefaults([{ chatModel: '', agentModel: '' }, 1])).toThrow();
+    expect(() => assertModelDefaults([])).toThrow();
   });
 
   it('validates a single string argument', () => {

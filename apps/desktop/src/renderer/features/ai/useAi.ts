@@ -18,6 +18,7 @@ import type {
   ProviderModel,
   ProviderStatus,
 } from '../../../shared/ai-types';
+import type { LocalModelDefaults } from '../../../shared/local-model-types';
 
 /** How often the streamed text is written into the state (milliseconds). */
 export const STREAM_FLUSH_MS = 100;
@@ -49,6 +50,10 @@ export interface AiController {
   providerId: string | null;
   /** The id of the selected model. */
   model: string;
+  /** The model that the chat uses by default (the user can change it). */
+  defaultChatModel: string;
+  /** The model that the agent uses by default (the user can change it). */
+  defaultAgentModel: string;
   /** The messages of the conversation. */
   messages: ChatMessage[];
   /** The files that are attached to the next message. */
@@ -92,6 +97,10 @@ export function useAi(): AiController {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [model, setModel] = useState<string>('');
+  const [defaults, setDefaults] = useState<LocalModelDefaults>({
+    chatModel: '',
+    agentModel: '',
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [preview, setPreview] = useState<ContextPreview[]>([]);
@@ -187,6 +196,11 @@ export function useAi(): AiController {
     if (!api) {
       return;
     }
+    // The defaults of the models are read with the providers: a model
+    // that was just downloaded becomes the default of the chat.
+    void api.localModels.defaults().then((stored) => {
+      setDefaults(stored);
+    });
     void api.ai.providers().then((result) => {
       if (!result.ok) {
         setError(result.error.message);
@@ -222,11 +236,20 @@ export function useAi(): AiController {
       }
       if (result.ok) {
         setModels(result.value);
-        setModel((current) =>
-          result.value.some((entry) => entry.id === current)
-            ? current
-            : (result.value[0]?.id ?? ''),
-        );
+        setModel((current) => {
+          if (result.value.some((entry) => entry.id === current)) {
+            return current;
+          }
+          // The default of the chat wins over the first model of the
+          // list — but only when it is really installed.
+          if (
+            defaults.chatModel.length > 0 &&
+            result.value.some((entry) => entry.id === defaults.chatModel)
+          ) {
+            return defaults.chatModel;
+          }
+          return result.value[0]?.id ?? '';
+        });
       } else {
         setModels([]);
         setModel('');
@@ -241,7 +264,7 @@ export function useAi(): AiController {
     return () => {
       cancelled = true;
     };
-  }, [providerId, providersVersion]);
+  }, [defaults.chatModel, providerId, providersVersion]);
 
   const selectProvider = useCallback((next: string): void => {
     setProviderId(next);
@@ -447,6 +470,8 @@ export function useAi(): AiController {
     status,
     providerId,
     model,
+    defaultChatModel: defaults.chatModel,
+    defaultAgentModel: defaults.agentModel,
     messages,
     attachments,
     streaming,

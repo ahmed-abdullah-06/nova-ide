@@ -33,6 +33,7 @@ import {
   assertConversationId,
   assertDownloadId,
   assertExternalUrl,
+  assertModelDefaults,
   assertModelName,
   assertModelPull,
   assertOptionalString,
@@ -67,6 +68,7 @@ import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
 import { LocalModelService } from '../providers/localModels/localModelService';
+import { ModelDefaultsStore } from '../providers/localModels/modelDefaultsStore';
 import { AgentService } from '../agent/agentService';
 import { AuditStore } from '../agent/auditStore';
 import { ToolExecutor } from '../agent/toolExecutor';
@@ -338,7 +340,10 @@ export function registerIpcHandlers(): () => Promise<void> {
     credentialStore,
     conversationStore,
   );
-  const localModelHandlers = createLocalModelHandlers(localModelService);
+  const localModelHandlers = createLocalModelHandlers(
+    localModelService,
+    new ModelDefaultsStore(),
+  );
 
   // The models that a running request uses are known now: a model that
   // is in use cannot be deleted or unloaded.
@@ -673,6 +678,16 @@ export function registerIpcHandlers(): () => Promise<void> {
     IpcChannels.aiLocalModelUnload,
     assertModelName,
     localModelHandlers.unload,
+  );
+  registerChannel(
+    IpcChannels.aiLocalModelDefaults,
+    assertNoArgs,
+    localModelHandlers.defaults,
+  );
+  registerChannel(
+    IpcChannels.aiLocalModelDefaultsSet,
+    assertModelDefaults,
+    localModelHandlers.setDefaults,
   );
 
 

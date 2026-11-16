@@ -204,6 +204,14 @@ export interface LocalDownloadProgress {
   errorCode?: string;
 }
 
+/** The defaults the user chose for the local models. */
+export interface LocalModelDefaults {
+  /** The model that the chat uses by default (empty = none). */
+  chatModel: string;
+  /** The model that the agent uses by default (empty = none). */
+  agentModel: string;
+}
+
 /** The maximum number of models the service lists at once. */
 export const MAX_LISTED_MODELS = 200;
 /** The maximum length of a model name. */

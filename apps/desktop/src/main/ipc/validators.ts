@@ -658,6 +658,33 @@ export function assertDownloadId(
 }
 
 /**
+ * The defaults of the local models.
+ *
+ * Only the names of models are accepted, and they are validated like
+ * every other model name.
+ */
+export function assertModelDefaults(
+  args: unknown[],
+): asserts args is [defaults: { chatModel: string; agentModel: string }] {
+  if (args.length !== 1 || typeof args[0] !== 'object' || args[0] === null) {
+    throw new Error('Expected the defaults of the models');
+  }
+  const record = args[0] as { chatModel?: unknown; agentModel?: unknown };
+  if (
+    typeof record.chatModel !== 'string' ||
+    typeof record.agentModel !== 'string'
+  ) {
+    throw new Error('Invalid defaults of the models');
+  }
+  if (record.chatModel.length > 0) {
+    assertModelName([record.chatModel]);
+  }
+  if (record.agentModel.length > 0) {
+    assertModelName([record.agentModel]);
+  }
+}
+
+/**
  * The answer of the user to the plan.
  *
  * Only descriptions can be edited; the validator refuses anything else,

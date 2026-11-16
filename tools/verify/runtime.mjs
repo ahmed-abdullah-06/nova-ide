@@ -61,32 +61,138 @@ const options = {
  * The harness talks to it through the real provider of the application,
  * so the chat flow is verified end to end without a model.
  *
+ * The mock also answers the management endpoints of Milestone 7:
+ * /api/tags (the installed models), /api/ps (the loaded models),
+ * /api/show (the details), /api/pull (the progress of a download),
+ * /api/delete and /api/generate (the unload).
+ *
  * @returns {Promise<{url: string, stop: () => void}>} The mock.
  */
 async function startMockOllama() {
+  /** The models the mock knows. */
+  const installed = new Map([
+    [
+      'nova-verify-model',
+      {
+        name: 'nova-verify-model',
+        model: 'nova-verify-model',
+        modified_at: '2025-10-03T23:34:03.409490317-07:00',
+        size: 1024,
+        digest: 'verifydigest',
+        details: {
+          format: 'gguf',
+          family: 'nova',
+          families: ['nova'],
+          parameter_size: '1.0B',
+          quantization_level: 'Q4_K_M',
+        },
+      },
+    ],
+  ]);
+  /** The models that were pulled during the run. */
+  const pulled = new Set();
+  /** The requests the mock received (for the checks). */
+  const seen = [];
+
   const server = createServer((request, response) => {
-    if ((request.url ?? '').startsWith('/api/tags')) {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(
-        JSON.stringify({
-          models: [
-            {
-              name: 'nova-verify-model',
-              size: 1024,
-              details: { family: 'nova', parameter_size: '1.0B' },
+    const chunks = [];
+    request.on('data', (chunk) => {
+      chunks.push(chunk.toString('utf8'));
+    });
+    request.on('end', () => {
+      const body = chunks.join('');
+      const url = request.url ?? '';
+      seen.push({ method: request.method ?? '', url, body });
+      if ((request.method ?? '') === 'DELETE' && url.startsWith('/api/delete')) {
+        const model = JSON.parse(body || '{}').model;
+        installed.delete(model);
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{}');
+        return;
+      }
+      if (url.startsWith('/api/generate')) {
+        // The unload of a model.
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{"done":true}');
+        return;
+      }
+      if (url.startsWith('/api/pull')) {
+        const model = JSON.parse(body || '{}').model;
+        const slow = String(model).includes('slow');
+        response.writeHead(200, { 'content-type': 'application/x-ndjson' });
+        let step = 0;
+        const writeNext = () => {
+          step += 1;
+          if (step === 1) {
+            response.write('{"status":"pulling manifest"}\n');
+          } else if (step === 2) {
+            response.write(
+              '{"status":"pulling verifydigest","total":2048,"completed":1024}\n',
+            );
+          } else if (step === 3) {
+            response.write(
+              '{"status":"pulling verifydigest","total":2048,"completed":2048}\n',
+            );
+          } else if (step === 4 && !slow) {
+            installed.set(model, {
+              name: model,
+              model,
+              modified_at: '2025-10-03T23:34:03.409490317-07:00',
+              size: 2048,
+              digest: 'verifydigest',
+              details: {
+                format: 'gguf',
+                family: 'nova',
+                parameter_size: '1.0B',
+                quantization_level: 'Q4_K_M',
+              },
+            });
+            pulled.add(model);
+            response.write('{"status":"success"}\n');
+            response.end();
+            return;
+          } else {
+            // A slow download stays open, so the check can stop it.
+            response.write(
+              '{"status":"pulling verifydigest","total":4096,"completed":2048}\n',
+            );
+          }
+          setTimeout(writeNext, 300);
+        };
+        writeNext();
+        return;
+      }
+      if (url.startsWith('/api/show')) {
+        const model = JSON.parse(body || '{}').model;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            license: 'MIT',
+            parameters: 'temperature 0.7',
+            modified_at: '2025-10-03T23:34:03.409490317-07:00',
+            details: {
+              format: 'gguf',
+              family: 'nova',
+              parameter_size: '1.0B',
+              quantization_level: 'Q4_K_M',
             },
-          ],
-        }),
-      );
-      return;
-    }
-    if ((request.url ?? '').startsWith('/api/chat')) {
-      const chunks = [];
-      request.on('data', (chunk) => {
-        chunks.push(chunk.toString('utf8'));
-      });
-      request.on('end', () => {
-        const body = chunks.join('');
+            capabilities: ['completion', 'tools'],
+            model_info: { 'nova.context_length': 4096 },
+          }),
+        );
+        return;
+      }
+      if (url.startsWith('/api/ps')) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ models: [] }));
+        return;
+      }
+      if (url.startsWith('/api/tags')) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ models: [...installed.values()] }));
+        return;
+      }
+      if (url.startsWith('/api/chat')) {
         // The planner and the agent use different system prompts, so the
         // mock can tell the three flows apart.
         const isPlanner = body.includes('You are planning a coding task');
@@ -127,10 +233,9 @@ async function startMockOllama() {
         );
         response.write('{"done":true,"eval_count":7}\n');
         response.end();
-      });
+      }
       return;
-    }
-    response.writeHead(404).end();
+    });
   });
   await new Promise((resolve) => {
     server.listen(0, '127.0.0.1', resolve);
@@ -139,6 +244,9 @@ async function startMockOllama() {
   const port = typeof address === 'object' && address !== null ? address.port : 0;
   return {
     url: `http://127.0.0.1:${port}`,
+    installed,
+    pulled,
+    seen,
     stop: () => {
       server.close();
     },
@@ -1122,6 +1230,340 @@ async function main() {
       20000,
     );
     check('the model of the provider is listed', modelListed === true);
+
+    // --- The management of the local models (Milestone 7) --------------
+
+    const modelsSection = await waitFor(
+      session,
+      `document.querySelector('.ai-models__list') !== null`,
+      20000,
+    );
+    check('the models section of the settings is rendered', modelsSection === true);
+
+    const installedListed = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.ai-models__item')];
+        const names = items.map((i) => i.getAttribute('data-model'));
+        return names.includes('nova-verify-model') ? names.join(',') : false;
+      })()`,
+      20000,
+    );
+    check(
+      'the installed models are listed',
+      typeof installedListed === 'string' &&
+        installedListed.includes('nova-verify-model'),
+      String(installedListed),
+    );
+
+    const fitShown = await waitFor(
+      session,
+      `(() => {
+        const fit = document.querySelector('.ai-models__fit');
+        if (fit === null) return false;
+        const text = fit.textContent;
+        return text.includes('estimate') ? text : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the fit of a model is shown as an estimate',
+      typeof fitShown === 'string' && fitShown.includes('estimate'),
+      String(fitShown).slice(0, 120),
+    );
+
+    const hardwareShown = await session.evaluate(
+      `(() => {
+        const text = document.querySelector('.ai-models__hardware');
+        return text === null ? '' : text.textContent.trim();
+      })()`,
+    );
+    check(
+      'the facts of the machine are shown',
+      typeof hardwareShown === 'string' &&
+        hardwareShown.includes('memory') &&
+        hardwareShown.includes('processors'),
+      String(hardwareShown).slice(0, 160),
+    );
+
+    const detailsOpened = await session.evaluate(
+      `(() => {
+        const item = [...document.querySelectorAll('.ai-models__item')].find(
+          (i) => i.getAttribute('data-model') === 'nova-verify-model');
+        if (item === undefined) return false;
+        const button = [...item.querySelectorAll('button')].find(
+          (b) => b.textContent.trim() === 'Details');
+        if (button === undefined) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the details of a model can be opened', detailsOpened === true);
+
+    const detailsShown = await waitFor(
+      session,
+      `(() => {
+        const details = document.querySelector('.ai-models__details');
+        if (details === null) return false;
+        const text = details.textContent;
+        return text.includes('Tool calls') ? text : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the details show what Ollama reports about the capabilities',
+      typeof detailsShown === 'string' && detailsShown.includes('reported by Ollama'),
+      String(detailsShown).slice(0, 200),
+    );
+
+    // A download needs the confirmation of the user.
+    const downloadBlocked = await session.evaluate(
+      `(() => {
+        const input = document.querySelector(
+          'input[aria-label="Name of the model"]');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'nova-slow-model');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const buttons = [...document.querySelectorAll('.ai-models__action')];
+        const download = buttons.find(
+          (b) => b.textContent.trim() === 'Download');
+        if (download === undefined) return false;
+        // The button stays disabled until the user confirms.
+        return download.disabled === true;
+      })()`,
+    );
+    check(
+      'a download needs the confirmation of the user',
+      downloadBlocked === true,
+    );
+
+    const downloadStarted = await session.evaluate(
+      `(() => {
+        const confirm = document.querySelector('.ai-models__confirm input');
+        if (confirm === null) return false;
+        confirm.click();
+        const buttons = [...document.querySelectorAll('.ai-models__action')];
+        const download = buttons.find(
+          (b) => b.textContent.trim() === 'Download');
+        if (download === undefined || download.disabled) return false;
+        download.click();
+        return true;
+      })()`,
+    );
+    check('the download can be started', downloadStarted === true);
+
+    const progressShown = await waitFor(
+      session,
+      `(() => {
+        const text = document.querySelector('.ai-models__progress-text');
+        if (text === null) return false;
+        const value = text.textContent;
+        return value.includes('nova-slow-model') ? value : false;
+      })()`,
+      20000,
+    );
+    check(
+      'the progress of the download is shown',
+      typeof progressShown === 'string' &&
+        progressShown.includes('nova-slow-model'),
+      String(progressShown).slice(0, 160),
+    );
+
+    const downloadStopped = await session.evaluate(
+      `(() => {
+        const buttons = [...document.querySelectorAll('.ai-models__action')];
+        const stop = buttons.find(
+          (b) => b.textContent.trim() === 'Stop the download');
+        if (stop === undefined) return false;
+        stop.click();
+        return true;
+      })()`,
+    );
+    check('the download can be stopped', downloadStopped === true);
+
+    const downloadCancelled = await waitFor(
+      session,
+      `(() => {
+        const text = document.querySelector('.ai-models__progress-text');
+        if (text === null) return false;
+        const value = text.textContent;
+        return value.toLowerCase().includes('cancel') ? value : false;
+      })()`,
+      20000,
+    );
+    check(
+      'the stopped download is reported as cancelled',
+      typeof downloadCancelled === 'string',
+      String(downloadCancelled).slice(0, 160),
+    );
+
+    // A second download brings a new model into the list.
+    const secondDownload = await session.evaluate(
+      `(() => {
+        const input = document.querySelector(
+          'input[aria-label="Name of the model"]');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'nova-new-model');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const buttons = [...document.querySelectorAll('.ai-models__action')];
+        const download = buttons.find(
+          (b) => b.textContent.trim() === 'Download');
+        if (download === undefined || download.disabled) return false;
+        download.click();
+        return true;
+      })()`,
+    );
+    check('a second download can be started', secondDownload === true);
+
+    const downloadFinished = await waitFor(
+      session,
+      `(() => {
+        const text = document.querySelector('.ai-models__progress-text');
+        if (text === null) return false;
+        const value = text.textContent;
+        return value.includes('nova-new-model') && value.includes('downloaded')
+          ? value
+          : false;
+      })()`,
+      30000,
+    );
+    check(
+      'the finished download is reported',
+      typeof downloadFinished === 'string',
+      String(downloadFinished).slice(0, 160),
+    );
+
+    const newModelListed = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.ai-models__item')];
+        const names = items.map((i) => i.getAttribute('data-model'));
+        return names.includes('nova-new-model') ? names.join(',') : false;
+      })()`,
+      20000,
+    );
+    check(
+      'the downloaded model is listed',
+      typeof newModelListed === 'string' &&
+        newModelListed.includes('nova-new-model'),
+      String(newModelListed),
+    );
+
+    const newModelInDropdown = await waitFor(
+      session,
+      `(() => {
+        const select = document.querySelector('select[aria-label="Model"]');
+        if (select === null) return false;
+        const options = [...select.options].map((o) => o.value);
+        return options.includes('nova-new-model') ? options.join(',') : false;
+      })()`,
+      20000,
+    );
+    check(
+      'the downloaded model appears in the model list of the chat',
+      typeof newModelInDropdown === 'string',
+      String(newModelInDropdown).slice(0, 160),
+    );
+
+    // The deletion asks for a confirmation and can be declined.
+    const deleteAsked = await session.evaluate(
+      `(() => {
+        const item = [...document.querySelectorAll('.ai-models__item')].find(
+          (i) => i.getAttribute('data-model') === 'nova-new-model');
+        if (item === undefined) return false;
+        const button = [...item.querySelectorAll('button')].find(
+          (b) => b.textContent.trim() === 'Delete');
+        if (button === undefined) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the deletion of a model asks for a confirmation', deleteAsked === true);
+
+    const confirmationShown = await waitFor(
+      session,
+      `(() => {
+        const confirm = document.querySelector('.ai-models__confirm-delete');
+        if (confirm === null) return false;
+        const text = confirm.textContent;
+        return text.includes('nova-new-model') ? text : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the confirmation shows the name of the model',
+      typeof confirmationShown === 'string' &&
+        confirmationShown.includes('nova-new-model'),
+      String(confirmationShown).slice(0, 160),
+    );
+
+    const deleteCancelled = await session.evaluate(
+      `(() => {
+        const confirm = document.querySelector('.ai-models__confirm-delete');
+        if (confirm === null) return false;
+        const button = [...confirm.querySelectorAll('button')].find(
+          (b) => b.textContent.trim() === 'Keep the model');
+        if (button === undefined) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    check('the deletion can be declined', deleteCancelled === true);
+
+    const stillListed = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.ai-models__item')];
+        const names = items.map((i) => i.getAttribute('data-model'));
+        return names.includes('nova-new-model') ? names.join(',') : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the declined model is still installed',
+      typeof stillListed === 'string',
+      String(stillListed),
+    );
+
+    const deleteConfirmed = await session.evaluate(
+      `(() => {
+        const item = [...document.querySelectorAll('.ai-models__item')].find(
+          (i) => i.getAttribute('data-model') === 'nova-new-model');
+        if (item === undefined) return false;
+        const button = [...item.querySelectorAll('button')].find(
+          (b) => b.textContent.trim() === 'Delete');
+        if (button === undefined) return false;
+        button.click();
+        const confirm = document.querySelector('.ai-models__confirm-delete');
+        if (confirm === null) return false;
+        const del = [...confirm.querySelectorAll('button')].find(
+          (b) => b.textContent.trim() === 'Delete the model');
+        if (del === undefined) return false;
+        del.click();
+        return true;
+      })()`,
+    );
+    check('the deletion can be confirmed', deleteConfirmed === true);
+
+    const modelRemoved = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.ai-models__item')];
+        const names = items.map((i) => i.getAttribute('data-model'));
+        return names.includes('nova-new-model') ? false : names.join(',');
+      })()`,
+      20000,
+    );
+    check(
+      'the deleted model is gone',
+      typeof modelRemoved === 'string' &&
+        !modelRemoved.includes('nova-new-model'),
+      String(modelRemoved),
+    );
 
     const localBadge = await session.evaluate(
       `(() => {

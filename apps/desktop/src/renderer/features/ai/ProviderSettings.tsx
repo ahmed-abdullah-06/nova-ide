@@ -14,6 +14,7 @@ import type {
   ProviderDescriptor,
   ProviderStatus,
 } from '../../../shared/ai-types';
+import { LocalModels } from './LocalModels';
 
 export interface ProviderSettingsProps {
   /** The providers. */
@@ -22,6 +23,13 @@ export interface ProviderSettingsProps {
   status: ProviderStatus | null;
   /** Re-reads the providers. */
   onRefresh: () => void;
+  /**
+   * Called when the list of the installed models changed.
+   *
+   * The chat reads its models again, so a model that was just
+   * downloaded appears in the list without a restart.
+   */
+  onModelsChanged?: () => void;
 }
 
 /** The providers the application knows. */
@@ -48,6 +56,7 @@ export function ProviderSettings({
   providers,
   status,
   onRefresh,
+  onModelsChanged,
 }: ProviderSettingsProps): React.JSX.Element {
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
@@ -58,6 +67,19 @@ export function ProviderSettings({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Counts the refreshes of the providers.
+   *
+   * The models are read again when the address of the provider changed:
+   * a different service can offer other models.
+   */
+  const [revision, setRevision] = useState(0);
+
+  /** Reads the providers again and the models with them. */
+  const handleRefresh = useCallback((): void => {
+    setRevision((current) => current + 1);
+    onRefresh();
+  }, [onRefresh]);
 
   /** The provider whose settings are shown. */
   const selected =
@@ -84,11 +106,11 @@ export function ProviderSettings({
     setBusy(false);
     if (result.ok) {
       setMessage('The address was saved.');
-      onRefresh();
+      handleRefresh();
     } else {
       setError(result.error.message);
     }
-  }, [address, confirmed, onRefresh, providerId, selected]);
+  }, [address, confirmed, handleRefresh, providerId, selected]);
 
   const handleToggle = useCallback(async (): Promise<void> => {
     const api = window.nova;
@@ -102,11 +124,11 @@ export function ProviderSettings({
     });
     setBusy(false);
     if (result.ok) {
-      onRefresh();
+      handleRefresh();
     } else {
       setError(result.error.message);
     }
-  }, [onRefresh, providerId, selected]);
+  }, [handleRefresh, providerId, selected]);
 
   const handleSaveKey = useCallback(async (): Promise<void> => {
     const api = window.nova;
@@ -122,11 +144,11 @@ export function ProviderSettings({
     setBusy(false);
     if (result.ok) {
       setMessage('The key was stored (encrypted by the operating system).');
-      onRefresh();
+      handleRefresh();
     } else {
       setError(result.error.message);
     }
-  }, [key, onRefresh, providerId]);
+  }, [key, handleRefresh, providerId]);
 
   const handleClearKey = useCallback(async (): Promise<void> => {
     const api = window.nova;
@@ -138,11 +160,11 @@ export function ProviderSettings({
     setBusy(false);
     if (result.ok) {
       setMessage('The key was removed.');
-      onRefresh();
+      handleRefresh();
     } else {
       setError(result.error.message);
     }
-  }, [onRefresh, providerId]);
+  }, [handleRefresh, providerId]);
 
   const handleTest = useCallback(async (): Promise<void> => {
     const api = window.nova;
@@ -287,6 +309,8 @@ export function ProviderSettings({
           {status.message}
         </p>
       ) : null}
+
+      <LocalModels onModelsChanged={onModelsChanged} revision={revision} />
     </section>
   );
 }

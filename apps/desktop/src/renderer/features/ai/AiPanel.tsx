@@ -5,7 +5,7 @@
  * used, and the state of the provider (LOCAL or CLOUD). It never writes
  * the answer of a model into a file — that belongs to Milestone 5.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
 import { AgentPanel } from '../agent/AgentPanel';
 import { MessageList } from './MessageList';
@@ -40,6 +40,23 @@ export function AiPanel({
   const [title, setTitle] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [approveCloud, setApproveCloud] = useState(false);
+  /** The mode that was shown before (the agent has its own default). */
+  const previousMode = useRef<'chat' | 'agent'>('chat');
+
+  // The agent uses its own default model. It is only applied when the
+  // user switches to the agent, so a manual choice is never overwritten.
+  useEffect(() => {
+    if (previousMode.current !== 'agent' && mode === 'agent') {
+      const preferred = ai.defaultAgentModel;
+      if (
+        preferred.length > 0 &&
+        ai.models.some((entry) => entry.id === preferred)
+      ) {
+        ai.selectModel(preferred);
+      }
+    }
+    previousMode.current = mode;
+  }, [ai, mode]);
 
   // The title of the open conversation is shown in the field.
   useEffect(() => {
@@ -230,6 +247,7 @@ export function AiPanel({
           providers={ai.providers}
           status={ai.status}
           onRefresh={ai.refresh}
+          onModelsChanged={ai.refresh}
         />
       ) : null}
 

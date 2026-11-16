@@ -92,6 +92,8 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.aiLocalModelCancelPull,
       IpcChannels.aiLocalModelDelete,
       IpcChannels.aiLocalModelUnload,
+      IpcChannels.aiLocalModelDefaults,
+      IpcChannels.aiLocalModelDefaultsSet,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

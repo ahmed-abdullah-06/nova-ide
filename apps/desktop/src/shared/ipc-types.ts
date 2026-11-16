@@ -22,6 +22,7 @@ import type {
 import type {
   LocalDownloadProgress,
   LocalModelCatalog,
+  LocalModelDefaults,
   LocalModelDetails,
 } from './local-model-types';
 
@@ -91,6 +92,8 @@ export const IpcChannels = {
   aiLocalModelCancelPull: 'ai:local-model-cancel-pull',
   aiLocalModelDelete: 'ai:local-model-delete',
   aiLocalModelUnload: 'ai:local-model-unload',
+  aiLocalModelDefaults: 'ai:local-model-defaults',
+  aiLocalModelDefaultsSet: 'ai:local-model-defaults-set',
   agentStart: 'agent:start',
   agentCancel: 'agent:cancel',
   agentState: 'agent:state',
@@ -617,6 +620,16 @@ export interface IpcInvokeMap {
     args: [model: string];
     result: AiResult<void>;
   };
+  /** The defaults of the local models (the chat model, the agent model). */
+  'ai:local-model-defaults': {
+    args: [];
+    result: LocalModelDefaults;
+  };
+  /** Stores the defaults of the local models. */
+  'ai:local-model-defaults-set': {
+    args: [defaults: LocalModelDefaults];
+    result: LocalModelDefaults;
+  };
   /**
    * Starts an agent run.
    *
@@ -953,6 +966,10 @@ export interface NovaLocalModelsApi {
   delete(model: string): Promise<AiResult<void>>;
   /** Unloads a model from the memory. */
   unload(model: string): Promise<AiResult<void>>;
+  /** The defaults of the local models. */
+  defaults(): Promise<LocalModelDefaults>;
+  /** Stores the defaults of the local models. */
+  setDefaults(defaults: LocalModelDefaults): Promise<LocalModelDefaults>;
   /** Subscribes to the progress of a download; returns unsubscribe. */
   onProgress(listener: (progress: LocalDownloadProgress) => void): () => void;
 }
