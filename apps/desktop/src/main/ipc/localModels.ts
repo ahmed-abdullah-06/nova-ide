@@ -20,6 +20,8 @@ export interface LocalModelHandlers {
   details: Handler<'ai:local-model-details'>;
   pull: Handler<'ai:local-model-pull'>;
   cancelPull: Handler<'ai:local-model-cancel-pull'>;
+  delete: Handler<'ai:local-model-delete'>;
+  unload: Handler<'ai:local-model-unload'>;
 }
 
 export function createLocalModelHandlers(
@@ -30,5 +32,7 @@ export function createLocalModelHandlers(
     details: async (model) => models.details(model),
     pull: async (model, confirmed) => models.pull(model, confirmed),
     cancelPull: async (downloadId) => models.cancelPull(downloadId),
+    delete: async (model) => models.delete(model),
+    unload: async (model) => models.unload(model),
   };
 }

@@ -89,6 +89,8 @@ export const IpcChannels = {
   aiLocalModelDetails: 'ai:local-model-details',
   aiLocalModelPull: 'ai:local-model-pull',
   aiLocalModelCancelPull: 'ai:local-model-cancel-pull',
+  aiLocalModelDelete: 'ai:local-model-delete',
+  aiLocalModelUnload: 'ai:local-model-unload',
   agentStart: 'agent:start',
   agentCancel: 'agent:cancel',
   agentState: 'agent:state',
@@ -605,6 +607,16 @@ export interface IpcInvokeMap {
     args: [downloadId: string];
     result: AiResult<void>;
   };
+  /** Deletes an installed model. */
+  'ai:local-model-delete': {
+    args: [model: string];
+    result: AiResult<void>;
+  };
+  /** Unloads a model from the memory. */
+  'ai:local-model-unload': {
+    args: [model: string];
+    result: AiResult<void>;
+  };
   /**
    * Starts an agent run.
    *
@@ -937,6 +949,10 @@ export interface NovaLocalModelsApi {
   ): Promise<AiResult<{ downloadId: string }>>;
   /** Stops a running download. */
   cancelPull(downloadId: string): Promise<AiResult<void>>;
+  /** Deletes an installed model. */
+  delete(model: string): Promise<AiResult<void>>;
+  /** Unloads a model from the memory. */
+  unload(model: string): Promise<AiResult<void>>;
   /** Subscribes to the progress of a download; returns unsubscribe. */
   onProgress(listener: (progress: LocalDownloadProgress) => void): () => void;
 }

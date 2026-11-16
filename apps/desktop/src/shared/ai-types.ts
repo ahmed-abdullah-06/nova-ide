@@ -109,6 +109,8 @@ export type ProviderErrorCode =
   | 'no-context-approval'
   // The management of the local models (Milestone 7).
   | 'busy'
+  | 'in-use'
+  | 'no-space'
   | 'unknown';
 
 /** A user-facing description of a failed request. */

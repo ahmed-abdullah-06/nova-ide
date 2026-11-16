@@ -205,6 +205,8 @@ const novaApi: NovaApi = {
       invoke(IpcChannels.aiLocalModelPull, model, confirmed),
     cancelPull: (downloadId) =>
       invoke(IpcChannels.aiLocalModelCancelPull, downloadId),
+    delete: (model) => invoke(IpcChannels.aiLocalModelDelete, model),
+    unload: (model) => invoke(IpcChannels.aiLocalModelUnload, model),
     onProgress: (listener) =>
       subscribe<LocalDownloadProgress>(
         IpcPushChannels.aiLocalModelProgress,

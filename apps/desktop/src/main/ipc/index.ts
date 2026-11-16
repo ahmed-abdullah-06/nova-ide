@@ -664,6 +664,16 @@ export function registerIpcHandlers(): () => Promise<void> {
     assertDownloadId,
     localModelHandlers.cancelPull,
   );
+  registerChannel(
+    IpcChannels.aiLocalModelDelete,
+    assertModelName,
+    localModelHandlers.delete,
+  );
+  registerChannel(
+    IpcChannels.aiLocalModelUnload,
+    assertModelName,
+    localModelHandlers.unload,
+  );
 
 
 

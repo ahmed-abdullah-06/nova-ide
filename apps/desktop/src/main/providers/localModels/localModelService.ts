@@ -463,6 +463,85 @@ export class LocalModelService {
   }
 
   /**
+   * Deletes an installed model.
+   *
+   * A model that a running chat or agent run uses cannot be deleted:
+   * the run would break in the middle. The user stops the run first.
+   */
+  async delete(model: string): Promise<AiResult<void>> {
+    const problem = validateModelName(model);
+    if (problem !== null) {
+      return { ok: false, error: { code: 'unknown', message: problem } };
+    }
+    if (this.isInUse(model)) {
+      return {
+        ok: false,
+        error: {
+          code: 'in-use',
+          message:
+            `"${model}" is used by a running request. Stop the request ` +
+            'before you delete the model.',
+        },
+      };
+    }
+    const target = await this.options.target();
+    const guard = this.checkTarget(target);
+    if (guard !== null) {
+      return { ok: false, error: guard };
+    }
+    const response = await ollamaRequest({
+      baseUrl: target.baseUrl,
+      remoteConfirmed: target.remoteConfirmed,
+      method: 'DELETE',
+      endpoint: '/api/delete',
+      body: JSON.stringify({ model }),
+      timeoutMs: 60_000,
+      fetchImpl: this.options.fetchImpl,
+    });
+    if (!response.ok) {
+      return { ok: false, error: this.mapError(response, model) };
+    }
+    return { ok: true, value: undefined };
+  }
+
+  /**
+   * Unloads a model from the memory.
+   *
+   * The file of the model stays on the disk; only the copy in the
+   * memory is released (Ollama unloads a model with `keep_alive: 0`).
+   */
+  async unload(model: string): Promise<AiResult<void>> {
+    const problem = validateModelName(model);
+    if (problem !== null) {
+      return { ok: false, error: { code: 'unknown', message: problem } };
+    }
+    if (this.isInUse(model)) {
+      return {
+        ok: false,
+        error: {
+          code: 'in-use',
+          message:
+            `"${model}" is used by a running request. Stop the request ` +
+            'before you unload the model.',
+        },
+      };
+    }
+    const target = await this.options.target();
+    const guard = this.checkTarget(target);
+    if (guard !== null) {
+      return { ok: false, error: guard };
+    }
+    await this.unloadModel(target, model);
+    return { ok: true, value: undefined };
+  }
+
+  /** True when a running request uses the model. */
+  private isInUse(model: string): boolean {
+    const active = this.options.getActiveModels?.() ?? [];
+    return active.includes(model);
+  }
+
+  /**
    * Makes sure that only one large model is loaded (spec §2.1).
    *
    * The method is called before a local request loads a model. A large
@@ -622,6 +701,17 @@ export class LocalModelService {
       return {
         code: 'model-not-found',
         message: `The model "${model}" was not found on the server.`,
+      };
+    }
+    if (
+      detail !== undefined &&
+      /no space|not enough space|disk/i.test(detail)
+    ) {
+      return {
+        code: 'no-space',
+        message:
+          'There is not enough space on the disk for the model. ' +
+          'Free some space and try again.',
       };
     }
     return response.error;
