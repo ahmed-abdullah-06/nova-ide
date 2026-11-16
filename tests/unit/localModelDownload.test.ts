@@ -265,6 +265,45 @@ describe('the download of a local model', () => {
     expect(last?.state).toBe('cancelled');
   });
 
+  it('stops a download that already streams', async () => {
+    // The cancel comes after the first status line: the answer of Ollama
+    // is already open, so the abort has to reach the running stream.
+    mock.respondWith({
+      lines: [
+        '{"status":"pulling abc","total":100,"completed":1}\n',
+        '{"status":"pulling abc","total":100,"completed":2}\n',
+        '{"status":"pulling abc","total":100,"completed":3}\n',
+        '{"status":"pulling abc","total":100,"completed":4}\n',
+      ],
+      lineDelayMs: 300,
+    });
+    const events: LocalDownloadProgress[] = [];
+    const service = new LocalModelService({
+      target: async () => ({ baseUrl, remoteConfirmed: false }),
+      onProgress: (progress) => events.push(progress),
+    });
+    const started = await service.pull('model-a', true);
+    expect(started.ok).toBe(true);
+    if (!started.ok) {
+      return;
+    }
+    // The stream is open now.
+    const streaming = await waitFor(
+      () => events.some((event) => event.state === 'downloading'),
+    );
+    expect(streaming).toBe(true);
+    const cancelled = await service.cancelPull(started.value.downloadId);
+    expect(cancelled.ok).toBe(true);
+    const finished = await waitFor(() => events.some((event) => event.done));
+    expect(finished).toBe(true);
+    const last = events[events.length - 1];
+    expect(last?.state).toBe('cancelled');
+    // The stream really ended: no status line arrives any more.
+    const before = events.length;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(events.length).toBe(before);
+  });
+
   it('cannot cancel a download that does not exist', async () => {
     const result = await service().cancelPull('pull-does-not-exist');
     expect(result.ok).toBe(false);

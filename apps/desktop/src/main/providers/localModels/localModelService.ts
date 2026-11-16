@@ -227,6 +227,10 @@ export class LocalModelService {
    * The download only starts when the user confirmed it explicitly:
    * the transfer comes from the registry of Ollama and reaches out
    * into the internet. Only one download runs at the same time.
+   *
+   * A download that was interrupted is safe to repeat: Ollama verifies
+   * the layers it already has and only fetches what is missing, so the
+   * second attempt continues where the first one stopped.
    */
   async pull(
     model: string,
@@ -383,6 +387,12 @@ export class LocalModelService {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    // A stopped download ends the stream at once, even when no status
+    // line arrives any more.
+    const onAbort = (): void => {
+      void reader.cancel();
+    };
+    signal.addEventListener('abort', onAbort);
 
     try {
       for (;;) {
@@ -447,6 +457,7 @@ export class LocalModelService {
         }
       }
     } catch {
+      signal.removeEventListener('abort', onAbort);
       if (signal.aborted) {
         finish('cancelled', 'The download was cancelled.');
         return;
@@ -456,6 +467,12 @@ export class LocalModelService {
         'The connection to Ollama failed while the model was downloaded.',
         'network',
       );
+      return;
+    }
+    signal.removeEventListener('abort', onAbort);
+
+    if (signal.aborted) {
+      finish('cancelled', 'The download was cancelled.');
       return;
     }
 
@@ -680,7 +697,13 @@ export class LocalModelService {
     }
     const payload = await readJsonBody(response.value, MAX_RESPONSE_BYTES);
     if (payload === null) {
-      return { ok: false, error: { code: 'invalid-response', message: '' } };
+      return {
+        ok: false,
+        error: {
+          code: 'invalid-response',
+          message: 'Ollama returned an answer that could not be read.',
+        },
+      };
     }
     return { ok: true, value: parseRunningModels(payload) };
   }

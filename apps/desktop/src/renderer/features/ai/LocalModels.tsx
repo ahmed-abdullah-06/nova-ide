@@ -32,9 +32,9 @@ function capabilityText(
   reported: boolean | undefined,
 ): string {
   if (reported === undefined) {
-    return 'unknown — Ollama did not report it';
+    return 'unknown — Ollama did not report any capability';
   }
-  return reported ? 'reported by Ollama' : 'not reported by Ollama';
+  return reported ? 'yes — reported by Ollama' : 'no — Ollama did not report it';
 }
 
 /** Formats a number of bytes for the panel. */
@@ -87,7 +87,7 @@ export function LocalModels({
         <h4 className="ai-models__title">Models</h4>
         <button
           type="button"
-          className="ai-settings__action"
+          className="ai-settings__action ai-models__action"
           onClick={models.refresh}
           disabled={models.busy}
         >
@@ -191,7 +191,7 @@ export function LocalModels({
               </p>
               <button
                 type="button"
-                className="ai-settings__action"
+                className="ai-settings__action ai-models__action"
                 onClick={models.closeDetails}
               >
                 Close
@@ -256,7 +256,7 @@ export function LocalModels({
               />
               <button
                 type="button"
-                className="ai-settings__action"
+                className="ai-settings__action ai-models__action"
                 onClick={models.startDownload}
                 disabled={
                   running ||
@@ -306,7 +306,7 @@ export function LocalModels({
                 {running ? (
                   <button
                     type="button"
-                    className="ai-settings__action"
+                    className="ai-settings__action ai-models__action"
                     onClick={models.cancelDownload}
                   >
                     Stop the download
@@ -384,7 +384,7 @@ function ModelRow({
           <div className="ai-models__item-actions">
             <button
               type="button"
-              className="ai-settings__action ai-models__delete"
+              className="ai-settings__action ai-models__action ai-models__delete"
               onClick={onConfirmDelete}
               disabled={busy}
             >
@@ -392,7 +392,7 @@ function ModelRow({
             </button>
             <button
               type="button"
-              className="ai-settings__action"
+              className="ai-settings__action ai-models__action"
               onClick={onCancelDelete}
               disabled={busy}
             >
@@ -404,7 +404,7 @@ function ModelRow({
         <div className="ai-models__item-actions">
           <button
             type="button"
-            className="ai-settings__action"
+            className="ai-settings__action ai-models__action"
             onClick={onDetails}
             disabled={busy}
           >
@@ -413,7 +413,7 @@ function ModelRow({
           {model.loaded ? (
             <button
               type="button"
-              className="ai-settings__action"
+              className="ai-settings__action ai-models__action"
               onClick={onUnload}
               disabled={busy}
             >
@@ -422,7 +422,7 @@ function ModelRow({
           ) : null}
           <button
             type="button"
-            className="ai-settings__action ai-models__delete"
+            className="ai-settings__action ai-models__action ai-models__delete"
             onClick={onDelete}
             disabled={busy}
           >

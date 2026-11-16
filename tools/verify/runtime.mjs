@@ -1529,7 +1529,7 @@ async function main() {
       String(stillListed),
     );
 
-    const deleteConfirmed = await session.evaluate(
+    const deleteAskedAgain = await session.evaluate(
       `(() => {
         const item = [...document.querySelectorAll('.ai-models__item')].find(
           (i) => i.getAttribute('data-model') === 'nova-new-model');
@@ -1538,6 +1538,30 @@ async function main() {
           (b) => b.textContent.trim() === 'Delete');
         if (button === undefined) return false;
         button.click();
+        return true;
+      })()`,
+    );
+    check('the deletion of a model asks again', deleteAskedAgain === true);
+
+    const confirmationShownAgain = await waitFor(
+      session,
+      `(() => {
+        const confirm = document.querySelector('.ai-models__confirm-delete');
+        if (confirm === null) return false;
+        return confirm.textContent.includes('nova-new-model')
+          ? confirm.textContent
+          : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the confirmation is shown again',
+      typeof confirmationShownAgain === 'string',
+      String(confirmationShownAgain).slice(0, 160),
+    );
+
+    const deleteConfirmed = await session.evaluate(
+      `(() => {
         const confirm = document.querySelector('.ai-models__confirm-delete');
         if (confirm === null) return false;
         const del = [...confirm.querySelectorAll('button')].find(
@@ -1565,11 +1589,19 @@ async function main() {
       String(modelRemoved),
     );
 
-    const localBadge = await session.evaluate(
+    const localBadge = await waitFor(
+      session,
       `(() => {
-        const badge = document.querySelector('.ai-badge');
-        return badge === null ? '' : badge.textContent.trim();
+        // The badge of the header of the panel shows the provider that
+        // the chat uses.
+        const header = document.querySelector('.ai-panel__header');
+        if (header === null) return false;
+        const badge = header.querySelector('.ai-badge');
+        if (badge === null) return false;
+        const text = badge.textContent.trim();
+        return text === 'LOCAL' ? text : false;
       })()`,
+      10000,
     );
     check(
       'the panel shows that the provider is local',

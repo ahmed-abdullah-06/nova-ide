@@ -89,17 +89,18 @@ export async function ollamaRequest(
   const timeout = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
-  const onAbort = (): void => {
-    controller.abort();
-  };
-  signal?.addEventListener('abort', onAbort);
+
+  // The signal of the caller must abort the whole answer — including the
+  // body of a streamed response. The timeout only bounds the wait for the
+  // headers: it is cleared as soon as the answer arrives.
+  const combined = combineSignals(controller.signal, signal);
 
   try {
     const response = await fetchImpl(`${baseUrl}${endpoint}`, {
       method,
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body,
-      signal: controller.signal,
+      signal: combined,
     });
 
     if (!response.ok) {
@@ -146,8 +147,40 @@ export async function ollamaRequest(
     };
   } finally {
     clearTimeout(timeout);
-    signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/**
+ * Combines the signal of the timeout with the signal of the caller.
+ *
+ * The result aborts when either of them fires.
+ *
+ * @param timeout The signal of the timeout.
+ * @param external The signal of the caller (undefined when there is none).
+ * @returns The combined signal.
+ */
+function combineSignals(
+  timeout: AbortSignal,
+  external: AbortSignal | undefined,
+): AbortSignal {
+  if (external === undefined) {
+    return timeout;
+  }
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([timeout, external]);
+  }
+  // A runtime without AbortSignal.any: the listeners stay attached, so
+  // the signal of the caller keeps aborting the answer.
+  const controller = new AbortController();
+  const abort = (): void => {
+    controller.abort();
+  };
+  if (timeout.aborted || external.aborted) {
+    controller.abort();
+  }
+  timeout.addEventListener('abort', abort);
+  external.addEventListener('abort', abort);
+  return controller.signal;
 }
 
 /**

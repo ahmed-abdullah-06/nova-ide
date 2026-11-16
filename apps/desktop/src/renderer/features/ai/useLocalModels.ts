@@ -10,7 +10,7 @@
  * Ollama did not report is "unknown", and the fit of a model is
  * labelled as an estimate.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   LocalDownloadProgress,
   LocalModelCatalog,
@@ -94,13 +94,28 @@ export function useLocalModels(
     boolean | undefined
   >(undefined);
 
+  /**
+   * Counts the reads of the catalog.
+   *
+   * An answer that belongs to an older read is dropped: the service
+   * that answers slowly must not overwrite the list of the service
+   * that was configured in the meantime.
+   */
+  const readRef = useRef(0);
+
   /** Reads the catalog of the models. */
   const refresh = useCallback((): void => {
     const api = window.nova;
     if (!api) {
       return;
     }
+    readRef.current += 1;
+    const read = readRef.current;
     void api.localModels.catalog().then((result) => {
+      if (read !== readRef.current) {
+        // A newer read is already running.
+        return;
+      }
       if (result.ok) {
         setCatalog(result.value);
         setError(null);
