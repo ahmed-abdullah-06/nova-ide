@@ -4,6 +4,7 @@ import { AppSettingsStore } from './config/appSettings';
 import { registerIpcHandlers } from './ipc';
 import { installApplicationMenu } from './menu';
 import { installContentSecurityPolicy } from './security/csp';
+import { installPermissionHandlers } from './security/permissions';
 import { createMainWindow } from './window';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -30,6 +31,9 @@ process.on('unhandledRejection', (reason: unknown) => {
 app.whenReady().then(() => {
   // Security measures must be in place before any renderer loads (spec §19).
   installContentSecurityPolicy();
+  // The microphone is only granted for the own origin, only for audio and
+  // only while a recording session is open (spec §19.2).
+  installPermissionHandlers();
   // The global settings are read before the window exists: the
   // local-only mode must be known before the first request (Milestone 8).
   const appSettings = new AppSettingsStore();

@@ -22,9 +22,18 @@ function getAllowedRendererUrlPrefix(): string {
  * in the window, it could not call our privileged handlers.
  */
 export function isTrustedSender(event: IpcMainInvokeEvent): boolean {
-  const frameUrl = event.senderFrame?.url;
-  if (!frameUrl) {
+  return isTrustedOrigin(event.senderFrame?.url);
+}
+
+/**
+ * True when the URL belongs to the application's own renderer.
+ *
+ * The same rule is used for the permissions of the browser: a frame of
+ * another origin may never ask for the microphone (spec §19.2).
+ */
+export function isTrustedOrigin(url: string | undefined): boolean {
+  if (!url) {
     return false;
   }
-  return frameUrl.startsWith(getAllowedRendererUrlPrefix());
+  return url.startsWith(getAllowedRendererUrlPrefix());
 }

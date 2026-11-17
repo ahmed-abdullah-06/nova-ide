@@ -219,6 +219,12 @@ const novaApi: NovaApi = {
       ),
   },
 
+  voice: {
+    openSession: () => invoke(IpcChannels.voiceSessionOpen),
+    closeSession: (sessionId) =>
+      invoke(IpcChannels.voiceSessionClose, sessionId),
+  },
+
 };
 
 contextBridge.exposeInMainWorld('nova', novaApi);
