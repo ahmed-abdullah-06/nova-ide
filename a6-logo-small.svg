@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="A6 logo (small sizes)">
+  <title>A6 (simplified for 16 to 48 px)</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a566b"/>
+      <stop offset="1" stop-color="#1c2331"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a9d2f5"/>
+      <stop offset="1" stop-color="#3b73bd"/>
+    </linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="300" y1="350" x2="700" y2="670">
+      <stop offset="0" stop-color="#7fd3ff"/>
+      <stop offset="1" stop-color="#2a86f0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(512 512) scale(1.545) translate(-512 -512)">
+    <rect x="222" y="222" width="580" height="580" rx="122" fill="url(#plate)"/>
+    <rect x="228" y="228" width="568" height="568" rx="116" fill="none" stroke="url(#edge)" stroke-width="12"/>
+    <!-- solid, thicker strokes, no inner outline or glow: stays readable at 16 px -->
+    <path d="M302 646 L458 364 L506 562 C522 626 572 654 640 652 C700 649 722 604 718 560 C714 508 676 474 630 474 C594 474 567 498 563 520" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="url(#ink)" stroke-width="54"/>
+    <path d="M332 612 C398 592 452 572 498 530" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="url(#ink)" stroke-width="54"/>
+    <path d="M563 520 C556 452 586 386 652 360 C692 345 722 372 724 410" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke="url(#ink)" stroke-width="54"/>
+  </g>
+</svg>
