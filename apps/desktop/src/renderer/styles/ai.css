@@ -689,3 +689,31 @@
   cursor: pointer;
   line-height: 1;
 }
+
+.ai-message__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-message__read {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-faint);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  padding: 1px 6px;
+}
+
+.ai-message__read:hover,
+.ai-message__read:focus-visible {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.ai-message__read[aria-pressed='true'] {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}

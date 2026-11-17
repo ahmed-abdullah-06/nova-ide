@@ -13,6 +13,7 @@ import { ProviderSettings } from './ProviderSettings';
 import { useAi, type Attachment } from './useAi';
 import { useConversations } from './useConversations';
 import { insertTranscript } from '../voice/composer';
+import { useSpeech } from '../voice/useSpeech';
 import { useVoiceInput } from '../voice/useVoiceInput';
 
 export interface AiPanelProps {
@@ -44,6 +45,7 @@ export function AiPanel({
       setInput((current) => insertTranscript(current, text));
     },
   });
+  const speech = useSpeech();
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [input, setInput] = useState('');
   const [title, setTitle] = useState('');
@@ -344,6 +346,9 @@ export function AiPanel({
               messages={ai.messages}
               streaming={ai.streaming}
               onOpenLink={handleOpenLink}
+              onReadAloud={speech.read}
+              speakingIndex={speech.speakingIndex}
+              onStopSpeech={speech.stop}
             />
           </div>
         </>
@@ -477,6 +482,16 @@ export function AiPanel({
           >
             Ask again
           </button>
+          {speech.speaking ? (
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={speech.stop}
+              title="Stop reading the answer aloud"
+            >
+              Stop reading
+            </button>
+          ) : null}
         </div>
         {voice.notice !== null ? (
           <p className="ai-panel__voice-status" role="status">
@@ -486,6 +501,19 @@ export function AiPanel({
               className="ai-panel__voice-dismiss"
               aria-label="Dismiss the message"
               onClick={voice.clearNotice}
+            >
+              ×
+            </button>
+          </p>
+        ) : null}
+        {speech.notice !== null ? (
+          <p className="ai-panel__voice-status" role="status">
+            {speech.notice}
+            <button
+              type="button"
+              className="ai-panel__voice-dismiss"
+              aria-label="Dismiss the message"
+              onClick={speech.clearNotice}
             >
               ×
             </button>

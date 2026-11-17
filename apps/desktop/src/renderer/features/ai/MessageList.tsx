@@ -18,6 +18,12 @@ export interface MessageListProps {
   streaming: boolean;
   /** Opens a link in the browser of the user. */
   onOpenLink: (url: string) => void;
+  /** Reads the answer of that index aloud (Milestone 8C). */
+  onReadAloud?: (text: string, index: number) => void;
+  /** The index of the answer that is being spoken (null otherwise). */
+  speakingIndex?: number | null;
+  /** Stops the speech at once. */
+  onStopSpeech?: () => void;
 }
 
 /** Renders the inline elements of a text. */
@@ -142,6 +148,9 @@ export function MessageList({
   messages,
   streaming,
   onOpenLink,
+  onReadAloud,
+  speakingIndex = null,
+  onStopSpeech,
 }: MessageListProps): React.JSX.Element {
   const handleOpenLink = useCallback(
     (url: string): void => {
@@ -168,13 +177,39 @@ export function MessageList({
           key={`${message.role}-${index}`}
           className={`ai-message ai-message--${message.role}`}
         >
-          <span className="ai-message__role">
-            {message.role === 'user'
-              ? 'You'
-              : message.role === 'assistant'
-                ? 'Assistant'
-                : 'System'}
-          </span>
+          <div className="ai-message__header">
+            <span className="ai-message__role">
+              {message.role === 'user'
+                ? 'You'
+                : message.role === 'assistant'
+                  ? 'Assistant'
+                  : 'System'}
+            </span>
+            {message.role === 'assistant' &&
+            onReadAloud !== undefined &&
+            !(streaming && index === messages.length - 1) &&
+            message.content.trim().length > 0 ? (
+              <button
+                type="button"
+                className="ai-message__read"
+                aria-pressed={speakingIndex === index}
+                onClick={() => {
+                  if (speakingIndex === index) {
+                    onStopSpeech?.();
+                    return;
+                  }
+                  onReadAloud(message.content, index);
+                }}
+                title={
+                  speakingIndex === index
+                    ? 'Stop reading the answer aloud'
+                    : 'Read the answer aloud (code blocks are skipped by default)'
+                }
+              >
+                {speakingIndex === index ? 'Stop reading' : 'Read aloud'}
+              </button>
+            ) : null}
+          </div>
           <div className="ai-message__content">
             {parseMarkdown(message.content).map((block, blockIndex) =>
               renderBlock(block, `m${index}-b${blockIndex}`, handleOpenLink),
