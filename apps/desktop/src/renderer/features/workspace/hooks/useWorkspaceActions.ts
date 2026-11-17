@@ -43,7 +43,7 @@ export function useWorkspaceActions(): WorkspaceActions {
         dispatch({
           type: 'notify',
           kind: 'error',
-          message: 'Filesystem access is unavailable outside NOVA IDE',
+          message: 'Filesystem access is unavailable outside A6',
         });
         return;
       }

@@ -92,8 +92,8 @@ export function StatusBar({
         }
       >
         {appInfo
-          ? `NOVA IDE ${appInfo.appVersion} · Electron ${appInfo.electronVersion}`
-          : 'NOVA IDE'}
+          ? `A6 ${appInfo.appVersion} · Electron ${appInfo.electronVersion}`
+          : 'A6'}
       </span>
     </footer>
   );

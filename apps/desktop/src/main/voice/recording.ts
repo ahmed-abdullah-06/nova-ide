@@ -106,7 +106,7 @@ export class RecordingSessions {
       return false;
     }
     if (!types.every((type) => type === 'audio')) {
-      // A camera (or a screen) is never used by NOVA IDE.
+      // A camera (or a screen) is never used by A6.
       return false;
     }
     return this.hasOpenSession();

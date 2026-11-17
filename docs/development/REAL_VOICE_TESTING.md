@@ -33,7 +33,7 @@ milestone is accepted. This document is that procedure.
 
 | Item | Notes |
 |---|---|
-| The packaged application | `pnpm package`, then start `apps/desktop/out/NOVA IDE-win32-x64/NOVAIDE.exe` (or `pnpm dev`) |
+| The packaged application | `pnpm package`, then start `apps/desktop/out/A6-win32-x64/A6IDE.exe` (or `pnpm dev`) |
 | A working microphone | With a system input level that is not muted |
 | A whisper.cpp-compatible executable | For example `whisper-cli.exe` from a local whisper.cpp build, placed anywhere on this machine |
 | A model file in the whisper.cpp format | For example `ggml-base.bin`, downloaded **by hand** from the upstream project; the application never fetches it |

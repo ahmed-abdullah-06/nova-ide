@@ -51,7 +51,7 @@ if (
   MarkerSeverity.Hint !== MONACO_SEVERITY.Hint
 ) {
   console.error(
-    'NOVA IDE: the severity flags of Monaco changed — update problemSeverity.ts',
+    'A6: the severity flags of Monaco changed — update problemSeverity.ts',
   );
 }
 

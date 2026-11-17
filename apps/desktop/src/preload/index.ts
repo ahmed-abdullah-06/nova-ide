@@ -47,7 +47,7 @@ function subscribe<T>(
 /**
  * Secure preload bridge (spec §19.1).
  *
- * Exposes only the narrow, typed NOVA API to the renderer via contextBridge.
+ * Exposes only the narrow, typed A6 API to the renderer via contextBridge.
  * The renderer never gets access to ipcRenderer, Node.js, or any other
  * privileged Electron/OS API — only the functions declared in `NovaApi`.
  */

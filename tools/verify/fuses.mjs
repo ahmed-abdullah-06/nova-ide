@@ -21,8 +21,8 @@ const exe = path.join(
   'apps',
   'desktop',
   'out',
-  'NOVA IDE-win32-x64',
-  'NOVAIDE.exe',
+  'A6-win32-x64',
+  'A6IDE.exe',
 );
 
 if (!existsSync(exe)) {

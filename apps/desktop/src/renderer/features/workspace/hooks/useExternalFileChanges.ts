@@ -10,7 +10,7 @@
  *       - missing file  → warning toast; the buffer stays open so the user
  *                         can still review it (Ctrl+S offers to recreate it).
  *
- * Events caused by NOVA's own writes are ignored: the main watcher already
+ * Events caused by A6's own writes are ignored: the main watcher already
  * suppresses them, and the renderer double-checks the mtime.
  */
 import { useEffect, useRef } from 'react';
@@ -78,7 +78,7 @@ export function useExternalFileChanges(): void {
         dispatch({
           type: 'notify',
           kind: 'warning',
-          message: `"${tab.name}" was deleted outside NOVA — the buffer stays open (Ctrl+S recreates it)`,
+          message: `"${tab.name}" was deleted outside A6 — the buffer stays open (Ctrl+S recreates it)`,
         });
         return;
       }

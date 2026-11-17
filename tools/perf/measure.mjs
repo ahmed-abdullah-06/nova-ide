@@ -23,7 +23,7 @@ import { createIsolatedProfile, userDataArgument } from '../verify/isolation.mjs
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 const DESKTOP = path.join(REPO, 'apps', 'desktop');
-const EXE = path.join(DESKTOP, 'out', 'NOVA IDE-win32-x64', 'NOVAIDE.exe');
+const EXE = path.join(DESKTOP, 'out', 'A6-win32-x64', 'A6IDE.exe');
 const PORT = 9336;
 const results = [];
 

@@ -6,7 +6,7 @@
  * a readable text file.
  */
 
-/** Largest file NOVA opens as text. */
+/** Largest file A6 opens as text. */
 export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
 /** Bytes inspected for NUL characters when detecting binary files. */
 export const BINARY_SNIFF_BYTES = 8000;

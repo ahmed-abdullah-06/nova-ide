@@ -34,7 +34,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: MIN_WINDOW_HEIGHT,
     show: false,
     backgroundColor: '#111318',
-    title: 'NOVA IDE',
+    title: 'A6',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,

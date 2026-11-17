@@ -6,8 +6,10 @@ on your machine unless you explicitly enable a cloud provider.
 
 ## 1. Getting started
 
-1. Install with the generated `NOVA IDE-0.1.0 Setup.exe` (or run the portable
-   build). The installer is per-user; no administrator rights are required.
+1. Install with the generated `A6-0.1.0 Setup.exe` (or run the portable build).
+   The installer is per-user; no administrator rights are required. If you used
+   the earlier NOVA IDE build, your settings, encrypted keys and conversations
+   are preserved — the app keeps reading its existing profile.
 2. On first launch there is no workspace open. Use **File → Open Folder**
    (or `Ctrl+Shift+O`) to choose a project directory.
 3. The layout has five regions: the **activity bar** (left icons), the

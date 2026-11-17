@@ -40,7 +40,7 @@ paid API.
 
 | Item | Notes |
 |---|---|
-| The packaged application | `pnpm package`, then start `apps/desktop/out/NOVA IDE-win32-x64/NOVA IDE.exe` (or use `pnpm dev`) |
+| The packaged application | `pnpm package`, then start `apps/desktop/out/A6-win32-x64/A6IDE.exe` (or use `pnpm dev`) |
 | Ollama | Installed and running (`ollama serve`), with one small model pulled by hand, for example `ollama pull qwen2.5-coder:7b` |
 | A cloud key (optional) | An OpenAI-compatible service and a key you are allowed to spend. Never commit it. |
 | A clean profile | The manual test may use your normal profile; the automated harness always uses a temporary one |

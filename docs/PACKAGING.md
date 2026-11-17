@@ -1,8 +1,10 @@
-# Packaging, licensing and signing (Milestone 10C)
+# Packaging, licensing and signing (Milestone 10C, updated 10G)
 
 This document records what was actually built and verified for the V1 release
 candidate, and what still needs an owner decision or a manual step. Nothing
-here claims a platform or a signing result that was not exercised.
+here claims a platform or a signing result that was not exercised. The product
+was renamed from **NOVA IDE** to **A6** in 10G; all metadata and artifact names
+below are the current A6 ones, verified after that rename.
 
 ## 1. License and third-party notices
 
@@ -43,13 +45,29 @@ Verified metadata of the rebuilt artifacts (2026-11-17):
 
 | Artifact | Field | Value |
 |---|---|---|
-| `NOVAIDE.exe` | ProductName | `NOVA IDE` |
-| `NOVAIDE.exe` | FileDescription | `NOVA IDE desktop application` |
-| `NOVAIDE.exe` | LegalCopyright | `Copyright (c) 2026 NOVA IDE Project. All rights reserved.` |
-| `NOVAIDE.exe` | ProductVersion | `0.1.0` |
-| `NOVAIDE-0.1.0-full.nupkg` (nuspec) | title / authors | `NOVA IDE` / `NOVA IDE Project` |
-| `NOVAIDE-0.1.0-full.nupkg` | description / copyright | as above |
-| `NOVA IDE-0.1.0 Setup.exe` | ProductVersion | `0.1.0` |
+| `A6IDE.exe` | ProductName | `A6` |
+| `A6IDE.exe` | FileDescription | `A6 desktop application` |
+| `A6IDE.exe` | LegalCopyright | `Copyright (c) 2026 A6 Project. All rights reserved.` |
+| `A6IDE.exe` | ProductVersion | `0.1.0` |
+| `A6IDE-0.1.0-full.nupkg` (nuspec) | title / authors | `A6` / `A6 Project` |
+| `A6IDE-0.1.0-full.nupkg` | description / copyright | as above |
+| `A6-0.1.0 Setup.exe` | ProductVersion | `0.1.0` |
+
+The application icon is generated from the committed root SVG sources by
+`pnpm generate:icons` (`tools/release/generate-icons.cjs`): the small SVG feeds
+16/24/32/48 px, the full SVG feeds 64/128/256 px, and `apps/desktop/icons/a6.ico`
+wraps all seven PNG-compressed entries. The generator is committed, uses the
+bundled Electron/Chromium as the rasterizer (no new image dependency), and the
+SVG sources are left unchanged. The ICO is wired through `packagerConfig.icon`.
+
+**Profile survival across the rename.** Electron derives `userData` from the
+product name, so renaming to A6 would otherwise strand every existing setting,
+encrypted API key and conversation in the old `NOVA IDE` directory. The app now
+pins `userData` back to that legacy directory at startup
+(`apps/desktop/src/main/config/profilePath.ts`); an explicit `--user-data-dir`
+(the verification harness) is always respected. This is verified by unit tests
+and, in the packaged app, by a throwaway profile seeded with the legacy path
+(see section 4). The directory name is an internal storage detail, not branding.
 
 The nuspec still contains a default `iconUrl` that points at Electron's icon
 on GitHub. There is no project icon host in this repository, so the owner
@@ -60,10 +78,10 @@ documented here rather than faked.
 
 `pnpm make` (Windows, x64) produces, under `apps/desktop/out/make/`:
 
-- `NOVA IDE-win32-x64/` — the portable packaged application.
-- `squirrel.windows/x64/NOVAIDE-0.1.0-full.nupkg` — the Squirrel full package.
+- `A6-win32-x64/` — the portable packaged application.
+- `squirrel.windows/x64/A6IDE-0.1.0-full.nupkg` — the Squirrel full package.
 - `squirrel.windows/x64/RELEASES` — the Squirrel release manifest (local only).
-- `squirrel.windows/x64/NOVA IDE-0.1.0 Setup.exe` — the Squirrel installer.
+- `squirrel.windows/x64/A6-0.1.0 Setup.exe` — the Squirrel installer.
 - `zip/` — a portable zip archive.
 
 These files are build output and are **not committed**.
@@ -71,13 +89,13 @@ These files are build output and are **not committed**.
 ## 4. What was actually verified
 
 `pnpm verify:packaging` (script: `tools/verify/packaging.mjs`) drives the real
-packaged build and passed **20/20** checks:
+packaged build and passed **26/26** checks:
 
 - exe and nuspec metadata match the product (above);
 - the app launches from a **fresh path whose name contains spaces** (like a
   real per-user install) — no hard-coded install location;
 - a **completely fresh profile** (no Ollama running, no local models, no API
-  keys) reaches a ready renderer;
+  keys) reaches a ready renderer, and reports its name as `A6`;
 - the local provider is present and keyless, the cloud provider is disabled
   and keyless on first run;
 - offline provider-status and model-catalog lookups return a result and do
@@ -85,7 +103,12 @@ packaged build and passed **20/20** checks:
 - the app creates its settings file in the `userData` directory and persists
   valid JSON on first write;
 - **no application process survives a forced kill** (the same guarantee the
-  Squirrel uninstaller needs to stop running processes before removal).
+  Squirrel uninstaller needs to stop running processes before removal);
+- (10G) with a fake `APPDATA` root containing a seeded legacy `NOVA IDE`
+  profile, the packaged app launched **without** `--user-data-dir` reads that
+  profile (`localOnly: true`), creates **no** fresh `A6` profile, leaves the
+  seeded file unchanged, and never touches the real user profile (which is
+  fingerprinted before and after every phase).
 
 `pnpm verify`, `pnpm verify:fuses` and `pnpm verify:quitcleanup` remain the
 broader runtime, fuse and child-process-cleanup gates and were re-run for this

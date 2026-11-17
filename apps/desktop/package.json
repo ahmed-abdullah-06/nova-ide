@@ -1,12 +1,12 @@
 {
-  "name": "@nova/desktop",
-  "productName": "NOVA IDE",
+  "name": "@a6/desktop",
+  "productName": "A6",
   "version": "0.1.0",
   "private": true,
-  "description": "NOVA IDE desktop application (Electron main, preload, and renderer)",
-  "author": "NOVA IDE Project",
+  "description": "A6 desktop application (Electron main, preload, and renderer)",
+  "author": "A6 Project",
   "license": "UNLICENSED",
-  "copyright": "Copyright (c) 2026 NOVA IDE Project. All rights reserved.",
+  "copyright": "Copyright (c) 2026 A6 Project. All rights reserved.",
   "main": ".vite/build/main.cjs",
   "scripts": {
     "dev": "electron-forge start",

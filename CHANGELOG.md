@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to NOVA IDE are documented in this file.
+All notable changes to A6 (formerly NOVA IDE) are documented in this file.
 Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) approach.
 
 ## [Unreleased]
@@ -377,15 +377,25 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     `docs/TROUBLESHOOTING.md`, `docs/SECURITY.md`,
     `docs/architecture/ARCHITECTURE.md`, `docs/KNOWN_LIMITATIONS.md`; stale
     README status and development progress updated to M10 V1 RC while keeping
-    the NOVA IDE branding until 10G.
+    the original branding until 10G.
   - **10F:** V1 definition-of-done walkthrough (25 criteria with evidence) and
     full regression in `docs/RELEASE_READINESS.md`: typecheck 0, 696/696 tests,
     package/make 0, verify 133/133, fuses 6/6, quitcleanup clean, packaging
     20/20, release checklist 17/17, `pnpm audit --audit-level high` 0. No push,
     tag, release, certificate or secret.
-  - **10G (pending, committed last):** isolated final rename to A6, logo/icon
-    generation with committed generator, profile-survival tests and packaged
-    isolated-profile verification.
+  - **10G (isolated, committed last):** final rename of the product from
+    **NOVA IDE** to **A6** across manifests, packaging metadata, UI strings,
+    docs and verification/CI artifacts. Generated the app icon set from the
+    committed `a6-logo.svg` / `a6-logo-small.svg` sources with a one-off
+    Electron rasterizer (`tools/release/generate-icons.cjs`, `pnpm generate:icons`)
+    and committed the generator plus PNG/ICO assets. The executable is now
+    `A6IDE.exe`, the Squirrel id `A6IDE` and the installer `A6-0.1.0 Setup.exe`.
+    Profile survival is guaranteed by pinning `userData` to the legacy
+    `NOVA IDE` directory (an explicit `--user-data-dir` is still respected);
+    unit tests and a packaged isolated-profile check verify it. 701/701 tests,
+    verify 133/133, packaging 26/26, all gates green. Internal identifiers
+    (`window.nova`, `NovaApi`, `nova:*` IPC) and the historical spec file name
+    are intentionally unchanged.
 
 ### Fixed
 
@@ -433,10 +443,10 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
   directory (`--user-data-dir`) that is deleted afterwards, and the
   harness compares the profile of the user before and after the run, so a
   regression that touches it is reported.
-- `pnpm make` failed with the scoped package name `@nova/desktop`: added
-  `productName`/`author` and explicit packager/maker naming
-  (`executableName: NOVAIDE`, Squirrel id `NOVAIDE`) so the NuGet id, nupkg and
-  exe paths are valid.
+- `pnpm make` failed with a scoped package name (`@a6/desktop` after the 10G
+  rename): added `productName`/`author` and explicit packager/maker naming
+  (`executableName: A6IDE`, Squirrel id `A6IDE`) so the NuGet id, nupkg and exe
+  paths are valid.
 - Renderer crashed (`window.nova` undefined) when the preload bridge was absent;
   the startup bridge call is now guarded and the status bar omits the version
   instead of failing.
@@ -463,4 +473,4 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M7 — Local AI and Model Management | Implemented (awaiting review) |
 | M8 — Voice Assistant | Implemented (awaiting review) |
 | M9 — Advanced Computer-Control Agent | Deferred (out of V1 scope) |
-| M10 — V1 Stabilization and Release | 10A–10F completed; 10G pending |
+| M10 — V1 Stabilization and Release | 10A–10G completed |

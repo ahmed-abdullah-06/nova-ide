@@ -1,5 +1,5 @@
 /**
- * Runtime verification harness for NOVA IDE (spec §24).
+ * Runtime verification harness for A6 (spec §24).
  *
  * Launches the real application (packaged or development build), drives it
  * through the Chrome DevTools protocol and checks the behaviour that can
@@ -499,8 +499,8 @@ function startApp(profileDir) {
   const executable = path.join(
     DESKTOP,
     'out',
-    'NOVA IDE-win32-x64',
-    'NOVAIDE.exe',
+    'A6-win32-x64',
+    'A6IDE.exe',
   );
   if (!existsSync(executable)) {
     throw new Error(

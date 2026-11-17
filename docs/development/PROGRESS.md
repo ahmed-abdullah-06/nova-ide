@@ -1,4 +1,4 @@
-# NOVA IDE — Development Progress
+# A6 — Development Progress (formerly NOVA IDE)
 
 Status values: **Not Started · In Progress · Implemented · Tested · Completed**
 A task may only be marked **Completed** after its acceptance criteria have passed (spec §26.9).
@@ -28,8 +28,8 @@ A task may only be marked **Completed** after its acceptance criteria have passe
 | 5.1 | Vitest unit tests | Completed | `tests/unit/`: tabsReducer, language, ipcChannels |
 | 5.2 | `pnpm typecheck` + `pnpm test` pass | Tested | typecheck exit 0; **21/21 tests pass** |
 | 5.3 | Dev run (`pnpm dev`) — manual DoD check | Tested | Verified via CDP: all six regions render, `window.nova` bridge live, no console errors |
-| 5.4 | Production build (`pnpm make`) verified | Tested | `NOVA IDE-0.1.0 Setup.exe` + zip produced; packaged app boots from ASAR and renders fully |
-| 5.5 | Security configuration verification | Tested | Fuses read back from packaged `NOVAIDE.exe`: RunAsNode OFF, CookieEncryption ON, NodeOptions OFF, NodeCliInspect OFF, AsarIntegrity ON, OnlyLoadAppFromAsar ON |
+| 5.4 | Production build (`pnpm make`) verified | Tested | `A6-0.1.0 Setup.exe` + zip produced (name reflects the 10G rename); packaged app boots from ASAR and renders fully |
+| 5.5 | Security configuration verification | Tested | Fuses read back from packaged `A6IDE.exe`: RunAsNode OFF, CookieEncryption ON, NodeOptions OFF, NodeCliInspect OFF, AsarIntegrity ON, OnlyLoadAppFromAsar ON |
 | 5.6 | Documentation updates (README, CHANGELOG, this file) | Completed | |
 
 ### Milestone 1 Definition of Done
@@ -524,8 +524,8 @@ caused by M10 work.
 | 10E.3 | Security doc | Completed | `docs/SECURITY.md` — process isolation, filesystem boundary, credentials, untrusted content, agent boundary, process hygiene, supply chain, honest gaps |
 | 10E.4 | Architecture overview | Completed | `docs/architecture/ARCHITECTURE.md` — process model, layout, IPC, subsystems, build/verification pipeline |
 | 10E.5 | Known limitations | Completed | `docs/KNOWN_LIMITATIONS.md` — scope exclusions, platform/packaging limits, testing honesty, product caps, spec-vs-V1 conflicts |
-| 10E.6 | Stale docs cleanup | Completed | `README.md` status M8 → M10 V1 RC (NOVA IDE branding kept until 10G), full gate commands and doc index; this file and `CHANGELOG.md` updated through 10E |
-| 10E.7 | Gates | Pending | Full gate suite re-run before the 10E commit |
+| 10E.6 | Stale docs cleanup | Completed | `README.md` status M8 → M10 V1 RC (original NOVA IDE branding intentionally kept until the isolated 10G rename), full gate commands and doc index; this file and `CHANGELOG.md` updated through 10E |
+| 10E.7 | Gates | Tested | Full gate suite re-run before the 10E commit: typecheck 0, 696/696 tests, package/make 0, verify 133/133, fuses 6/6, quitcleanup clean, packaging 20/20 |
 
 ### 10F — V1 definition-of-done walkthrough (completed)
 
@@ -537,15 +537,22 @@ caused by M10 work.
 | 10F.4 | No publishing side effects | Tested | No push, tag, release, certificate, secret or OS install/uninstall was performed; all artifacts local and uncommitted |
 | 10F.5 | Transparency note | Completed | One 10E `pnpm test` run exited 1 because a `node-pty` `AttachConsole failed` message crashed a Vitest worker (691/691 ran); the immediate re-run and the final regression both passed 696/696 |
 
-### 10G — Final rename to A6 (pending, committed last)
+### 10G — Final rename to A6 (completed, committed last, isolated)
 
-Isolated change set: verify the root `a6-logo.svg` (64+) and
-`a6-logo-small.svg` (16/24/32/48) sources, check for A6 naming conflicts,
-generate the icon set (rasterize with Chromium/Electron or a one-off script,
-write the ICO, commit the generator + generated icons; keep the SVG sources
-unchanged), apply the branding, and prove **profile survival** using a pinned
-old userData path or a tested migration. Requires unit tests **and** a packaged
-isolated-profile verification, a full regression, and an update to
-`RELEASE_READINESS.md`. Committed separately from 10A–10F.
+The product is renamed from **NOVA IDE** to **A6** in one isolated change set,
+committed separately from 10A–10F. Internal identifiers (`window.nova`,
+`NovaApi`, `nova:*` IPC, the `nova-verify-profile-` temp prefix) and the
+historical `NOVA_IDE_SPEC.md` file name are intentionally unchanged.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10G.1 | SVG source check | Tested | Root `a6-logo.svg` (full detail, used at 64+) and `a6-logo-small.svg` (simplified, used at 16/24/32/48) are well-formed; no A6 naming conflict existed in the repository. SVG sources left byte-for-byte unchanged |
+| 10G.2 | Icon generation | Completed | `tools/release/generate-icons.cjs` (`pnpm generate:icons`) rasterizes the SVGs with the bundled Electron/Chromium canvas (no new image dependency) and writes the ICO by hand. Committed generator + `apps/desktop/icons/a6-{16,24,32,48,64,128,256}.png` and `a6.ico`; ICO verified to contain 7 entries with exact PNG dimensions (88793 bytes). Wired via `packagerConfig.icon` |
+| 10G.3 | Branding applied | Completed | Manifests (`name: a6`, `@a6/desktop`, `productName: A6`), Forge metadata (`A6IDE.exe`, Squirrel id `A6IDE`, `A6-0.1.0 Setup.exe`, `A6 desktop application`, A6 copyright), `index.html` title, window title, status bar, provider/system prompt, error strings, CSS headers, `LICENSE`, `.env.example`, `.npmrc`, all user/release docs, verification harnesses and CI artifact name. Electron security flags, CSP and fuses unchanged |
+| 10G.4 | Profile survival — design | Completed | `apps/desktop/src/main/config/profilePath.ts` pins `userData` to the legacy `NOVA IDE` directory when the path is Electron's product-name default; an explicit `--user-data-dir` and any other non-default override are respected. Called at the top of `main/index.ts` before any store/log path is read, so settings, encrypted keys and conversations survive the rename |
+| 10G.5 | Profile survival — unit tests | Tested | `tests/unit/profilePath.test.ts` (5 tests): default A6 launch → legacy path, explicit `--user-data-dir` respected, non-default override respected, idempotent, legacy name stable. `tests/unit/verifyIsolation.test.ts` updated: harness now fingerprints the legacy profile path while the product name is A6 |
+| 10G.6 | Profile survival — packaged check | Tested | `tools/verify/packaging.mjs` seeds a throwaway `APPDATA` root with `<legacy>/NOVA IDE/app-settings.json` = `{version:1, settings:{localOnly:true}}`, launches the packaged app **without** `--user-data-dir`, and asserts the seeded value is read, no fresh `A6` profile is created, the file is unchanged, and the real profile is untouched. `pnpm verify:packaging` = **26/26** |
+| 10G.7 | Full regression | Tested | typecheck 0; test 0 (701/701, 51 files); package/make 0; verify 133/133; fuses 6/6; quitcleanup 0; packaging 26/26; release checklist 17/17 on the clean tree; `pnpm audit --audit-level high` 0. All A6 artifacts exist locally; no push/tag/release/certificate/secret |
+| 10G.8 | Readiness report | Completed | `docs/RELEASE_READINESS.md` §11 records the rename results, icon verification, profile-survival evidence and final gates |
 
 

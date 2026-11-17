@@ -1,4 +1,4 @@
-# The voice design of NOVA IDE (decision note)
+# The voice design of A6 (decision note)
 
 This note compares the options for speech-to-text (STT) and text-to-speech
 (TTS) **before** any voice code is written, as the milestone requires. It

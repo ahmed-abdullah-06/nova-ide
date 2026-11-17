@@ -12,7 +12,7 @@ import { copyNativeTerminalModule } from './forge/copyNativeModule';
 // `win32metadata` object has no LegalCopyright key in its type and is not
 // where resedit reads the value from.
 const PRODUCT_COPYRIGHT =
-  'Copyright (c) 2026 NOVA IDE Project. All rights reserved.';
+  'Copyright (c) 2026 A6 Project. All rights reserved.';
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -23,16 +23,19 @@ const config: ForgeConfig = {
       // ASAR integrity fuse keeps the archive tamper-evident.
       unpack: '**/node_modules/node-pty/**',
     },
-    // Display name comes from package.json `productName` ("NOVA IDE");
-    // the executable must be a filesystem-safe name without spaces.
-    executableName: 'NOVAIDE',
+    // The application icon is rasterized from the committed A6 SVG sources by
+    // `pnpm generate:icons` (tools/release/generate-icons.cjs).
+    icon: 'icons/a6.ico',
+    // Display name comes from package.json `productName` ("A6"); the
+    // executable must be a filesystem-safe name without spaces.
+    executableName: 'A6IDE',
     // Windows file/version resource metadata (spec 10C). These strings must
     // stay in sync with the description/author/copyright in package.json.
     appCopyright: PRODUCT_COPYRIGHT,
     win32metadata: {
-      CompanyName: 'NOVA IDE Project',
-      FileDescription: 'NOVA IDE desktop application',
-      ProductName: 'NOVA IDE',
+      CompanyName: 'A6 Project',
+      FileDescription: 'A6 desktop application',
+      ProductName: 'A6',
     },
     afterCopy: [copyNativeTerminalModule],
   },
@@ -46,12 +49,12 @@ const config: ForgeConfig = {
   makers: [
     // Windows installers (initial development platform is Windows, spec §22)
     // `name` must be a valid NuGet package id — the scoped workspace name
-    // "@nova/desktop" is rejected by nuget.exe (it also becomes a path).
+    // "@a6/desktop" is rejected by nuget.exe (it also becomes a path).
     new MakerSquirrel({
-      name: 'NOVAIDE',
-      title: 'NOVA IDE',
-      authors: 'NOVA IDE Project',
-      description: 'NOVA IDE desktop application',
+      name: 'A6IDE',
+      title: 'A6',
+      authors: 'A6 Project',
+      description: 'A6 desktop application',
       copyright: PRODUCT_COPYRIGHT,
     }),
     // Portable zip archives

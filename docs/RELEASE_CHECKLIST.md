@@ -18,8 +18,10 @@ pnpm make               # Windows Squirrel + zip installers
 pnpm verify             # 133 packaged-runtime checks
 pnpm verify:fuses       # all 6 hardening fuses
 pnpm verify:quitcleanup # no child process survives a crash
-pnpm verify:packaging   # 20 packaged metadata/first-run checks
+pnpm verify:packaging   # 26 packaged metadata/first-run + profile-survival checks
+pnpm verify:release     # release hygiene + manual-step reminder
 pnpm generate:notices   # refresh THIRD_PARTY_NOTICES.md after dep changes
+pnpm generate:icons     # re-rasterize A6 SVG sources into PNGs + a6.ico
 node tools/release/checklist.mjs  # hygiene + manual-step reminder
 ```
 
@@ -40,8 +42,9 @@ steps below. It changes no files and makes no network calls.
       license before a public open-source release.
 - [ ] **Icon URL.** The Squirrel nuspec carries a default Electron `iconUrl`.
       Replace it with an HTTPS URL you control.
-- [ ] **Product/brand name.** 10G applies the final A6 rename; confirm the
-      rename results before producing release artifacts.
+- [ ] **Product/brand name.** Applied in 10G: the product is now **A6**
+      (`A6IDE.exe`, `A6-0.1.0 Setup.exe`). Confirm the rename results recorded in
+      `docs/RELEASE_READINESS.md` §11 before producing release artifacts.
 
 ## 3. Signing and notarization (blocking for a public release, not done)
 
@@ -62,19 +65,23 @@ is documented as **unsigned**.
 
 ## 4. Manual smoke tests (owner, on a clean Windows machine)
 
-- [ ] Install with the generated `NOVA IDE-0.1.0 Setup.exe`.
+- [ ] Install with the generated `A6-0.1.0 Setup.exe`.
 - [ ] Confirm the app starts from the installed location (path with spaces).
 - [ ] First run with **no Ollama running, no local models and no API keys**:
       the app must start, show the local provider as keyless, the cloud
       provider as disabled, and never crash on offline lookups.
 - [ ] Confirm the data files are created under the userData directory.
-- [ ] Uninstall and confirm **no NOVAIDE process remains running**.
+- [ ] **Upgrade an existing NOVA IDE profile**: settings, encrypted keys and
+      conversations must survive the rename (the app pins userData to the
+      legacy `NOVA IDE` directory; the automated check proves this only in a
+      throwaway profile and never touches a real one).
+- [ ] Uninstall and confirm **no A6IDE process remains running**.
 - [ ] Confirm no user settings/keys/conversations outside the app's own
       userData directory were touched.
 
 The automated equivalents of most of these are in `pnpm verify:packaging`
-(20 checks), but a real install/uninstall is intentionally left to the owner
-because it modifies the machine.
+(26 checks), but a real install/uninstall and a real-profile upgrade are
+intentionally left to the owner because they modify the machine.
 
 ## 5. Publishing (owner, outside this repository's tooling)
 

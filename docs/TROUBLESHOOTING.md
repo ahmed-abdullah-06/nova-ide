@@ -16,9 +16,9 @@ the owner for a signed build. Do not disable SmartScreen globally.
 
 **The installer will not start / the app does not appear.** The Squirrel
 installer is per-user; it does not need administrator rights. Run the exact
-`NOVA IDE-0.1.0 Setup.exe` produced by `pnpm make`. If an older copy is already
+`A6-0.1.0 Setup.exe` produced by `pnpm make`. If an older copy is already
 installed, uninstall it first (Settings → Apps). The portable
-`NOVA IDE-win32-x64` folder can be run directly without installing.
+`A6-win32-x64` folder can be run directly without installing.
 
 **The app starts but shows a blank window.** Check the log in the logs folder.
 A broken preload bridge is guarded (the status bar omits the version instead of
@@ -26,7 +26,7 @@ crashing), so a blank window points to a rendering or GPU issue. Try updating
 your integrated graphics drivers — the verified dev machine uses Intel
 integrated graphics.
 
-**A stale `NOVAIDE.exe` process remains.** Use Task Manager to end it. The
+**A stale `A6IDE.exe` process remains.** Use Task Manager to end it. The
 application is expected to leave no process behind after quit or crash —
 `pnpm verify:quitcleanup` checks this. If it happens repeatedly, report it with
 the log.
@@ -127,7 +127,8 @@ unresolved.
 ## Diagnostics
 
 `pnpm verify` drives the real packaged app through 133 checks with an isolated
-temporary profile; `pnpm verify:packaging` runs 20 metadata/first-run checks;
+temporary profile; `pnpm verify:packaging` runs 26 metadata/first-run and
+profile-survival checks;
 `pnpm verify:fuses` reads back all six hardening fuses; and
 `pnpm verify:quitcleanup` checks that no child process survives a crash. Every
 run deletes its temporary profile and verifies that your real profile was not

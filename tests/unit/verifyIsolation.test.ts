@@ -18,7 +18,7 @@ import {
 
 describe('the isolation of the verification runs', () => {
   it('names the application like the desktop package', () => {
-    expect(appName()).toBe('NOVA IDE');
+    expect(appName()).toBe('A6');
   });
 
   it('creates a temporary profile directory', () => {
@@ -48,12 +48,13 @@ describe('the isolation of the verification runs', () => {
     }
   });
 
-  it('finds the profile of the user', () => {
+  it('fingerprints the legacy profile the app actually uses after 10G', () => {
     const userProfile = realUserDataPath();
-    // The path depends on the platform; it must at least end with the
-    // name of the application.
+    // After the rename the product name is A6, but the app pins userData to
+    // the legacy NOVA IDE directory. The harness must fingerprint THAT path.
     if (userProfile !== null) {
       expect(userProfile.endsWith('NOVA IDE')).toBe(true);
+      expect(appName()).toBe('A6');
     }
   });
 

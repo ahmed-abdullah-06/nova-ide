@@ -1,5 +1,5 @@
 /**
- * Milestone 10C packaged-application verification.
+ * Milestone 10C/10G packaged-application verification.
  *
  * Checks the real, packaged Windows build from a clean install-like location:
  *  - the exe / nuspec metadata is the product metadata, not tool defaults,
@@ -7,9 +7,13 @@
  *  - a completely fresh profile (no Ollama, no models, no keys) starts cleanly,
  *  - the app creates its data files in the userData directory,
  *  - no application process survives a forced kill (the same guarantee the
- *    Squirrel uninstaller relies on when it stops running processes).
+ *    Squirrel uninstaller relies on when it stops running processes),
+ *  - (10G) a pre-existing profile survives a launch: the app reads the seeded
+ *    legacy "NOVA IDE" userData path after the rename instead of creating a
+ *    fresh "A6" profile, so settings/keys/conversations are not stranded.
  *
- * Every run uses a temporary profile. The real user profile is never touched.
+ * Every run uses a temporary profile (or a fake APPDATA root). The real user
+ * profile is fingerprinted before and after and is never touched.
  *
  * Usage: node tools/verify/packaging.mjs   (run `pnpm make` first)
  */
@@ -17,10 +21,12 @@ import { spawn, execFileSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -31,14 +37,19 @@ import {
   findPageTarget,
   waitForDevTools,
 } from './cdp.mjs';
-import { createIsolatedProfile } from './isolation.mjs';
+import {
+  createIsolatedProfile,
+  profileFingerprint,
+  realUserDataPath,
+} from './isolation.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 const DESKTOP = path.join(REPO, 'apps', 'desktop');
-const PACKAGED = path.join(DESKTOP, 'out', 'NOVA IDE-win32-x64');
-const NUPKG = path.join(DESKTOP, 'out', 'make', 'squirrel.windows', 'x64', 'NOVAIDE-0.1.0-full.nupkg');
+const PACKAGED = path.join(DESKTOP, 'out', 'A6-win32-x64');
+const NUPKG = path.join(DESKTOP, 'out', 'make', 'squirrel.windows', 'x64', 'A6IDE-0.1.0-full.nupkg');
 const PORT = 9410;
+const SURVIVAL_PORT = 9411;
 
 const results = [];
 function check(name, ok, detail = '') {
@@ -86,11 +97,20 @@ $text
   return powerShell(script);
 }
 
-async function connect() {
-  if (!(await waitForDevTools('127.0.0.1', PORT, 60000))) {
+async function connect(port = PORT) {
+  if (!(await waitForDevTools('127.0.0.1', port, 60000))) {
     throw new Error('DevTools endpoint never became ready');
   }
-  const target = await findPageTarget('127.0.0.1', PORT);
+  // The DevTools HTTP endpoint can answer before the renderer page target has
+  // registered (especially on a cold launch with a fresh profile), so poll
+  // for the page instead of assuming it is there on the first request.
+  let target = null;
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    target = await findPageTarget('127.0.0.1', port);
+    if (target) break;
+    await delay(250);
+  }
   if (!target) throw new Error('No renderer page target');
   const session = new DevToolsSession(target.webSocketDebuggerUrl);
   await session.open();
@@ -114,18 +134,23 @@ async function run() {
     throw new Error(`Installer missing: ${NUPKG}. Run pnpm make first.`);
   }
 
+  // Fingerprint the real (legacy) profile before anything runs; no phase below
+  // may change it. 10G pinned userData to "NOVA IDE", so that is the path the
+  // harness must guard — not the new product name.
+  const realBefore = profileFingerprint(realUserDataPath());
+
   // --- 1. Metadata -------------------------------------------------------
-  const exe = path.join(PACKAGED, 'NOVAIDE.exe');
+  const exe = path.join(PACKAGED, 'A6IDE.exe');
   const exeMetadata = powerShell(`$v = (Get-Item '${exe.replace(/'/g, "''")}').VersionInfo; "$($v.ProductName)|$($v.FileDescription)|$($v.LegalCopyright)|$($v.ProductVersion)"`);
   if (exeMetadata === null) {
     check('exe metadata check (Windows only)', true, 'skipped on this platform');
   } else {
     const [product, description, copyright, version] = exeMetadata.split('|');
-    check('exe ProductName', product === 'NOVA IDE', product);
-    check('exe FileDescription', description === 'NOVA IDE desktop application', description);
+    check('exe ProductName', product === 'A6', product);
+    check('exe FileDescription', description === 'A6 desktop application', description);
     check(
       'exe LegalCopyright is the product, not the Electron template',
-      copyright === 'Copyright (c) 2026 NOVA IDE Project. All rights reserved.' &&
+      copyright === 'Copyright (c) 2026 A6 Project. All rights reserved.' &&
         !copyright.includes('GitHub'),
       copyright,
     );
@@ -136,26 +161,26 @@ async function run() {
   if (nuspec === null) {
     check('nuspec metadata check (Windows only)', true, 'skipped on this platform');
   } else {
-    check('nuspec title', /<title>NOVA IDE<\/title>/.test(nuspec));
-    check('nuspec authors', /<authors>NOVA IDE Project<\/authors>/.test(nuspec));
-    check('nuspec description', /<description>NOVA IDE desktop application<\/description>/.test(nuspec));
+    check('nuspec title', /<title>A6<\/title>/.test(nuspec));
+    check('nuspec authors', /<authors>A6 Project<\/authors>/.test(nuspec));
+    check('nuspec description', /<description>A6 desktop application<\/description>/.test(nuspec));
     check(
       'nuspec copyright',
-      /<copyright>Copyright \(c\) 2026 NOVA IDE Project\. All rights reserved\.<\/copyright>/.test(nuspec),
+      /<copyright>Copyright \(c\) 2026 A6 Project\. All rights reserved\.<\/copyright>/.test(nuspec),
     );
   }
 
   // --- 2. Clean-location launch -----------------------------------------
   // Copy the portable app into a path that contains spaces, like a real
   // per-user Squirrel install under "Local Settings"/"Programs".
-  const cleanRoot = mkdtempSync(path.join(tmpdir(), 'NOVA IDE clean location '));
-  const cleanExeDir = path.join(cleanRoot, 'NOVA IDE-win32-x64');
+  const cleanRoot = mkdtempSync(path.join(tmpdir(), 'A6 clean location '));
+  const cleanExeDir = path.join(cleanRoot, 'A6-win32-x64');
   cpSync(PACKAGED, cleanExeDir, { recursive: true });
   const profile = createIsolatedProfile();
   let app = null;
   let session = null;
   try {
-    const cleanExe = path.join(cleanExeDir, 'NOVAIDE.exe');
+    const cleanExe = path.join(cleanExeDir, 'A6IDE.exe');
     app = spawn(cleanExe, [
       `--remote-debugging-port=${PORT}`,
       `--user-data-dir=${profile.dir}`,
@@ -172,6 +197,7 @@ async function run() {
     // --- 3. First-run state (no Ollama, no models, no keys) --------------
     const info = await session.evaluate(`window.nova.getAppInfo()`);
     check('reports a packaged build', info?.isPackaged === true, `appName=${info?.appName} v${info?.appVersion}`);
+    check('packaged app name is A6', info?.appName === 'A6', `appName=${info?.appName}`);
 
     const providers = await session.evaluate(`window.nova.ai.providers()`);
     const list = Array.isArray(providers?.value) ? providers.value : [];
@@ -220,6 +246,80 @@ async function run() {
     rmSync(cleanRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     profile.cleanup();
   }
+
+  // --- 6. 10G profile survival (packaged, no explicit --user-data-dir) ---
+  // Prove the packaged app still reads the legacy "NOVA IDE" profile after the
+  // rename. We point APPDATA at a throwaway root and seed
+  //   <fake APPDATA>/NOVA IDE/app-settings.json = { version:1, settings:{ localOnly:true } }
+  // then launch WITHOUT --user-data-dir. The startup resolver must pin userData
+  // to <fake APPDATA>/NOVA IDE, so window.nova.localOnly() returns true and no
+  // fresh <fake APPDATA>/A6 profile is created. A regression that drops the pin
+  // would read a fresh A6 profile (localOnly false) and fail this check.
+  if (process.platform === 'win32') {
+    const survivalRoot = mkdtempSync(path.join(tmpdir(), 'A6 profile survival '));
+    const legacyDir = path.join(survivalRoot, 'NOVA IDE');
+    const newNameDir = path.join(survivalRoot, 'A6');
+    mkdirSync(legacyDir, { recursive: true });
+    const seed = { version: 1, settings: { localOnly: true } };
+    writeFileSync(
+      path.join(legacyDir, 'app-settings.json'),
+      `${JSON.stringify(seed, null, 2)}\n`,
+      'utf8',
+    );
+    let survivalApp = null;
+    let survivalSession = null;
+    try {
+      survivalApp = spawn(
+        path.join(PACKAGED, 'A6IDE.exe'),
+        [`--remote-debugging-port=${SURVIVAL_PORT}`],
+        {
+          stdio: 'ignore',
+          env: { ...process.env, APPDATA: survivalRoot },
+        },
+      );
+      survivalSession = await connect(SURVIVAL_PORT);
+      const survivalReady = await waitForExpression(
+        survivalSession,
+        `window.nova !== undefined && document.readyState === 'complete'`,
+      );
+      check('survival launch reaches a ready renderer', survivalReady);
+
+      const localOnly = await survivalSession.evaluate(`window.nova.localOnly()`);
+      check(
+        'packaged app reads the seeded legacy profile after the rename',
+        localOnly === true,
+        `window.nova.localOnly()=${localOnly}`,
+      );
+      check(
+        'no fresh A6 profile directory was created',
+        !existsSync(path.join(newNameDir, 'app-settings.json')),
+      );
+
+      // The seeded file must survive the launch unchanged (no overwrite).
+      const seeded = JSON.parse(
+        readFileSync(path.join(legacyDir, 'app-settings.json'), 'utf8'),
+      );
+      check(
+        'seeded profile data is unchanged after the launch',
+        seeded?.settings?.localOnly === true,
+      );
+    } finally {
+      survivalSession?.close();
+      if (survivalApp && !survivalApp.killed) survivalApp.kill();
+      await delay(2000);
+      rmSync(survivalRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  } else {
+    check('10G profile survival check (Windows only)', true, 'skipped on this platform');
+  }
+
+  // --- 7. Real profile untouched ----------------------------------------
+  const realAfter = profileFingerprint(realUserDataPath());
+  check(
+    'real user profile was not touched by any verification phase',
+    realAfter === realBefore,
+    `path=${realUserDataPath()}`,
+  );
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} packaging checks passed`);

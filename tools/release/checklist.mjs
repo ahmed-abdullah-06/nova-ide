@@ -74,7 +74,7 @@ function readJson(file) {
 }
 
 function run() {
-  console.log('NOVA IDE — local release-readiness checklist\n');
+  console.log('A6 — local release-readiness checklist\n');
 
   // 1. Clean working tree.
   const dirty = git(['status', '--porcelain']);
@@ -93,10 +93,10 @@ function run() {
 
   // 4. Build artifacts exist (the release candidate was actually built).
   const artifacts = [
-    'apps/desktop/out/NOVA IDE-win32-x64/NOVAIDE.exe',
-    'apps/desktop/out/make/squirrel.windows/x64/NOVAIDE-0.1.0-full.nupkg',
+    'apps/desktop/out/A6-win32-x64/A6IDE.exe',
+    'apps/desktop/out/make/squirrel.windows/x64/A6IDE-0.1.0-full.nupkg',
     'apps/desktop/out/make/squirrel.windows/x64/RELEASES',
-    'apps/desktop/out/make/squirrel.windows/x64/NOVA IDE-0.1.0 Setup.exe',
+    'apps/desktop/out/make/squirrel.windows/x64/A6-0.1.0 Setup.exe',
   ];
   for (const file of artifacts) {
     check(`artifact ${path.basename(file)}`, existsSync(path.join(REPO, file)));
@@ -105,11 +105,17 @@ function run() {
   // 5. Metadata consistency.
   const root = readJson('package.json');
   const desktop = readJson('apps/desktop/package.json');
-  check('product name is consistent', root.description?.startsWith('NOVA IDE') && desktop.description?.startsWith('NOVA IDE'));
+  check(
+    'product name is consistent',
+    root.description?.startsWith('A6') &&
+      desktop.description?.startsWith('A6') &&
+      desktop.productName === 'A6',
+    desktop.productName,
+  );
   check('version is consistent', root.version === desktop.version, `${root.version} / ${desktop.version}`);
   check('app is private (npm publish blocked)', root.private === true && desktop.private === true);
   const forge = readFileSync(path.join(REPO, 'apps', 'desktop', 'forge.config.mts'), 'utf8');
-  check('exe name + Squirrel id documented in Forge config', forge.includes("executableName: 'NOVAIDE'") && forge.includes("name: 'NOVAIDE'"));
+  check('exe name + Squirrel id documented in Forge config', forge.includes("executableName: 'A6IDE'") && forge.includes("name: 'A6IDE'"));
   check('appCopyright is wired (LegalCopyright)' , forge.includes('appCopyright: PRODUCT_COPYRIGHT'));
 
   // 6. License decision is explicitly flagged to the owner.
@@ -129,8 +135,12 @@ Manual steps that MUST be done by the owner before a public release
      (macOS: also notarize with Apple credentials.)
   4. Perform a real Squirrel install -> uninstall smoke test on Windows.
   5. Smoke-test a fresh first run with no Ollama / models / API keys.
-  6. Review docs/RELEASE_CHECKLIST.md and docs/PACKAGING.md in full.
-  7. Create the release, tag and upload artifacts through your own account.
+  6. Upgrade an existing "NOVA IDE" profile: confirm its settings, encrypted
+     keys and conversations survive the rename to A6 (the isolated packaged
+     check proves this in a throwaway profile; a real profile is never touched
+     by automated verification).
+  7. Review docs/RELEASE_CHECKLIST.md and docs/PACKAGING.md in full.
+  8. Create the release, tag and upload artifacts through your own account.
      This repository's tooling never pushes, tags or publishes.
 
 This script is local-only: it made no network calls and changed no files.

@@ -23,7 +23,7 @@ actually ran; unresolved items are listed in
 - Packaged builds use Electron **fuses**: `RunAsNode` off, `CookieEncryption`
   on, `NodeOptions` off, `NodeCliInspect` off, `ASAR integrity` on and
   `OnlyLoadAppFromAsar` on. `pnpm verify:fuses` reads all six back from the
-  packaged `NOVAIDE.exe`; all six are OK.
+  packaged `A6IDE.exe`; all six are OK.
 - No fuse or CSP value was changed during the V1 stabilization work. Any
   future change requires justification and a re-run of the full gate suite.
 

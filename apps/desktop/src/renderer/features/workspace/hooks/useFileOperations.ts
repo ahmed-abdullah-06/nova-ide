@@ -42,7 +42,7 @@ export function useFileOperations(): FileOperations {
   const createEntry = useCallback(
     async (parentPath: string, kind: FileKind, name: string): Promise<void> => {
       if (!window.nova) {
-        notify('error', 'Filesystem access is unavailable outside NOVA IDE');
+        notify('error', 'Filesystem access is unavailable outside A6');
         return;
       }
       const trimmed = name.trim();
@@ -88,7 +88,7 @@ export function useFileOperations(): FileOperations {
   const renameEntry = useCallback(
     async (entry: FileEntry, newName: string): Promise<void> => {
       if (!window.nova) {
-        notify('error', 'Filesystem access is unavailable outside NOVA IDE');
+        notify('error', 'Filesystem access is unavailable outside A6');
         return;
       }
       const trimmed = newName.trim();
@@ -162,7 +162,7 @@ export function useFileOperations(): FileOperations {
   const deleteEntry = useCallback(
     async (entry: FileEntry): Promise<void> => {
       if (!window.nova) {
-        notify('error', 'Filesystem access is unavailable outside NOVA IDE');
+        notify('error', 'Filesystem access is unavailable outside A6');
         return;
       }
       const isDirectory = entry.kind === 'directory';
@@ -235,7 +235,7 @@ export function useFileOperations(): FileOperations {
 
   const saveActive = useCallback(async (): Promise<void> => {
     if (!window.nova) {
-      notify('error', 'Filesystem access is unavailable outside NOVA IDE');
+      notify('error', 'Filesystem access is unavailable outside A6');
       return;
     }
     const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);

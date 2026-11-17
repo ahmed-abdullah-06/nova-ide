@@ -261,7 +261,7 @@ export function describeMediaError(error: unknown): string {
   switch (name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'The microphone was not allowed. Allow it for NOVA IDE and try again.';
+      return 'The microphone was not allowed. Allow it for A6 and try again.';
     case 'NotFoundError':
     case 'DevicesNotFoundError':
       return 'No microphone was found on this machine.';

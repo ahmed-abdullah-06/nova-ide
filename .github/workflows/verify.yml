@@ -22,7 +22,7 @@ permissions:
 jobs:
   verify-windows:
     # The packaged-application gates (runtime, fuses, quit-cleanup and
-    # packaging) launch NOVAIDE.exe, so they require a Windows runner with a
+    # packaging) launch A6IDE.exe, so they require a Windows runner with a
     # desktop session. A hosted `windows-latest` runner provides one.
     runs-on: windows-latest
     steps:
@@ -68,9 +68,9 @@ jobs:
       - name: Upload build artifacts (not a release)
         uses: actions/upload-artifact@v4
         with:
-          name: nova-ide-windows-x64
+          name: a6-windows-x64
           path: |
-            apps/desktop/out/NOVA IDE-win32-x64/
+            apps/desktop/out/A6-win32-x64/
             apps/desktop/out/make/squirrel.windows/x64/
             apps/desktop/out/make/zip/
           if-no-files-found: error

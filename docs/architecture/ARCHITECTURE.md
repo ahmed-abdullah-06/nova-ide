@@ -33,10 +33,10 @@ The Electron app has three isolated layers:
 ## 2. Monorepo layout
 
 ```
-nova-ide/
+a6/
 ├── apps/desktop/
 │   ├── src/main/         main process: window, ipc/, services, agent/, providers/, voice/
-│   ├── src/preload/      contextBridge API (window.nova)
+│   ├── src/preload/      contextBridge API (window.nova — kept as a stable internal id)
 │   ├── src/renderer/     React UI, reducers, components, Monaco
 │   ├── src/shared/       ipc-types.ts, contracts, result types (imported by all layers)
 │   ├── forge.config.mts  Forge packaging, makers, fuses, metadata
@@ -45,9 +45,9 @@ nova-ide/
 ├── tools/
 │   ├── verify/           CDP runtime harness, isolation, fuses, quitcleanup, packaging
 │   ├── perf/             measured performance harness
-│   └── release/          notice generator + release checklist
+│   └── release/          notice generator, icon generator + release checklist
 ├── docs/                 user, security, privacy, packaging, performance, release docs
-└── NOVA_IDE_SPEC.md
+└── NOVA_IDE_SPEC.md      historical specification (name kept for reference)
 ```
 
 The workspace uses pnpm 12 with `nodeLinker: hoisted` (Electron Forge
@@ -101,19 +101,24 @@ requirement) and a single lockfile.
 - `pnpm verify` — 133 CDP checks driving the real packaged app with a mock
   provider/engine and a **fresh isolated profile** seeded before launch.
 - `pnpm verify:fuses`, `pnpm verify:quitcleanup`, `pnpm verify:packaging` —
-  fuse read-back, crash-cleanup and 20 clean-location/first-run checks.
-- `pnpm perf:measure`, `pnpm generate:notices`, `pnpm verify:release` — measured
-  performance, third-party notice generation and release hygiene.
+  fuse read-back, crash-cleanup and 26 clean-location/first-run/profile-survival
+  checks.
+- `pnpm perf:measure`, `pnpm generate:notices`, `pnpm generate:icons`,
+  `pnpm verify:release` — measured performance, third-party notice generation,
+  icon rasterization and release hygiene.
 
-Every verification run uses a temporary `--user-data-dir`, deletes it
-afterwards, and fingerprints the real user profile before and after to prove it
-was not touched.
+Every verification run uses a temporary `--user-data-dir` (or a fake `APPDATA`
+root for the packaged survival check), deletes it afterwards, and fingerprints
+the real user profile before and after to prove it was not touched. During
+startup the main process pins `userData` to the legacy `NOVA IDE` directory so
+the 10G rename cannot strand existing data; an explicit `--user-data-dir` is
+always respected.
 
 ## 7. Packaging
 
 `forge.config.mts` is the single source of product metadata: executable name
-`NOVAIDE`, product name `NOVA IDE`, Squirrel id `NOVAIDE`, and one
-`PRODUCT_COPYRIGHT` constant wired through `appCopyright` (the field Electron
-Packager actually writes into the exe's `LegalCopyright`). See
+`A6IDE`, product name `A6`, Squirrel id `A6IDE`, and one `PRODUCT_COPYRIGHT`
+constant wired through `appCopyright` (the field Electron Packager actually
+writes into the exe's `LegalCopyright`). See
 [../PACKAGING.md](../PACKAGING.md) for verified metadata, produced artifacts,
 platform coverage and signing limitations.

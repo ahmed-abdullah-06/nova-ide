@@ -41,20 +41,31 @@ export function appName() {
       'utf8',
     );
     const parsed = JSON.parse(raw);
-    return typeof parsed.productName === 'string' ? parsed.productName : 'NOVA IDE';
+    return typeof parsed.productName === 'string' ? parsed.productName : 'A6';
   } catch {
-    return 'NOVA IDE';
+    return 'A6';
   }
 }
+
+/**
+ * The profile directory name the application still uses after the 10G rename.
+ * Kept in sync with `apps/desktop/src/main/config/profilePath.ts`.
+ */
+export const LEGACY_PROFILE_NAME = 'NOVA IDE';
 
 /**
  * The directory the application uses for its data when it is started
  * without an isolated profile.
  *
+ * After 10G the product name is "A6", but the app pins userData to the legacy
+ * "NOVA IDE" directory so a rename does not lose the user's data. The harness
+ * must fingerprint THAT directory — fingerprinting the new name would miss a
+ * regression that writes into the real legacy profile.
+ *
  * @returns The path, or null when it cannot be determined.
  */
 export function realUserDataPath() {
-  const name = appName();
+  const name = LEGACY_PROFILE_NAME;
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA;
     return appData === undefined ? null : path.join(appData, name);

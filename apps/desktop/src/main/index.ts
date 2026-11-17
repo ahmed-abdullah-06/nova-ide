@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog } from 'electron';
 import started from 'electron-squirrel-startup';
 import { AppSettingsStore } from './config/appSettings';
+import { resolveProfilePath } from './config/profilePath';
 import { registerIpcHandlers } from './ipc';
 import { AppLogger, installErrorHandlers } from './logging/appLogger';
 import { installApplicationMenu } from './menu';
@@ -12,6 +13,20 @@ import { createMainWindow } from './window';
 if (started) {
   app.quit();
 }
+
+// The 10G rename changed the product name. Pin the userData directory back to
+// the legacy name so settings, encrypted keys and conversations survive.
+// This must run before ANY getPath('logs'/'userData') or store initialisation;
+// an explicit --user-data-dir (the verification harness) is left untouched.
+app.setPath(
+  'userData',
+  resolveProfilePath({
+    userData: app.getPath('userData'),
+    appData: app.getPath('appData'),
+    appName: app.getName(),
+    hasExplicitUserData: app.commandLine.hasSwitch('user-data-dir'),
+  }),
+);
 
 // The log lives in Electron's logs directory. It is bounded, rotated and
 // redacted; unhandled errors are written there and shown to the user as a
