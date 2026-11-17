@@ -54,6 +54,8 @@ function subscribe<T>(
 const novaApi: NovaApi = {
   getAppInfo: () => invoke(IpcChannels.appGetInfo),
   openExternal: (url) => invoke(IpcChannels.appOpenExternal, url),
+  localOnly: () => invoke(IpcChannels.appLocalOnly),
+  setLocalOnly: (enabled) => invoke(IpcChannels.appLocalOnlySet, enabled),
 
   workspace: {
     open: (pathValue?: string) =>

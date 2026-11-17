@@ -238,6 +238,9 @@ export function buildSystemPrompt(): string {
  * @param hasKey True when a key is configured.
  * @param approved True when the user approved the context of this request.
  * @param hasContext True when the request carries workspace content.
+ * @param localOnly True when the local-only mode is switched on. Nothing
+ *   may leave the machine then — a cloud provider is refused even with
+ *   the approval of the user.
  * @returns An error when the request must be refused.
  */
 export function checkPrivacyGate(
@@ -246,7 +249,16 @@ export function checkPrivacyGate(
   hasKey: boolean,
   approved: boolean,
   hasContext: boolean,
+  localOnly = false,
 ): ProviderErrorInfo | null {
+  if (localOnly && kind === 'cloud') {
+    return {
+      code: 'disabled',
+      message:
+        'The local-only mode is switched on: no cloud provider may be ' +
+        'used. Switch the mode off in the settings to use it.',
+    };
+  }
   if (!enabled) {
     return {
       code: 'disabled',

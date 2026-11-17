@@ -92,6 +92,13 @@ export interface AgentServiceOptions {
    * same time. A failure of the hook never blocks the run.
    */
   beforeLocalRequest?: (model: string) => Promise<void>;
+  /**
+   * True when the local-only mode is switched on.
+   *
+   * The rule is read from the main process, so neither the renderer nor
+   * the model can bypass it (Milestone 8).
+   */
+  isLocalOnly?: () => boolean;
 }
 
 /** The answer of the user to the plan of the run. */
@@ -256,6 +263,7 @@ export class AgentService {
       // The agent reads the workspace, so the scope is always the
       // workspace.
       true,
+      this.options.isLocalOnly?.() === true,
     );
     if (gate !== null) {
       return { ok: false, message: gate.message };

@@ -46,6 +46,13 @@ export interface ChatServiceOptions {
    * same time. A failure of the hook never blocks the request.
    */
   beforeLocalRequest?: (model: string) => Promise<void>;
+  /**
+   * True when the local-only mode is switched on.
+   *
+   * The rule is read from the main process, so the renderer cannot
+   * bypass it (Milestone 8).
+   */
+  isLocalOnly?: () => boolean;
 }
 
 export class ChatService {
@@ -97,6 +104,7 @@ export class ChatService {
       apiKey !== null,
       approveCloudContext,
       attachments.length > 0,
+      this.options.isLocalOnly?.() === true,
     );
     if (gate !== null) {
       return { ok: false, error: gate };

@@ -33,6 +33,7 @@ import {
   assertConversationId,
   assertDownloadId,
   assertExternalUrl,
+  assertLocalOnly,
   assertModelDefaults,
   assertModelName,
   assertModelPull,
@@ -67,6 +68,7 @@ import { ConversationStore } from '../providers/conversationStore';
 import { CredentialStore } from '../providers/credentials';
 import { ProviderService } from '../providers/providerService';
 import { ProviderSettingsStore } from '../providers/settings';
+import { AppSettingsStore } from '../config/appSettings';
 import { LocalModelService } from '../providers/localModels/localModelService';
 import { ModelDefaultsStore } from '../providers/localModels/modelDefaultsStore';
 import { AgentService } from '../agent/agentService';
@@ -149,7 +151,9 @@ async function confirmPermissionWidening(
  * @returns A function that terminates every child process of the
  *   application. The promise resolves when the process trees are gone.
  */
-export function registerIpcHandlers(): () => Promise<void> {
+export function registerIpcHandlers(
+  appSettings: AppSettingsStore,
+): () => Promise<void> {
   const watcher = new OpenFileWatcher((change) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(IpcPushChannels.fsExternalChange, change);
@@ -238,6 +242,11 @@ export function registerIpcHandlers(): () => Promise<void> {
     credentialStore.getKey(providerId),
   );
 
+  // The global settings of the application (Milestone 8): the
+  // local-only mode blocks every cloud provider and every cloud voice
+  // service in the main process.
+  const isLocalOnly = (): boolean => appSettings.localOnly;
+
   // The management of the local models (Milestone 7). The service talks
   // to the local Ollama service; the renderer only sends the name of a
   // model and never gains network access.
@@ -271,6 +280,7 @@ export function registerIpcHandlers(): () => Promise<void> {
     },
     beforeLocalRequest: (model) =>
       localModelService.ensureSingleLoadedModel(model),
+    isLocalOnly,
   });
   const conversationStore = new ConversationStore();
 
@@ -332,6 +342,7 @@ export function registerIpcHandlers(): () => Promise<void> {
     },
     beforeLocalRequest: (model) =>
       localModelService.ensureSingleLoadedModel(model),
+    isLocalOnly,
   });
   const agentHandlers = createAgentHandlers(agentService, permissionController);
   const aiHandlers = createAiHandlers(
@@ -364,6 +375,22 @@ export function registerIpcHandlers(): () => Promise<void> {
   });
 
   registerChannel(IpcChannels.appGetInfo, assertNoArgs, createAppInfoHandler());
+
+  // The local-only mode (Milestone 8). The rule is enforced in the main
+  // process: the renderer can only switch the mode on or off.
+  registerChannel(
+    IpcChannels.appLocalOnly,
+    assertNoArgs,
+    async () => appSettings.localOnly,
+  );
+  registerChannel(
+    IpcChannels.appLocalOnlySet,
+    assertLocalOnly,
+    async (enabled: boolean) => {
+      await appSettings.setLocalOnly(enabled);
+      return appSettings.localOnly;
+    },
+  );
 
   // A link of the chat is opened in the browser of the user — only http
   // and https are accepted (the output of a model is untrusted).

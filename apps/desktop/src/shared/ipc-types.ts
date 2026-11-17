@@ -42,6 +42,8 @@ import type {
 export const IpcChannels = {
   appGetInfo: 'app:get-info',
   appOpenExternal: 'app:open-external',
+  appLocalOnly: 'app:local-only',
+  appLocalOnlySet: 'app:local-only-set',
   workspaceOpen: 'workspace:open',
   workspaceClose: 'workspace:close',
   workspaceRecent: 'workspace:recent',
@@ -406,6 +408,15 @@ export interface IpcInvokeMap {
    * model output without that check.
    */
   'app:open-external': { args: [url: string]; result: FsResult<void> };
+  /**
+   * The state of the local-only mode.
+   *
+   * While the mode is on, no cloud provider and no cloud voice service
+   * may be used — the rule is enforced in the main process.
+   */
+  'app:local-only': { args: []; result: boolean };
+  /** Switches the local-only mode on or off. */
+  'app:local-only-set': { args: [enabled: boolean]; result: boolean };
   /** No argument → native folder dialog; with a path → open that folder
    *  (used by Recent Workspaces). `value: null` means the user cancelled. */
   'workspace:open': { args: [path?: string]; result: FsResult<Workspace | null> };
@@ -979,6 +990,10 @@ export interface NovaApi {
   getAppInfo(): Promise<AppInfo>;
   /** Opens a link in the browser of the user. */
   openExternal(url: string): Promise<FsResult<void>>;
+  /** True when nothing may leave this machine. */
+  localOnly(): Promise<boolean>;
+  /** Switches the local-only mode on or off. */
+  setLocalOnly(enabled: boolean): Promise<boolean>;
   workspace: NovaWorkspaceApi;
   fs: NovaFsApi;
   terminal: NovaTerminalApi;

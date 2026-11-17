@@ -13,6 +13,7 @@ import {
   assertApprovalAnswer,
   assertChatRequest,
   assertDownloadId,
+  assertLocalOnly,
   assertModelDefaults,
   assertModelName,
   assertModelPull,
@@ -41,6 +42,14 @@ describe('IPC argument validators', () => {
   it('rejects arguments on a channel that takes none', () => {
     expect(() => assertNoArgs([])).not.toThrow();
     expect(() => assertNoArgs(['x'])).toThrow();
+  });
+
+  it('validates the state of the local-only mode', () => {
+    expect(() => assertLocalOnly([true])).not.toThrow();
+    expect(() => assertLocalOnly([false])).not.toThrow();
+    expect(() => assertLocalOnly(['yes'])).toThrow();
+    expect(() => assertLocalOnly([])).toThrow();
+    expect(() => assertLocalOnly([true, false])).toThrow();
   });
 
   it('validates the name of a local model', () => {
@@ -393,7 +402,10 @@ describe('IPC registration security', () => {
     const { registerIpcHandlers } = await import(
       '../../apps/desktop/src/main/ipc/index'
     );
-    registerIpcHandlers();
+    const { AppSettingsStore } = await import(
+      '../../apps/desktop/src/main/config/appSettings'
+    );
+    registerIpcHandlers(new AppSettingsStore());
 
     const handler = handlers.get(IpcChannels.terminalCreate);
     expect(handler).toBeDefined();

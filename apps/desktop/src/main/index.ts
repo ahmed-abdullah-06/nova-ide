@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
+import { AppSettingsStore } from './config/appSettings';
 import { registerIpcHandlers } from './ipc';
 import { installApplicationMenu } from './menu';
 import { installContentSecurityPolicy } from './security/csp';
@@ -29,29 +30,34 @@ process.on('unhandledRejection', (reason: unknown) => {
 app.whenReady().then(() => {
   // Security measures must be in place before any renderer loads (spec §19).
   installContentSecurityPolicy();
-  // The returned callback terminates every child process on quit.
-  const stopChildProcesses = registerIpcHandlers();
-  installApplicationMenu();
-  createMainWindow();
+  // The global settings are read before the window exists: the
+  // local-only mode must be known before the first request (Milestone 8).
+  const appSettings = new AppSettingsStore();
+  void appSettings.load().then(() => {
+    // The returned callback terminates every child process on quit.
+    const stopChildProcesses = registerIpcHandlers(appSettings);
+    installApplicationMenu();
+    createMainWindow();
 
-  // macOS convention: re-create the window when the dock icon is clicked.
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
-  });
+    // macOS convention: re-create the window when the dock icon is clicked.
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow();
+      }
+    });
 
-  // The quit is delayed until every child process is really gone, so a
-  // task or a terminal shell can never outlive the application.
-  let cleanupDone = false;
-  app.on('will-quit', (event) => {
-    if (cleanupDone) {
-      return;
-    }
-    event.preventDefault();
-    void stopChildProcesses().finally(() => {
-      cleanupDone = true;
-      app.quit();
+    // The quit is delayed until every child process is really gone, so a
+    // task or a terminal shell can never outlive the application.
+    let cleanupDone = false;
+    app.on('will-quit', (event) => {
+      if (cleanupDone) {
+        return;
+      }
+      event.preventDefault();
+      void stopChildProcesses().finally(() => {
+        cleanupDone = true;
+        app.quit();
+      });
     });
   });
 });

@@ -654,3 +654,12 @@
   font-size: var(--font-size-small);
   overflow-wrap: anywhere;
 }
+
+.ai-badge--local-only {
+  background: rgba(240, 180, 41, 0.18);
+  color: #f0b429;
+}
+
+.ai-settings__confirm--local-only {
+  color: var(--color-text);
+}

@@ -190,6 +190,14 @@ export function AiPanel({
             {provider.kind === 'local' ? 'LOCAL' : 'CLOUD'}
           </span>
         ) : null}
+        {ai.localOnly ? (
+          <span
+            className="ai-badge ai-badge--local-only"
+            title="The local-only mode is switched on: no cloud provider and no cloud voice service may be used"
+          >
+            LOCAL ONLY
+          </span>
+        ) : null}
         <button
           type="button"
           className="ai-panel__settings-button"
@@ -248,6 +256,8 @@ export function AiPanel({
           status={ai.status}
           onRefresh={ai.refresh}
           onModelsChanged={ai.refresh}
+          localOnly={ai.localOnly}
+          onLocalOnlyChange={ai.setLocalOnly}
         />
       ) : null}
 

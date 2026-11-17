@@ -30,6 +30,10 @@ export interface ProviderSettingsProps {
    * downloaded appears in the list without a restart.
    */
   onModelsChanged?: () => void;
+  /** True when nothing may leave this machine. */
+  localOnly?: boolean;
+  /** Switches the local-only mode on or off. */
+  onLocalOnlyChange?: (enabled: boolean) => void;
 }
 
 /** The providers the application knows. */
@@ -57,6 +61,8 @@ export function ProviderSettings({
   status,
   onRefresh,
   onModelsChanged,
+  localOnly = false,
+  onLocalOnlyChange,
 }: ProviderSettingsProps): React.JSX.Element {
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
@@ -256,6 +262,17 @@ export function ProviderSettings({
           external service.
         </label>
       ) : null}
+
+      <label className="ai-settings__confirm ai-settings__confirm--local-only">
+        <input
+          type="checkbox"
+          aria-label="Local-only mode"
+          checked={localOnly}
+          onChange={(event) => onLocalOnlyChange?.(event.target.checked)}
+        />
+        Local-only mode: no cloud provider and no cloud voice service may be
+        used. The rule is enforced in the main process.
+      </label>
 
       <div className="ai-settings__row">
         <input

@@ -604,6 +604,20 @@ export function assertPermissionUpdate(
 }
 
 /**
+ * The state of the local-only mode.
+ *
+ * The switch is the only way to change the rule; the renderer cannot
+ * ask for an exception for a single request.
+ */
+export function assertLocalOnly(
+  args: unknown[],
+): asserts args is [enabled: boolean] {
+  if (args.length !== 1 || typeof args[0] !== 'boolean') {
+    throw new Error('Expected the state of the local-only mode');
+  }
+}
+
+/**
  * The name of a local model.
  *
  * The renderer only sends a name; the main process builds the request

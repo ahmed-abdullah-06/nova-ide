@@ -50,6 +50,15 @@ export interface AiController {
   providerId: string | null;
   /** The id of the selected model. */
   model: string;
+  /**
+   * True when nothing may leave this machine.
+   *
+   * The state is read from the main process: the renderer cannot bypass
+   * the rule for a single request.
+   */
+  localOnly: boolean;
+  /** Switches the local-only mode on or off. */
+  setLocalOnly: (enabled: boolean) => void;
   /** The model that the chat uses by default (the user can change it). */
   defaultChatModel: string;
   /** The model that the agent uses by default (the user can change it). */
@@ -106,6 +115,7 @@ export function useAi(): AiController {
   const [preview, setPreview] = useState<ContextPreview[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localOnly, setLocalOnlyState] = useState(false);
 
   /** The request that is currently running. */
   const requestRef = useRef<string | null>(null);
@@ -201,6 +211,10 @@ export function useAi(): AiController {
     void api.localModels.defaults().then((stored) => {
       setDefaults(stored);
     });
+    // The local-only mode is read from the main process.
+    void api.localOnly().then((value) => {
+      setLocalOnlyState(value);
+    });
     void api.ai.providers().then((result) => {
       if (!result.ok) {
         setError(result.error.message);
@@ -270,6 +284,22 @@ export function useAi(): AiController {
     setProviderId(next);
     setModel('');
     setStatus(null);
+  }, []);
+
+  /**
+   * Switches the local-only mode on or off.
+   *
+   * The main process owns the rule: the switch only changes it for
+   * everything that follows.
+   */
+  const setLocalOnly = useCallback((enabled: boolean): void => {
+    const api = window.nova;
+    if (!api) {
+      return;
+    }
+    void api.setLocalOnly(enabled).then((value) => {
+      setLocalOnlyState(value);
+    });
   }, []);
 
   /**
@@ -470,6 +500,8 @@ export function useAi(): AiController {
     status,
     providerId,
     model,
+    localOnly,
+    setLocalOnly,
     defaultChatModel: defaults.chatModel,
     defaultAgentModel: defaults.agentModel,
     messages,
