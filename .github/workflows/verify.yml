@@ -1,0 +1,76 @@
+# Milestone 10D — automated verification, local-only by design.
+#
+# This workflow builds and VERIFIES the application on every push and pull
+# request. It is deliberately NOT a release pipeline:
+#   - no secrets / credentials are referenced,
+#   - no tags are created,
+#   - no GitHub Release is published,
+#   - nothing is pushed anywhere.
+# Signing, notarization and publishing remain owner manual steps (see
+# docs/PACKAGING.md and docs/RELEASE_CHECKLIST.md).
+name: Verify
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows:
+    # The packaged-application gates (runtime, fuses, quit-cleanup and
+    # packaging) launch NOVAIDE.exe, so they require a Windows runner with a
+    # desktop session. A hosted `windows-latest` runner provides one.
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack (pnpm 12.18.0)
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.17.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Package application
+        run: pnpm package
+
+      - name: Build installers
+        run: pnpm make
+
+      - name: Runtime verification (packaged app)
+        run: pnpm verify
+
+      - name: Fuse verification
+        run: pnpm verify:fuses
+
+      - name: Quit-cleanup verification
+        run: pnpm verify:quitcleanup
+
+      - name: Packaging verification
+        run: pnpm verify:packaging
+
+      - name: Upload build artifacts (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nova-ide-windows-x64
+          path: |
+            apps/desktop/out/NOVA IDE-win32-x64/
+            apps/desktop/out/make/squirrel.windows/x64/
+            apps/desktop/out/make/zip/
+          if-no-files-found: error
