@@ -5,6 +5,8 @@
   "private": true,
   "description": "NOVA IDE desktop application (Electron main, preload, and renderer)",
   "author": "NOVA IDE Project",
+  "license": "UNLICENSED",
+  "copyright": "Copyright (c) 2026 NOVA IDE Project. All rights reserved.",
   "main": ".vite/build/main.cjs",
   "scripts": {
     "dev": "electron-forge start",

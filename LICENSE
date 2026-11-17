@@ -1,0 +1,18 @@
+NOVA IDE — all rights reserved
+
+Copyright (c) 2026 NOVA IDE Project
+
+This software is provided for evaluation and internal use only. No license to
+copy, modify, distribute, sublicense, or sell this software, in source or
+compiled form, is granted by this file. All rights not expressly granted are
+reserved by the copyright holder.
+
+The third-party packages bundled with or used to build this application are
+distributed under their own licenses. See THIRD_PARTY_NOTICES.md for the
+versions, declared license identifiers and license texts taken from the real
+dependency tree of this repository.
+
+NOTE FOR THE OWNER: this is the conservative default chosen during V1 release
+preparation because no license was specified in the repository or the product
+specification. Replace this file with an OSI-approved license (for example
+MIT or Apache-2.0) before a public open-source release if that is the intent.

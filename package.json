@@ -21,6 +21,8 @@
     "verify": "node tools/verify/runtime.mjs",
     "verify:fuses": "node tools/verify/fuses.mjs",
     "verify:quitcleanup": "node tools/verify/quitcleanup.mjs",
+    "verify:packaging": "node tools/verify/packaging.mjs",
+    "generate:notices": "node tools/release/generate-notices.mjs",
     "perf:measure": "node tools/perf/measure.mjs"
   },
   "devDependencies": {

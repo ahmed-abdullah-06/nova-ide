@@ -6,6 +6,14 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import { copyNativeTerminalModule } from './forge/copyNativeModule';
 
+// Single source of truth for the Windows copyright string. Electron Packager
+// maps the top-level `packagerConfig.appCopyright` option to the exe's
+// LegalCopyright version resource (via `legalCopyright` -> resedit). The
+// `win32metadata` object has no LegalCopyright key in its type and is not
+// where resedit reads the value from.
+const PRODUCT_COPYRIGHT =
+  'Copyright (c) 2026 NOVA IDE Project. All rights reserved.';
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: {
@@ -18,6 +26,14 @@ const config: ForgeConfig = {
     // Display name comes from package.json `productName` ("NOVA IDE");
     // the executable must be a filesystem-safe name without spaces.
     executableName: 'NOVAIDE',
+    // Windows file/version resource metadata (spec 10C). These strings must
+    // stay in sync with the description/author/copyright in package.json.
+    appCopyright: PRODUCT_COPYRIGHT,
+    win32metadata: {
+      CompanyName: 'NOVA IDE Project',
+      FileDescription: 'NOVA IDE desktop application',
+      ProductName: 'NOVA IDE',
+    },
     afterCopy: [copyNativeTerminalModule],
   },
   rebuildConfig: {
@@ -31,7 +47,13 @@ const config: ForgeConfig = {
     // Windows installers (initial development platform is Windows, spec §22)
     // `name` must be a valid NuGet package id — the scoped workspace name
     // "@nova/desktop" is rejected by nuget.exe (it also becomes a path).
-    new MakerSquirrel({ name: 'NOVAIDE' }),
+    new MakerSquirrel({
+      name: 'NOVAIDE',
+      title: 'NOVA IDE',
+      authors: 'NOVA IDE Project',
+      description: 'NOVA IDE desktop application',
+      copyright: PRODUCT_COPYRIGHT,
+    }),
     // Portable zip archives
     new MakerZIP({}, ['win32', 'darwin']),
   ],

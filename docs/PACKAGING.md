@@ -1,0 +1,132 @@
+# Packaging, licensing and signing (Milestone 10C)
+
+This document records what was actually built and verified for the V1 release
+candidate, and what still needs an owner decision or a manual step. Nothing
+here claims a platform or a signing result that was not exercised.
+
+## 1. License and third-party notices
+
+The repository and specification contained **no license** before this work.
+A conservative default was chosen so the release is not accidentally
+open-source licensed:
+
+- `LICENSE` — all rights reserved / proprietary evaluation license. **The
+  owner must replace this with the intended license (for example MIT or
+  Apache-2.0) before any public open-source release.** This is an explicit,
+  unresolved owner decision, not an oversight.
+- `THIRD_PARTY_NOTICES.md` — generated from the **real installed dependency
+  tree** (215 packages, 9 license identifiers: MIT, ISC, Apache-2.0, BSD-2,
+  BSD-3, MPL-2.0, BlueOak-1.0.0 and dual-license combinations). It lists each
+  package, its version and declared license, plus the representative license
+  text copied from `node_modules`. Regenerate with
+  `pnpm generate:notices` after any dependency change. No dependency was added
+  to produce these notices.
+
+The `license: "UNLICENSED"` value in both `package.json` files prevents npm
+from publishing the app by accident; it is intentional and distinct from the
+license decision above.
+
+## 2. Product metadata (single source of truth)
+
+`apps/desktop/forge.config.mts` and `apps/desktop/package.json` carry the
+release metadata. A subtle toolchain detail was found and fixed during this
+work:
+
+- Electron Packager sets the exe's `LegalCopyright` from the **top-level
+  `packagerConfig.appCopyright`** option (via `legalCopyright` → `resedit`).
+  Setting only `win32metadata.LegalCopyright` does **not** change the exe; it
+  silently kept the Electron template value
+  `Copyright (C) 2015 GitHub, Inc. All rights reserved.`. Both keys are now
+  fed from one `PRODUCT_COPYRIGHT` constant so they cannot drift.
+
+Verified metadata of the rebuilt artifacts (2026-11-17):
+
+| Artifact | Field | Value |
+|---|---|---|
+| `NOVAIDE.exe` | ProductName | `NOVA IDE` |
+| `NOVAIDE.exe` | FileDescription | `NOVA IDE desktop application` |
+| `NOVAIDE.exe` | LegalCopyright | `Copyright (c) 2026 NOVA IDE Project. All rights reserved.` |
+| `NOVAIDE.exe` | ProductVersion | `0.1.0` |
+| `NOVAIDE-0.1.0-full.nupkg` (nuspec) | title / authors | `NOVA IDE` / `NOVA IDE Project` |
+| `NOVAIDE-0.1.0-full.nupkg` | description / copyright | as above |
+| `NOVA IDE-0.1.0 Setup.exe` | ProductVersion | `0.1.0` |
+
+The nuspec still contains a default `iconUrl` that points at Electron's icon
+on GitHub. There is no project icon host in this repository, so the owner
+must supply a real, HTTPS-hosted icon URL before a public release; this is
+documented here rather than faked.
+
+## 3. Artifacts produced
+
+`pnpm make` (Windows, x64) produces, under `apps/desktop/out/make/`:
+
+- `NOVA IDE-win32-x64/` — the portable packaged application.
+- `squirrel.windows/x64/NOVAIDE-0.1.0-full.nupkg` — the Squirrel full package.
+- `squirrel.windows/x64/RELEASES` — the Squirrel release manifest (local only).
+- `squirrel.windows/x64/NOVA IDE-0.1.0 Setup.exe` — the Squirrel installer.
+- `zip/` — a portable zip archive.
+
+These files are build output and are **not committed**.
+
+## 4. What was actually verified
+
+`pnpm verify:packaging` (script: `tools/verify/packaging.mjs`) drives the real
+packaged build and passed **20/20** checks:
+
+- exe and nuspec metadata match the product (above);
+- the app launches from a **fresh path whose name contains spaces** (like a
+  real per-user install) — no hard-coded install location;
+- a **completely fresh profile** (no Ollama running, no local models, no API
+  keys) reaches a ready renderer;
+- the local provider is present and keyless, the cloud provider is disabled
+  and keyless on first run;
+- offline provider-status and model-catalog lookups return a result and do
+  **not** crash the app;
+- the app creates its settings file in the `userData` directory and persists
+  valid JSON on first write;
+- **no application process survives a forced kill** (the same guarantee the
+  Squirrel uninstaller needs to stop running processes before removal).
+
+`pnpm verify`, `pnpm verify:fuses` and `pnpm verify:quitcleanup` remain the
+broader runtime, fuse and child-process-cleanup gates and were re-run for this
+milestone. The full local Squirrel install → uninstall cycle was **not** run,
+because that modifies the developer machine; the process-cleanup and
+clean-location checks above are the automated proxies, and the actual install
+is listed as an owner manual step in the release readiness report.
+
+## 5. Platforms
+
+- **Windows x64 — verified** on the specified development machine
+  (16 GB RAM, Intel Core i5-1145G7, integrated Intel graphics). This is the
+  initial development platform per the spec.
+- **macOS — not verified.** No native maker package (`@electron-forge/maker-dmg`
+  / `maker-zip` target for darwin is configured for the zip only) and no macOS
+  machine was available. Apple notarization is **not** implemented.
+- **Linux — not verified.** No native maker package is installed, so no `.deb`
+  / `.rpm` / AppImage is produced. The portable zip maker is configured for
+  win32 and darwin only.
+
+Adding native makers/signing would require new build dependencies and a build
+machine per platform; that was deliberately out of scope for this milestone.
+
+## 6. Code signing and notarization (owner manual steps — NOT done)
+
+No certificate, secret, token or password is present in the repository, and
+no signing or notarization was performed. Do **not** claim a signed build
+until the following are done by the owner on a secured machine:
+
+1. Obtain an EV/OV code-signing certificate (Windows) and, for macOS, an
+   Apple Developer ID plus app-specific notarization credentials.
+2. Configure `windowsSign` and (if added) macOS signing in
+   `apps/desktop/forge.config.mts` **through environment variables or the
+   OS certificate store**, never by committing the certificate or password.
+3. Run `pnpm make` on the matching host platform and verify the signer
+   (`signtool verify /pa` on Windows; `spctl -a -vv` / `stapler validate` on
+   macOS).
+4. Publish through an owner-controlled channel. This repository's workflows
+   only build artifacts locally; they do not publish, push tags, or create
+   GitHub releases.
+
+Untouched, the produced binaries are **unsigned**. Windows SmartScreen and
+macOS Gatekeeper will warn until signing/notarization is completed. This is a
+known, documented limitation of the V1 release candidate, not a silent gap.
