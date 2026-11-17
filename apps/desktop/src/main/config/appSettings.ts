@@ -12,6 +12,7 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { readJsonWithBackup } from './corruptRecovery';
 
 /** The name of the file in the user data directory. */
 const SETTINGS_FILE_NAME = 'app-settings.json';
@@ -56,18 +57,14 @@ export class AppSettingsStore {
     if (this.cache !== null) {
       return this.cache;
     }
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.cache = sanitizeSettings(JSON.parse(raw));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        console.error(
-          '[settings] could not read the settings of the application',
-          error instanceof Error ? error.message : 'unknown error',
-        );
-      }
-      this.cache = defaultAppSettings();
-    }
+    const recovered = await readJsonWithBackup(
+      this.filePath,
+      'settings',
+      sanitizeSettings,
+      defaultAppSettings(),
+      'application settings',
+    );
+    this.cache = recovered.value;
     this.localOnly = this.cache.localOnly;
     return this.cache;
   }

@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import started from 'electron-squirrel-startup';
 import { AppSettingsStore } from './config/appSettings';
 import { registerIpcHandlers } from './ipc';
+import { AppLogger, installErrorHandlers } from './logging/appLogger';
 import { installApplicationMenu } from './menu';
 import { installContentSecurityPolicy } from './security/csp';
 import { installPermissionHandlers } from './security/permissions';
@@ -12,20 +13,15 @@ if (started) {
   app.quit();
 }
 
-/**
- * node-pty starts a small helper process on Windows to list the processes
- * of a console. The helper cannot be started in the hardened build (the
- * `RunAsNode` fuse is disabled on purpose), so its rejection is reported
- * as a warning: the process trees are terminated with `taskkill /T`
- * instead, which does not need the helper.
- */
-process.on('unhandledRejection', (reason: unknown) => {
-  const message = reason instanceof Error ? reason.message : String(reason);
-  if (message.includes('runAsNode fuse')) {
-    console.warn('[main] the node-pty helper is not available:', message);
-    return;
-  }
-  console.error('[main] unhandled rejection:', reason);
+// The log lives in Electron's logs directory. It is bounded, rotated and
+// redacted; unhandled errors are written there and shown to the user as a
+// safe message without any detail that could contain a secret.
+const appLogger = new AppLogger({ directory: app.getPath('logs') });
+installErrorHandlers({
+  logger: appLogger,
+  showMessage: (title, message) => {
+    dialog.showErrorBox(title, message);
+  },
 });
 
 app.whenReady().then(() => {

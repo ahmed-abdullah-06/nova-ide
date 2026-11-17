@@ -19,7 +19,8 @@ import type {
   Workspace,
 } from '../../shared/ipc-types';
 import { resolveWorkspaceRoot } from './pathSecurity';
-import { errnoOf, fsOk } from './results';
+import { fsOk } from './results';
+import { readJsonWithBackup } from '../config/corruptRecovery';
 
 /** How many recent workspaces are kept. */
 const MAX_RECENT_WORKSPACES = 10;
@@ -150,16 +151,14 @@ export class WorkspaceService {
     if (this.recentCache !== null) {
       return this.recentCache;
     }
-    try {
-      const raw = await fs.readFile(this.recentFilePath, 'utf8');
-      const parsed: unknown = JSON.parse(raw);
-      this.recentCache = sanitizeRecent(parsed);
-    } catch (error) {
-      if (errnoOf(error) !== 'ENOENT') {
-        console.error('[workspace] could not read recent workspaces', error);
-      }
-      this.recentCache = [];
-    }
+    const recovered = await readJsonWithBackup(
+      this.recentFilePath,
+      null,
+      sanitizeRecent,
+      [],
+      'recent workspaces',
+    );
+    this.recentCache = recovered.value;
     return this.recentCache;
   }
 }

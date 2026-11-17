@@ -22,7 +22,7 @@ import {
   type ChatMessage,
   type StoredConversation,
 } from '../../shared/ai-types';
-import { errnoOf } from '../services/results';
+import { readJsonWithBackup } from '../config/corruptRecovery';
 
 /** The name of the file in the user data directory. */
 const CONVERSATIONS_FILE_NAME = 'conversations.json';
@@ -43,15 +43,14 @@ export class ConversationStore {
     if (this.cache !== null) {
       return this.cache;
     }
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.cache = sanitizeConversations(JSON.parse(raw));
-    } catch (error) {
-      if (errnoOf(error) !== 'ENOENT') {
-        console.error('[ai] could not read the conversations', error);
-      }
-      this.cache = [];
-    }
+    const recovered = await readJsonWithBackup(
+      this.filePath,
+      'conversations',
+      sanitizeConversations,
+      [],
+      'conversations',
+    );
+    this.cache = recovered.value;
     return this.cache;
   }
 

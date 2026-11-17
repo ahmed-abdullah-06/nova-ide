@@ -13,8 +13,8 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { errnoOf } from '../services/results';
 import { DEFAULT_OLLAMA_URL } from './urlPolicy';
+import { readJsonWithBackup } from '../config/corruptRecovery';
 
 /** The default address of the OpenAI compatible service. */
 export const DEFAULT_OPENAI_URL = 'https://api.openai.com/v1';
@@ -77,15 +77,14 @@ export class ProviderSettingsStore {
     if (this.cache !== null) {
       return this.cache;
     }
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.cache = sanitizeSettings(JSON.parse(raw));
-    } catch (error) {
-      if (errnoOf(error) !== 'ENOENT') {
-        console.error('[providers] could not read the provider settings', error);
-      }
-      this.cache = new Map();
-    }
+    const recovered = await readJsonWithBackup(
+      this.filePath,
+      'providers',
+      sanitizeSettings,
+      new Map<string, ProviderSettings>(),
+      'provider settings',
+    );
+    this.cache = recovered.value;
     return this.cache;
   }
 

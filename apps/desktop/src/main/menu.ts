@@ -1,4 +1,4 @@
-import { Menu, type MenuItemConstructorOptions } from 'electron';
+import { Menu, app, shell, type MenuItemConstructorOptions } from 'electron';
 
 /**
  * Minimal, standard application menu built exclusively from Electron roles
@@ -16,6 +16,17 @@ export function installApplicationMenu(): void {
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Open Logs Folder',
+          click: () => {
+            void shell.openPath(app.getPath('logs'));
+          },
+        },
+      ],
+    },
   );
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

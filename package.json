@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "verify": "node tools/verify/runtime.mjs",
     "verify:fuses": "node tools/verify/fuses.mjs",
-    "verify:quitcleanup": "node tools/verify/quitcleanup.mjs"
+    "verify:quitcleanup": "node tools/verify/quitcleanup.mjs",
+    "perf:measure": "node tools/perf/measure.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.0",

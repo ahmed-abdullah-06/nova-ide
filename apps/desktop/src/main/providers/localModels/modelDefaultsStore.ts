@@ -15,6 +15,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { LocalModelDefaults } from '../../../shared/local-model-types';
 import { validateModelName } from './modelNames';
+import { readJsonWithBackup } from '../../config/corruptRecovery';
 
 /** The name of the file in the user data directory. */
 const DEFAULTS_FILE_NAME = 'local-model-defaults.json';
@@ -43,18 +44,14 @@ export class ModelDefaultsStore {
     if (this.cache !== null) {
       return this.cache;
     }
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.cache = sanitizeDefaults(JSON.parse(raw));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        console.error(
-          '[models] could not read the defaults of the models',
-          error instanceof Error ? error.message : 'unknown error',
-        );
-      }
-      this.cache = emptyModelDefaults();
-    }
+    const recovered = await readJsonWithBackup(
+      this.filePath,
+      'defaults',
+      sanitizeDefaults,
+      emptyModelDefaults(),
+      'local model defaults',
+    );
+    this.cache = recovered.value;
     return this.cache;
   }
 

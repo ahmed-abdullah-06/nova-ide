@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-17T12:35:08.750Z",
+  "results": [
+    {
+      "name": "cold_start_to_renderer_ready_ms",
+      "value": 975,
+      "detail": "spawn -> window.nova + DOM complete"
+    },
+    {
+      "name": "idle_working_set_mb",
+      "value": 444.5,
+      "detail": "main + renderer + GPU process tree"
+    },
+    {
+      "name": "idle_renderer_js_heap_mb",
+      "value": 14.7,
+      "detail": ""
+    },
+    {
+      "name": "large_folder_open_to_title_ms",
+      "value": 34,
+      "detail": "6000 files; ok=true; explorer title rendered"
+    },
+    {
+      "name": "large_folder_tree_expanded_ms",
+      "value": 286,
+      "detail": "open -> >100 rendered tree nodes"
+    },
+    {
+      "name": "large_folder_tree_nodes",
+      "value": 121,
+      "detail": ""
+    },
+    {
+      "name": "after_folder_working_set_mb",
+      "value": 559.5,
+      "detail": ""
+    },
+    {
+      "name": "large_tree_search_ms",
+      "value": 64,
+      "detail": "500 matches; done=true"
+    },
+    {
+      "name": "long_terminal_output_ms",
+      "value": 995,
+      "detail": "~103194 rendered chars; ok=true"
+    },
+    {
+      "name": "after_terminal_working_set_mb",
+      "value": 610.8,
+      "detail": ""
+    },
+    {
+      "name": "after_terminal_closed_working_set_mb",
+      "value": 475.5,
+      "detail": ""
+    },
+    {
+      "name": "after_close_working_set_mb",
+      "value": 460.9,
+      "detail": "after GC"
+    },
+    {
+      "name": "after_close_renderer_js_heap_mb",
+      "value": 13.5,
+      "detail": "after GC"
+    },
+    {
+      "name": "cold_start_with_history_ms",
+      "value": 769,
+      "detail": "spawn -> renderer with 20x150 messages"
+    },
+    {
+      "name": "large_history_load_ms",
+      "value": 181,
+      "detail": "20 conversations"
+    },
+    {
+      "name": "large_history_working_set_mb",
+      "value": 546,
+      "detail": ""
+    }
+  ]
+}

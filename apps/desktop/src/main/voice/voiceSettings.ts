@@ -13,6 +13,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { parsePushToTalkKey } from '../../shared/pushToTalk';
+import { readJsonWithBackup } from '../config/corruptRecovery';
 import {
   defaultVoiceSettings,
   MAX_PUSH_TO_TALK_CHARS,
@@ -142,18 +143,14 @@ export class VoiceSettingsStore {
     if (this.cache !== null) {
       return this.cache;
     }
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.cache = sanitizeVoiceSettings(JSON.parse(raw));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        console.error(
-          '[voice] could not read the voice settings',
-          error instanceof Error ? error.message : 'unknown error',
-        );
-      }
-      this.cache = defaultVoiceSettings();
-    }
+    const recovered = await readJsonWithBackup(
+      this.filePath,
+      'settings',
+      sanitizeVoiceSettings,
+      defaultVoiceSettings(),
+      'voice settings',
+    );
+    this.cache = recovered.value;
     return this.cache;
   }
 

@@ -19,7 +19,7 @@ import type {
   AgentPermissionView,
 } from '../../shared/agent-types';
 import { DEFAULT_AGENT_PERMISSION_CONFIG } from '../../shared/agent-types';
-import { errnoOf } from '../services/results';
+import { readJsonWithBackup } from '../config/corruptRecovery';
 import { permissionLevels, type AgentPermissionSettings } from './permissions';
 
 /** The name of the settings file in the user data directory. */
@@ -105,14 +105,16 @@ export class PermissionSettingsStore {
 
   /** Reads and checks the file. */
   private async read(): Promise<void> {
-    try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
-      this.applyParsed(JSON.parse(raw) as unknown);
-    } catch (error) {
-      if (errnoOf(error) !== 'ENOENT') {
-        console.error('[agent] could not read the permission settings', error);
-      }
-    }
+    await readJsonWithBackup(
+      this.filePath,
+      'read',
+      (parsed) => {
+        this.applyParsed(parsed);
+        return undefined;
+      },
+      undefined,
+      'agent permission settings',
+    );
   }
 
   /** Writes the file (a failure is logged, never thrown at the user). */
