@@ -32,3 +32,13 @@ export function profileFingerprint(dir: string | null): string;
 
 /** The command line argument that isolates the profile of the application. */
 export function userDataArgument(dir: string): string;
+
+/**
+ * Writes the address of the mock service into the settings of the
+ * providers of an isolated profile.
+ *
+ * The application must never contact a real service during a
+ * verification run, so the address is written before the application
+ * starts.
+ */
+export function seedProviderAddress(dir: string, baseUrl: string): string;
