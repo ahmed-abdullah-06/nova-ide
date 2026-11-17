@@ -343,6 +343,53 @@ async function waitFor(session, expression, timeoutMs = 30000) {
 }
 
 /**
+ * Clicks an element with a real mouse event.
+ *
+ * A DOM `click()` is not a trusted user gesture, so it cannot open the
+ * microphone or start an `AudioContext`. The voice checks need a trusted
+ * input event from the fake audio device.
+ *
+ * @param {import('./cdp.mjs').DevToolsSession} session The session.
+ * @param {string} selector The selector of the element.
+ * @returns {Promise<boolean>} True when the element was clicked.
+ */
+async function clickWithMouse(session, selector) {
+  const point = await session.evaluate(
+    `(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (element === null) return null;
+      element.scrollIntoView({ block: 'center' });
+      const rect = element.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`,
+  );
+  if (point === null || typeof point !== 'object') {
+    return false;
+  }
+  const { x, y } = point;
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x,
+    y,
+  });
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
+  return true;
+}
+
+/**
  * Waits for the plan of the active run and approves it unchanged.
  *
  * @param {import('./cdp.mjs').DevToolsSession} session The session.
@@ -460,9 +507,19 @@ function startApp(profileDir) {
       `The packaged application is missing. Run "pnpm package" first (${executable}).`,
     );
   }
+  // The voice checks need a deterministic microphone. Chromium's fake
+  // device produces a synthetic tone and the fake UI grants the media
+  // permission, so verification never touches the microphone of the user
+  // and never depends on a sound card.
   return spawn(
     executable,
-    [`--remote-debugging-port=${DEVTOOLS_PORT}`, profileArgument],
+    [
+      `--remote-debugging-port=${DEVTOOLS_PORT}`,
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      '--autoplay-policy=no-user-gesture-required',
+      profileArgument,
+    ],
     { stdio: 'inherit' },
   );
 }
@@ -1723,6 +1780,326 @@ async function main() {
       `(() => document.querySelectorAll('.editor-tab').length === ${tabsBeforeChat})()`,
     );
     check('the answer did not open a file', noFileWrite === true);
+
+    // --- Voice assistant (Milestone 8) --------------------------------
+    //
+    // The microphone is Chromium's fake device (the flags are set when the
+    // packaged application starts) and the speech engine is a mock: the
+    // configured "engine" is the command interpreter, which only echoes a
+    // marker. No real model is downloaded, no cloud service is contacted
+    // and no audio of the user is involved. The settings and the fake
+    // model live in the isolated profile of this run.
+
+    const voiceBridge = await session.evaluate(
+      `(() => {
+        const voice = window.nova?.voice;
+        if (voice === undefined) return false;
+        return ['openSession', 'closeSession', 'settings', 'saveSettings',
+          'pickFile', 'transcribe', 'cancelTranscription']
+          .every((name) => typeof voice[name] === 'function');
+      })()`,
+    );
+    check('the voice channels are exposed by the bridge', voiceBridge === true);
+
+    const voiceDefaults = await session.evaluate(
+      `window.nova.voice.settings().then((s) => JSON.stringify({
+        enabled: s.enabled, engine: s.engine, key: s.pushToTalkKey
+      }))`,
+    );
+    const defaultVoice = JSON.parse(String(voiceDefaults));
+    check(
+      'the voice assistant starts switched off without an engine',
+      defaultVoice.enabled === false &&
+        defaultVoice.engine === 'none' &&
+        typeof defaultVoice.key === 'string' &&
+        defaultVoice.key.length > 0,
+      String(voiceDefaults),
+    );
+
+    const voicePanel = await waitFor(
+      session,
+      `document.querySelector('.voice-settings') !== null`,
+      10000,
+    );
+    check('the voice settings are rendered', voicePanel === true);
+
+    const micWhileOff = await clickWithMouse(
+      session,
+      '.ai-panel__action--mic',
+    );
+    const offNotice = await waitFor(
+      session,
+      `(() => {
+        const status = document.querySelector('.ai-panel__voice-status');
+        return status !== null && status.textContent.includes('switched off')
+          ? status.textContent
+          : false;
+      })()`,
+      10000,
+    );
+    check(
+      'the microphone does not start while the assistant is off',
+      micWhileOff === true && typeof offNotice === 'string',
+      String(offNotice).slice(0, 100),
+    );
+
+    const localOnlyOn = await session.evaluate(
+      `(() => {
+        const box = document.querySelector('input[aria-label="Local-only mode"]');
+        if (box === null) return false;
+        box.click();
+        return true;
+      })()`,
+    );
+    const voiceLocalBadge = await waitFor(
+      session,
+      `document.querySelector('.ai-badge--local-only') !== null`,
+      10000,
+    );
+    const cloudBlocked = await session.evaluate(
+      `(() => {
+        const select = document.querySelector('#voice-engine');
+        if (select === null) return false;
+        const cloud = [...select.options].find((option) => option.value === 'cloud');
+        return cloud !== undefined && cloud.disabled === true &&
+          cloud.textContent.includes('local-only');
+      })()`,
+    );
+    check(
+      'the local-only mode is shown and removes cloud voice',
+      localOnlyOn === true && voiceLocalBadge === true && cloudBlocked === true,
+      `badge=${String(voiceLocalBadge)} cloud=${String(cloudBlocked)}`,
+    );
+
+    const noSession = await session.evaluate(
+      `(async () => {
+        const audio = new Int16Array(16000).buffer;
+        const result = await window.nova.voice.transcribe(
+          'nova-verify-no-session', audio, false);
+        return JSON.stringify(result);
+      })()`,
+    );
+    const noSessionOutcome = JSON.parse(String(noSession));
+    check(
+      'audio without a recording session is refused',
+      noSessionOutcome.ok === false && noSessionOutcome.code === 'no-session',
+      String(noSession).slice(0, 120),
+    );
+
+    // Even a hand-edited setting that selects a cloud engine must not send
+    // the audio while the local-only mode is on (approval is irrelevant).
+    const cloudInLocalOnly = await session.evaluate(
+      `(async () => {
+        const current = await window.nova.voice.settings();
+        await window.nova.voice.saveSettings({
+          ...current, enabled: true, engine: 'cloud'
+        });
+        const opened = await window.nova.voice.openSession();
+        const result = await window.nova.voice.transcribe(
+          opened.sessionId, new Int16Array(16000).buffer, true);
+        await window.nova.voice.closeSession(opened.sessionId);
+        await window.nova.voice.saveSettings(current);
+        return JSON.stringify(result);
+      })()`,
+    );
+    const cloudOutcome = JSON.parse(String(cloudInLocalOnly));
+    check(
+      'the local-only mode refuses cloud voice even when approved',
+      cloudOutcome.ok === false && cloudOutcome.code === 'local-only',
+      String(cloudInLocalOnly).slice(0, 120),
+    );
+
+    const localOnlyOff = await session.evaluate(
+      `(() => {
+        const box = document.querySelector('input[aria-label="Local-only mode"]');
+        if (box === null || !box.checked) return false;
+        box.click();
+        return true;
+      })()`,
+    );
+    const voiceLocalBadgeGone = await waitFor(
+      session,
+      `document.querySelector('.ai-badge--local-only') === null`,
+      10000,
+    );
+    check(
+      'the local-only mode can be switched off again',
+      localOnlyOff === true && voiceLocalBadgeGone === true,
+    );
+
+    // The mock is an executable on the disk: the command interpreter with
+    // an echo argument. The model is an inert file in the isolated profile.
+    const mockModel = path.join(profile.dir, 'voice-mock-model.bin');
+    writeFileSync(mockModel, 'not a real speech model\n', 'utf8');
+    const mockEngine = path.join(
+      process.env.SystemRoot || 'C:\\Windows',
+      'System32',
+      'cmd.exe',
+    );
+    const engineConfigured = await session.evaluate(
+      `(async () => {
+        const current = await window.nova.voice.settings();
+        const next = {
+          ...current,
+          enabled: true,
+          engine: 'local',
+          enginePath: ${JSON.stringify(mockEngine)},
+          engineArgs: ['/c', 'echo NOVA_VERIFY_TRANSCRIPT'],
+          modelPath: ${JSON.stringify(mockModel)},
+          modelId: 'verify',
+          maxRecordingSeconds: 5,
+        };
+        const saved = await window.nova.voice.saveSettings(next);
+        return saved.enabled === true && saved.engine === 'local' &&
+          saved.enginePath === ${JSON.stringify(mockEngine)};
+      })()`,
+    );
+    check(
+      'the voice settings are saved through the validated channel',
+      engineConfigured === true,
+    );
+
+    const recognition = await session.evaluate(
+      `(async () => {
+        const opened = await window.nova.voice.openSession();
+        const audio = new Int16Array(16000).buffer;
+        const result = await window.nova.voice.transcribe(
+          opened.sessionId, audio, false);
+        await window.nova.voice.closeSession(opened.sessionId);
+        return JSON.stringify(result);
+      })()`,
+    );
+    const recognitionOutcome = JSON.parse(String(recognition));
+    check(
+      'the mock local engine recognises fake audio',
+      recognitionOutcome.ok === true &&
+        typeof recognitionOutcome.value?.text === 'string' &&
+        recognitionOutcome.value.text.includes('NOVA_VERIFY_TRANSCRIPT'),
+      String(recognition).slice(0, 160),
+    );
+
+    // The whole path of the composer: a real recording of the fake device,
+    // a recognition by the mock and a transcript that only lands in the
+    // input field. The number of chat messages must not change.
+    const messagesBeforeVoice = await session.evaluate(
+      `document.querySelectorAll('.ai-message').length`,
+    );
+    const micFocused = await clickWithMouse(
+      session,
+      '.ai-panel__action--mic',
+    );
+    const recording = await waitFor(
+      session,
+      `document.querySelector('.ai-panel__action--mic')?.getAttribute('aria-pressed') === 'true'`,
+      15000,
+    );
+    check(
+      'the microphone opens for a recording',
+      micFocused === true && recording === true,
+    );
+    // The fake device needs a moment to produce 0.3 seconds of samples.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const stoppedRecording = await clickWithMouse(
+      session,
+      '.ai-panel__action--mic',
+    );
+    await waitFor(
+      session,
+      `document.querySelector('.ai-panel__action--mic')?.getAttribute('aria-pressed') !== 'true'`,
+      15000,
+    );
+    const transcript = await waitFor(
+      session,
+      `(() => {
+        const input = document.querySelector('.ai-panel__input');
+        return input !== null && input.value.includes('NOVA_VERIFY_TRANSCRIPT')
+          ? input.value
+          : false;
+      })()`,
+      20000,
+    );
+    const messagesAfterVoice = await session.evaluate(
+      `document.querySelectorAll('.ai-message').length`,
+    );
+    check(
+      'recognised speech lands in the composer without being sent',
+      stoppedRecording === true &&
+        typeof transcript === 'string' &&
+        messagesAfterVoice === messagesBeforeVoice,
+      `messages ${String(messagesBeforeVoice)} -> ${String(messagesAfterVoice)}`,
+    );
+
+    // The read-aloud uses a fake synthesis: no sound is produced and no
+    // voice of the machine is touched. The button must start and stop it.
+    const speechFake = await session.evaluate(
+      `(() => {
+        window.__novaVerifySpoken = [];
+        window.__novaVerifyCancelled = 0;
+        class FakeUtterance {
+          constructor(text) { this.text = text; this.rate = 1; this.voice = null; }
+        }
+        Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+          value: FakeUtterance, configurable: true,
+        });
+        Object.defineProperty(window, 'speechSynthesis', {
+          value: {
+            speak: (utterance) => window.__novaVerifySpoken.push(utterance.text),
+            cancel: () => { window.__novaVerifyCancelled += 1; },
+            getVoices: () => [],
+          },
+          configurable: true,
+        });
+        const read = document.querySelector('.ai-message__read');
+        if (read === null) return false;
+        read.click();
+        return true;
+      })()`,
+    );
+    const speaking = await waitFor(
+      session,
+      `(() => {
+        const button = document.querySelector('.ai-message__read');
+        return button !== null && button.textContent.includes('Stop reading');
+      })()`,
+      10000,
+    );
+    check(
+      'the read-aloud starts from the answer',
+      speechFake === true && speaking === true,
+    );
+    const speechStopped = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.ai-message__read');
+        if (button === null || !button.textContent.includes('Stop reading')) {
+          return false;
+        }
+        button.click();
+        return window.__novaVerifyCancelled > 0 &&
+          window.__novaVerifySpoken.length > 0;
+      })()`,
+    );
+    const stoppedLabel = await waitFor(
+      session,
+      `(() => {
+        const button = document.querySelector('.ai-message__read');
+        return button !== null && button.textContent.includes('Read aloud');
+      })()`,
+      10000,
+    );
+    check(
+      'the read-aloud can be stopped',
+      speechStopped === true && stoppedLabel === true,
+    );
+
+    // Leave the isolated profile without an enabled microphone.
+    const voiceRestored = await session.evaluate(
+      `window.nova.voice.settings()
+        .then((s) => window.nova.voice.saveSettings({
+          ...s, enabled: false, engine: 'none', enginePath: '', modelPath: ''
+        }))
+        .then((s) => s.enabled === false && s.engine === 'none')`,
+    );
+    check('the voice settings are restored after verification', voiceRestored === true);
 
     // The agent mode of the AI panel.
     const agentTab = await session.evaluate(
