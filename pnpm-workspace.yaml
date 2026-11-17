@@ -11,6 +11,12 @@ autoInstallPeers: false
 # (its system check enforces this for pnpm projects).
 nodeLinker: hoisted
 
+# Security override (10A): monaco-editor@0.57.0 pins dompurify 3.4.15, which is
+# affected by high/critical advisories (GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr).
+# Force the patched release; dompurify is semver-compatible with monaco-editor.
+overrides:
+  dompurify: 3.4.18
+
 # Explicitly approve dependency build scripts (pnpm 11+ `allowBuilds` map).
 # - electron: downloads the Electron runtime binary
 # - electron-winstaller: selects the correct 7z arch (needed by maker-squirrel)

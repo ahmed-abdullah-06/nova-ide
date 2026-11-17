@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: false
   excludeLinksFromLockfile: false
 
+overrides:
+  dompurify: 3.4.18
+
 importers:
 
   .:
@@ -683,8 +686,8 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  dompurify@3.4.15:
-    resolution: {integrity: sha512-EUBjM+B+lkDE41iE82DDSCfkoPGfXx8IxFxPMjNzm/Uk4xDet77rTN9wqlxlVg71kK7XGuUMv6wUxJUwwv+Xyw==}
+  dompurify@3.4.18:
+    resolution: {integrity: sha512-ofe3wI/uNm68HInABYFJYqQxRw1EaKAjNdrFVKqjUY+UZurvNd2L/HuQe097s/4RivWiZyP6tT7aoT8atjfhwg==}
 
   electron-squirrel-startup@1.0.1:
     resolution: {integrity: sha512-sTfFIHGku+7PsHLJ7v0dRcZNkALrV+YEozINTW8X1nM//e5O3L+rfYuvSW00lmGHnYmUjARZulD8F2V8ISI9RA==}
@@ -1830,7 +1833,7 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  dompurify@3.4.15:
+  dompurify@3.4.18:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -2124,7 +2127,7 @@ snapshots:
 
   monaco-editor@0.57.0:
     dependencies:
-      dompurify: 3.4.15
+      dompurify: 3.4.18
       marked: 14.0.0
 
   ms@2.0.0: {}
