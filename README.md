@@ -2,9 +2,19 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 8 - Voice Assistant (implemented, awaiting review).
-See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
-[`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
+**Status:** Milestone 10 — V1 release candidate (stabilization 10A–10E complete;
+10F definition-of-done and 10G final rename pending). Features from milestones
+1–8 are implemented and tested. See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for
+the full product specification and
+[`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the
+development checklist and the spec-vs-V1 scope decisions.
+
+This is a **release candidate, not a signed public release**. It is verified on
+Windows x64 only; the binaries are unsigned. See
+[`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) and
+[`docs/PACKAGING.md`](./docs/PACKAGING.md) for the honest limits and the owner
+manual steps. The final product rename to **A6** is applied and verified in
+sub-milestone 10G, after all functional gates are green.
 
 ## Architecture (current)
 
@@ -61,9 +71,18 @@ never touched.
 
 ```bash
 pnpm package                # the verification needs the packaged build
-pnpm verify:fuses           # the fuses of the packaged executable are read back
-node tools/verify/quitcleanup.mjs   # no process survives a crash of the app
+pnpm make                   # build the Windows Squirrel installer + zip
+pnpm verify:fuses           # all six fuses of the packaged exe are read back
+pnpm verify:quitcleanup     # no child process survives a crash of the app
+pnpm verify:packaging       # metadata + clean-location/first-run packaged checks
+pnpm verify:release         # release hygiene + owner manual-step reminder
+pnpm perf:measure           # reproducible performance measurements
+pnpm generate:notices       # regenerate THIRD_PARTY_NOTICES.md after dep changes
 ```
+
+All of these gates must pass before a release. The local-only verification
+workflow (`.github/workflows/verify.yml`) runs the same sequence on push/PR with
+`contents: read` only — it does not sign, tag, push or publish.
 
 ## Production build
 
@@ -278,9 +297,14 @@ Milestone 8 adds the voice assistant:
   read-aloud are deliberately not implemented; see
   [`VOICE_DECISION.md`](./docs/development/VOICE_DECISION.md).
 
-Not yet implemented (planned for later milestones): multi-agent systems,
-the advanced computer control of Milestone 9, the extension marketplace and
-the release automation (see spec §23).
+Not in V1 (planned / out of scope by owner decision): multi-agent systems,
+the advanced computer control of Milestone 9 (deferred), the extension system
+and marketplace, and an auto-update server. Milestone 10 adds stabilization,
+documentation, packaging metadata, verification and local-only CI, but not the
+extension architecture, plugin management or cross-platform native packaging
+named in the spec's M10 task list — those are recorded as planned in
+[`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) and
+[`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md).
 
 ## Security model
 
@@ -334,7 +358,22 @@ the release automation (see spec §23).
 
 ## Documentation
 
+**Users**
+
+- [User guide](./docs/USER_GUIDE.md)
+- [Troubleshooting](./docs/TROUBLESHOOTING.md)
+- [Privacy and data flows](./docs/PRIVACY.md)
+- [Security model](./docs/SECURITY.md)
+- [Known limitations](./docs/KNOWN_LIMITATIONS.md)
+
+**Release and development**
+
 - [Product specification](./NOVA_IDE_SPEC.md)
+- [Architecture overview](./docs/architecture/ARCHITECTURE.md)
 - [Development progress](./docs/development/PROGRESS.md)
+- [Measured performance](./docs/development/PERFORMANCE.md)
+- [Packaging, licensing and signing](./docs/PACKAGING.md)
+- [V1 release checklist](./docs/RELEASE_CHECKLIST.md)
 - [Real-model testing (manual)](./docs/development/REAL_MODEL_TESTING.md)
+- [Real-voice testing (manual)](./docs/development/REAL_VOICE_TESTING.md)
 - [Changelog](./CHANGELOG.md)

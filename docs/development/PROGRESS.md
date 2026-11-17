@@ -439,8 +439,108 @@ because it would let model output trigger speech. Out of scope for M8 (planned):
 the advanced computer-control agent of Milestone 9 and the extensions/release
 automation of Milestone 10.
 
-## Milestone 9-10
+## Milestone 9 — Advanced Computer-Control Agent
 
-Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
+**Deferred by owner decision — not started.** No computer-control capability is
+part of V1. It is listed as **planned** in
+[`../KNOWN_LIMITATIONS.md`](../KNOWN_LIMITATIONS.md) and in the spec-vs-V1
+conflict table below. No M9 code, tests or claims exist.
+
+## Milestone 10 — V1 Stabilization and Release Preparation
+
+V1 scope only. One commit per sub-milestone, gates green before moving on. The
+name **A6** is applied last, in 10G, so all functional gates run against the
+original product name first.
+
+### Spec-vs-V1 conflict (owner decision, authoritative)
+
+The M10 task list in `NOVA_IDE_SPEC.md` §23 names extension architecture,
+plugin management, an update strategy and cross-platform packaging. These are
+**outside V1** per the definition of done and are recorded as **planned**, not
+implemented:
+
+| Spec M10 task | V1 status |
+|---|---|
+| Extension architecture / plugin management | Planned — out of V1 scope |
+| Auto-update server / update strategy | Planned — no service or endpoint |
+| Linux / macOS native packaging | Planned — Windows x64 only verified |
+| Release documentation, CI, security & performance testing | Implemented (10A–10F) |
+| Signing / notarization | Owner manual step — not done |
+
+### Baseline (before M10 changes, commit `83af4e3`)
+
+`pnpm typecheck=0`, `pnpm test=0` (677/677 tests), `pnpm package=0`,
+`pnpm make=0`, `pnpm verify=0` (133/133 packaged checks),
+`pnpm verify:fuses=0` (6/6 fuses OK), `pnpm verify:quitcleanup=0`.
+`AttachConsole failed` messages appeared in the baseline (18×) and are not
+caused by M10 work.
+
+### 10A — Security audit and privacy data flow (commit `f29ff00`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10A.1 | Dependency audit | Tested | `pnpm audit --audit-level high` exit 0 after the DOMPurify override. Two **moderate, build-time** `glob`/`minimatch` findings remain (dev tooling, not shipped runtime) — documented, not fixed |
+| 10A.2 | DOMPurify override | Completed | Patched version pinned to `3.4.18` in `pnpm-workspace.yaml`; pnpm 12 ignores a `pnpm.overrides` field in `package.json`, so the override lives in the workspace file. A dependency regression test guards it |
+| 10A.3 | Privacy data-flow doc | Completed | `docs/PRIVACY.md` records every stored file, what stays local, what can leave, approvals, local-only mode and untrusted content |
+| 10A.4 | Security flags unchanged | Tested | `nodeIntegration:false`, `contextIsolation:true`, `sandbox:true`; no CSP/fuse change; all gates green |
+
+### 10B — Measured performance, corruption recovery, bounded logging (commit `0e5a255`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10B.1 | Performance harness | Completed | `tools/perf/measure.mjs`, results in `tools/perf/last-results.json`, documented in `docs/development/PERFORMANCE.md` |
+| 10B.2 | Measured numbers | Tested | Cold start 975 ms; idle working set 444.5 MB; renderer heap 14.7 MB; folder open 34 ms; tree expansion 286 ms; search 64 ms; long terminal output 995 ms; after-close 460.9 MB / 13.5 MB; 3,000-message history load 181 ms. Single dev machine (16 GB, i5-1145G7, Intel integrated graphics) — not a cross-device benchmark |
+| 10B.3 | Corruption recovery | Completed | Broken/partial JSON persistence is recovered without losing the rest of the data |
+| 10B.4 | Bounded redacted logging | Completed | Log output is bounded and redacted; no secret or file content in logs |
+| 10B.5 | Gates | Tested | 696/696 tests; typecheck, package, make, verify (133/133), fuses, quitcleanup all green |
+
+### 10C — License, notices, metadata, packaging verification (commit `e15bdff`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10C.1 | License | Completed | Conservative all-rights-reserved `LICENSE` added because no license existed. **Owner must replace it before any public/open-source release** |
+| 10C.2 | Third-party notices | Completed | `THIRD_PARTY_NOTICES.md` generated from the real installed tree (215 packages, 9 license identifiers) by `tools/release/generate-notices.mjs`; regenerated with `pnpm generate:notices`. No dependency added |
+| 10C.3 | Product metadata | Completed | `apps/desktop/package.json` + `forge.config.mts` carry product/description/author/copyright. Found and fixed a toolchain subtlety: Electron Packager sets exe `LegalCopyright` from top-level `packagerConfig.appCopyright` (via `legalCopyright` → resedit), **not** `win32metadata.LegalCopyright`; an invalid `win32metadata.LegalCopyright` also fails typecheck and was removed. One `PRODUCT_COPYRIGHT` constant feeds `appCopyright` and the Squirrel maker |
+| 10C.4 | Metadata verification | Tested | exe ProductName/Description/LegalCopyright/Version and nuspec title/authors/description/copyright verified against the rebuilt artifacts |
+| 10C.5 | Packaged verification | Tested | `tools/verify/packaging.mjs` (`pnpm verify:packaging`) — **20/20** checks: clean location with spaces, fresh profile (no Ollama/models/keys), graceful offline lookups, data-file creation, no surviving process after forced kill. `docs/PACKAGING.md` records artifacts, platform coverage and signing limits. Full gates green |
+| 10C.6 | Open item | Planned | nuspec `iconUrl` still points at Electron's default icon; owner must supply an HTTPS-hosted URL |
+
+### 10D — Local-only CI and release checklist (commit `c59ec49`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10D.1 | Verification workflow | Completed | `.github/workflows/verify.yml` builds and runs all gates on push/PR; `contents: read` only; no secrets, tags, publish or push; uploads artifacts. This is verification-only, not a release pipeline |
+| 10D.2 | Release checklist doc | Completed | `docs/RELEASE_CHECKLIST.md` — automated gates, owner decisions, signing/notarization, manual smoke tests, publishing, explicit V1 exclusions |
+| 10D.3 | Checklist script | Completed | `tools/release/checklist.mjs` (`pnpm verify:release`) — clean tree, no committed secrets/personal paths (test fixtures excluded), required files, artifacts, metadata consistency, license notice; prints manual steps. **17/17** automated checks on the clean tree |
+| 10D.4 | New scripts | Completed | `verify:packaging`, `verify:release`, `generate:notices`, `perf:measure` added to root `package.json` |
+| 10D.5 | Gates | Tested | `pnpm typecheck=0`, `pnpm test=0` (696/696) |
+
+### 10E — User and security documentation (current sub-milestone)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10E.1 | User guide | Completed | `docs/USER_GUIDE.md` — editor, terminal, search, Git, AI chat, agent, local models, voice, local-only mode, privacy |
+| 10E.2 | Troubleshooting | Completed | `docs/TROUBLESHOOTING.md` — first-run, provider, files, terminal/Git/tasks, voice, agent, diagnostics |
+| 10E.3 | Security doc | Completed | `docs/SECURITY.md` — process isolation, filesystem boundary, credentials, untrusted content, agent boundary, process hygiene, supply chain, honest gaps |
+| 10E.4 | Architecture overview | Completed | `docs/architecture/ARCHITECTURE.md` — process model, layout, IPC, subsystems, build/verification pipeline |
+| 10E.5 | Known limitations | Completed | `docs/KNOWN_LIMITATIONS.md` — scope exclusions, platform/packaging limits, testing honesty, product caps, spec-vs-V1 conflicts |
+| 10E.6 | Stale docs cleanup | Completed | `README.md` status M8 → M10 V1 RC (NOVA IDE branding kept until 10G), full gate commands and doc index; this file and `CHANGELOG.md` updated through 10E |
+| 10E.7 | Gates | Pending | Full gate suite re-run before the 10E commit |
+
+### 10F — V1 definition-of-done walkthrough (pending)
+
+Commit the V1 DoD table, a full final regression and
+`docs/RELEASE_READINESS.md`. No new features.
+
+### 10G — Final rename to A6 (pending, committed last)
+
+Isolated change set: verify the root `a6-logo.svg` (64+) and
+`a6-logo-small.svg` (16/24/32/48) sources, check for A6 naming conflicts,
+generate the icon set (rasterize with Chromium/Electron or a one-off script,
+write the ICO, commit the generator + generated icons; keep the SVG sources
+unchanged), apply the branding, and prove **profile survival** using a pinned
+old userData path or a tested migration. Requires unit tests **and** a packaged
+isolated-profile verification, a full regression, and an update to
+`RELEASE_READINESS.md`. Committed separately from 10A–10F.
 
 

@@ -347,6 +347,42 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     external engine instead of in-process Whisper.cpp, OS voices instead of
     Piper, no model download, no cloud transport, no automatic read-aloud)
     are documented in `docs/development/VOICE_DECISION.md`.
+- **Milestone 10 — V1 stabilization and release preparation** (one commit per
+  sub-milestone; M9 computer control and V2 features are deferred):
+  - **10A:** dependency security audit; DOMPurify pinned to `3.4.18` through a
+    `pnpm-workspace.yaml` override (pnpm 12 ignores `package.json`
+    `pnpm.overrides`) with a regression test; `docs/PRIVACY.md` records the
+    verified data flows. `pnpm audit --audit-level high` exits 0. Two moderate
+    build-time `glob`/`minimatch` findings remain and are documented, not
+    fixed. No security flag, CSP or fuse was changed.
+  - **10B:** reproducible performance harness (`tools/perf/measure.mjs`,
+    `tools/perf/last-results.json`, `docs/development/PERFORMANCE.md`) with
+    numbers measured on the specified dev machine; corruption recovery for
+    broken persistence; bounded, redacted logging. 696/696 tests.
+  - **10C:** conservative all-rights-reserved `LICENSE` (owner must replace it)
+    and generated `THIRD_PARTY_NOTICES.md` (215 packages, 9 license
+    identifiers, `pnpm generate:notices`); product metadata in
+    `apps/desktop/package.json` and `forge.config.mts`; `docs/PACKAGING.md`;
+    `tools/verify/packaging.mjs` with **20/20** clean-location, fresh-profile
+    and no-surviving-process checks. Fixed the exe `LegalCopyright` by wiring
+    the top-level `packagerConfig.appCopyright` field (the field Electron
+    Packager actually writes); an invalid `win32metadata.LegalCopyright` was
+    removed because resedit ignores it and it failed typecheck.
+  - **10D:** local-only verification CI (`.github/workflows/verify.yml`,
+    `contents: read`, no secrets/tags/publish/push); `docs/RELEASE_CHECKLIST.md`;
+    `tools/release/checklist.mjs` (`pnpm verify:release`, **17/17** checks on a
+    clean tree); new `verify:packaging`, `verify:release`, `generate:notices`
+    and `perf:measure` scripts.
+  - **10E:** user-facing and security documentation — `docs/USER_GUIDE.md`,
+    `docs/TROUBLESHOOTING.md`, `docs/SECURITY.md`,
+    `docs/architecture/ARCHITECTURE.md`, `docs/KNOWN_LIMITATIONS.md`; stale
+    README status and development progress updated to M10 V1 RC while keeping
+    the NOVA IDE branding until 10G.
+  - **10F (pending):** V1 definition-of-done walkthrough, full regression and
+    `docs/RELEASE_READINESS.md`.
+  - **10G (pending, committed last):** isolated final rename to A6, logo/icon
+    generation with committed generator, profile-survival tests and packaged
+    isolated-profile verification.
 
 ### Fixed
 
@@ -423,5 +459,5 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M6 — Planning, Permissions, and Verification | Implemented (awaiting review) |
 | M7 — Local AI and Model Management | Implemented (awaiting review) |
 | M8 — Voice Assistant | Implemented (awaiting review) |
-| M9 — Advanced Computer-Control Agent | Not Started |
-| M10 — Extensions, Packaging, and Release | Not Started |
+| M9 — Advanced Computer-Control Agent | Deferred (out of V1 scope) |
+| M10 — V1 Stabilization and Release | 10A–10E completed; 10F–10G pending |
