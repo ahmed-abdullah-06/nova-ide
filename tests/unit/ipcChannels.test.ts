@@ -98,6 +98,9 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.appLocalOnlySet,
       IpcChannels.voiceSessionOpen,
       IpcChannels.voiceSessionClose,
+      IpcChannels.voiceSettings,
+      IpcChannels.voiceTranscribe,
+      IpcChannels.voiceCancel,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

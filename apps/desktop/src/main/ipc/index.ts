@@ -55,6 +55,7 @@ import {
   assertSessionAndSize,
   assertStringArray,
   assertTwoStrings,
+  assertVoiceAudio,
   assertWriteFileArgs,
   type ArgsValidator,
 } from './validators';
@@ -81,6 +82,8 @@ import {
 import { PermissionController } from '../agent/permissionController';
 import { PermissionSettingsStore } from '../agent/permissionStore';
 import { recordingSessions } from '../voice/recording';
+import { VoiceService } from '../voice/voiceService';
+import { VoiceSettingsStore } from '../voice/voiceSettings';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -248,6 +251,11 @@ export function registerIpcHandlers(
   // service in the main process.
   const isLocalOnly = (): boolean => appSettings.localOnly;
 
+  // The voice assistant (Milestone 8). The settings and the engine live
+  // here; the renderer only sends the samples of its own recording.
+  const voiceSettings = new VoiceSettingsStore();
+  const voiceService = new VoiceService({ settings: voiceSettings, isLocalOnly });
+
   // The management of the local models (Milestone 7). The service talks
   // to the local Ollama service; the renderer only sends the name of a
   // model and never gains network access.
@@ -411,6 +419,30 @@ export function registerIpcHandlers(
       recordingSessions.close(sessionId);
     },
   );
+
+  // The recognition (Milestone 8B). The audio belongs to a recording
+  // session that the user opened, and it is bounded by the validator.
+  registerChannel(IpcChannels.voiceSettings, assertNoArgs, async () =>
+    voiceSettings.get(),
+  );
+  registerChannel(
+    IpcChannels.voiceTranscribe,
+    assertVoiceAudio,
+    async (sessionId: string, audio: ArrayBuffer) => {
+      if (!recordingSessions.isOpen(sessionId)) {
+        return {
+          ok: false as const,
+          code: 'no-session' as const,
+          message:
+            'The recording session has ended. Record the message again.',
+        };
+      }
+      return voiceService.transcribe(new Int16Array(audio));
+    },
+  );
+  registerChannel(IpcChannels.voiceCancel, assertNoArgs, async () => {
+    voiceService.cancel();
+  });
 
   // A link of the chat is opened in the browser of the user — only http
   // and https are accepted (the output of a model is untrusted).
@@ -759,6 +791,8 @@ export function registerIpcHandlers(
     localModelService.cancelAll();
     // No microphone permission outlives the application (spec §19.6).
     recordingSessions.closeAll();
+    // No speech engine outlives the application either.
+    voiceService.cancel();
     await Promise.all([
       terminalService.killAll(),
       taskService.killAll(),

@@ -34,6 +34,7 @@ import {
   assertSessionAndData,
   assertSessionAndSize,
   assertStringArray,
+  assertVoiceAudio,
 } from '../../apps/desktop/src/main/ipc/validators';
 import { isAllowedChannel } from '../../apps/desktop/src/main/security/channels';
 import { IpcChannels } from '../../apps/desktop/src/shared/ipc-types';
@@ -50,6 +51,21 @@ describe('IPC argument validators', () => {
     expect(() => assertLocalOnly(['yes'])).toThrow();
     expect(() => assertLocalOnly([])).toThrow();
     expect(() => assertLocalOnly([true, false])).toThrow();
+  });
+
+  it('validates the audio of a recording', () => {
+    const audio = new ArrayBuffer(3200);
+    expect(() => assertVoiceAudio(['mic-1', audio])).not.toThrow();
+    expect(() => assertVoiceAudio(['', audio])).toThrow();
+    expect(() => assertVoiceAudio([1, audio])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1'])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', 'audio'])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(0)])).toThrow();
+    // An odd number of bytes cannot be 16 bit samples.
+    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(3)])).toThrow();
+    expect(() =>
+      assertVoiceAudio(['mic-1', new ArrayBuffer(4 * 1024 * 1024 + 2)]),
+    ).toThrow();
   });
 
   it('validates the name of a local model', () => {

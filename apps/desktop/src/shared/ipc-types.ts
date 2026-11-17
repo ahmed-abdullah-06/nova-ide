@@ -25,6 +25,11 @@ import type {
   LocalModelDefaults,
   LocalModelDetails,
 } from './local-model-types';
+import type {
+  VoiceResult,
+  VoiceSettings,
+  VoiceTranscript,
+} from './voice-types';
 
 /**
  * Typed IPC contract between the renderer and the Electron main process.
@@ -46,6 +51,9 @@ export const IpcChannels = {
   appLocalOnlySet: 'app:local-only-set',
   voiceSessionOpen: 'voice:session-open',
   voiceSessionClose: 'voice:session-close',
+  voiceSettings: 'voice:settings',
+  voiceTranscribe: 'voice:transcribe',
+  voiceCancel: 'voice:cancel',
   workspaceOpen: 'workspace:open',
   workspaceClose: 'workspace:close',
   workspaceRecent: 'workspace:recent',
@@ -429,6 +437,21 @@ export interface IpcInvokeMap {
   'voice:session-open': { args: []; result: { sessionId: string } };
   /** Closes a recording session (the microphone is released). */
   'voice:session-close': { args: [sessionId: string]; result: void };
+  /** The settings of the voice assistant (never a secret). */
+  'voice:settings': { args: []; result: VoiceSettings };
+  /**
+   * Recognises the speech of one recording.
+   *
+   * The renderer sends the samples of the recording that the user made;
+   * the engine, the model and the decision to share the audio stay in
+   * the main process.
+   */
+  'voice:transcribe': {
+    args: [sessionId: string, audio: ArrayBuffer];
+    result: VoiceResult<VoiceTranscript>;
+  };
+  /** Stops the running recognition (no engine outlives it). */
+  'voice:cancel': { args: []; result: void };
   /** No argument → native folder dialog; with a path → open that folder
    *  (used by Recent Workspaces). `value: null` means the user cancelled. */
   'workspace:open': { args: [path?: string]; result: FsResult<Workspace | null> };
@@ -1014,6 +1037,20 @@ export interface NovaVoiceApi {
   openSession(): Promise<{ sessionId: string }>;
   /** Closes a recording session (the microphone is released). */
   closeSession(sessionId: string): Promise<void>;
+  /** The settings of the voice assistant (never a secret). */
+  settings(): Promise<VoiceSettings>;
+  /**
+   * Recognises the speech of one recording.
+   *
+   * The audio is the `ArrayBuffer` of the 16 bit samples. The main
+   * process owns the engine, the model and every privacy decision.
+   */
+  transcribe(
+    sessionId: string,
+    audio: ArrayBuffer,
+  ): Promise<VoiceResult<VoiceTranscript>>;
+  /** Stops the running recognition. */
+  cancelTranscription(): Promise<void>;
 }
 
 /** Public API exposed on `window.nova` by the preload bridge. */

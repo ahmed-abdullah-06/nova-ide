@@ -223,6 +223,10 @@ const novaApi: NovaApi = {
     openSession: () => invoke(IpcChannels.voiceSessionOpen),
     closeSession: (sessionId) =>
       invoke(IpcChannels.voiceSessionClose, sessionId),
+    settings: () => invoke(IpcChannels.voiceSettings),
+    transcribe: (sessionId, audio) =>
+      invoke(IpcChannels.voiceTranscribe, sessionId, audio),
+    cancelTranscription: () => invoke(IpcChannels.voiceCancel),
   },
 
 };

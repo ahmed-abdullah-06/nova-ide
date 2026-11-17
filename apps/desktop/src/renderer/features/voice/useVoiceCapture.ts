@@ -35,8 +35,13 @@ export interface VoiceCaptureState {
 
 /** The options of the hook. */
 export interface UseVoiceCaptureOptions {
-  /** Called with the samples when a recording ends. */
-  onResult?: (result: CaptureResult) => void;
+  /** Called with the samples when a recording ends. The session is still
+   *  open while the promise runs, so the main process can tie the audio to
+   *  the recording of the user. */
+  onResult?: (
+    result: CaptureResult,
+    sessionId: string | null,
+  ) => void | Promise<void>;
   /** The maximum length (seconds). */
   maxSeconds?: number;
 }
@@ -167,16 +172,17 @@ export function useVoiceCapture(
       setBusy(true);
       try {
         const result = await active.stop();
-        closeSession();
         if (fromLimit && !result.truncated) {
           // The engine may have stopped a moment before the limit: the
           // sample is complete, the flag only describes the reason.
           result.truncated = true;
         }
         if (result.seconds > 0) {
-          onResult?.(result);
+          await onResult?.(result, sessionId.current);
         }
+        closeSession();
       } catch {
+        closeSession();
         setError('The recording could not be stopped.');
       } finally {
         setElapsedSeconds(0);
@@ -201,11 +207,12 @@ export function useVoiceCapture(
     setBusy(true);
     try {
       const result = await active.stop();
-      closeSession();
       if (result.seconds > 0) {
-        onResult?.(result);
+        await onResult?.(result, sessionId.current);
       }
+      closeSession();
     } catch {
+      closeSession();
       setError('The recording could not be stopped.');
     } finally {
       setElapsedSeconds(0);

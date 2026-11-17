@@ -7,6 +7,7 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { AgentPermissionCategory } from '../../shared/agent-types';
+import { MAX_AUDIO_BYTES } from '../../shared/voice-types';
 import { validateModelName } from '../providers/localModels/modelNames';
 
 /** Validates the argument list of a channel; throws on unexpected input. */
@@ -614,6 +615,35 @@ export function assertLocalOnly(
 ): asserts args is [enabled: boolean] {
   if (args.length !== 1 || typeof args[0] !== 'boolean') {
     throw new Error('Expected the state of the local-only mode');
+  }
+}
+
+/**
+ * The audio of one recording.
+ *
+ * The array buffer must be 16 bit samples (an even number of bytes), must
+ * not be empty and must stay under the limit of the application. A
+ * renderer cannot send an arbitrarily large message.
+ */
+export function assertVoiceAudio(
+  args: unknown[],
+): asserts args is [sessionId: string, audio: ArrayBuffer] {
+  if (args.length !== 2) {
+    throw new Error('Expected (sessionId, audio)');
+  }
+  const [sessionId, audio] = args;
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throw new Error('Expected the id of a recording session');
+  }
+  if (!(audio instanceof ArrayBuffer)) {
+    throw new Error('Expected the samples of a recording');
+  }
+  if (
+    audio.byteLength === 0 ||
+    audio.byteLength % 2 !== 0 ||
+    audio.byteLength > MAX_AUDIO_BYTES
+  ) {
+    throw new Error('The recording has an invalid size');
   }
 }
 

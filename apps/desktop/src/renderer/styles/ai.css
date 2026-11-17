@@ -663,3 +663,29 @@
 .ai-settings__confirm--local-only {
   color: var(--color-text);
 }
+
+.ai-panel__action--recording {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: rgba(240, 80, 80, 0.12);
+}
+
+.ai-panel__voice-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  border-top: 1px solid var(--color-border);
+}
+
+.ai-panel__voice-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  line-height: 1;
+}

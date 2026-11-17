@@ -12,6 +12,8 @@ import { MessageList } from './MessageList';
 import { ProviderSettings } from './ProviderSettings';
 import { useAi, type Attachment } from './useAi';
 import { useConversations } from './useConversations';
+import { insertTranscript } from '../voice/composer';
+import { useVoiceInput } from '../voice/useVoiceInput';
 
 export interface AiPanelProps {
   /** True when a workspace is open (the context needs one). */
@@ -35,6 +37,13 @@ export function AiPanel({
 }: AiPanelProps): React.JSX.Element {
   const ai = useAi();
   const conversations = useConversations();
+  const voice = useVoiceInput({
+    onTranscript: (text) => {
+      // The recognised text only lands in the composer: the user reads it,
+      // edits it and sends it. Nothing is sent here (spec §15.4).
+      setInput((current) => insertTranscript(current, text));
+    },
+  });
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [input, setInput] = useState('');
   const [title, setTitle] = useState('');
@@ -415,6 +424,37 @@ export function AiPanel({
         <div className="ai-panel__actions">
           <button
             type="button"
+            className={`ai-panel__action ai-panel__action--mic${
+              voice.recording ? ' ai-panel__action--recording' : ''
+            }`}
+            onClick={() => {
+              if (voice.processing) {
+                voice.cancel();
+                return;
+              }
+              void voice.toggle();
+            }}
+            disabled={
+              ai.streaming ||
+              (voice.busy && !voice.recording && !voice.processing)
+            }
+            aria-pressed={voice.recording}
+            title={
+              voice.recording
+                ? 'Stop the recording (the text is only placed in the input)'
+                : voice.processing
+                  ? 'Cancel the speech recognition'
+                  : 'Record a message with the microphone'
+            }
+          >
+            {voice.processing
+              ? 'Cancel'
+              : voice.recording
+                ? `Stop (${Math.ceil(voice.elapsedSeconds)} s)`
+                : 'Mic'}
+          </button>
+          <button
+            type="button"
             className="ai-panel__action ai-panel__action--primary"
             onClick={() => void handleSend()}
             disabled={ai.streaming || input.trim().length === 0}
@@ -438,6 +478,19 @@ export function AiPanel({
             Ask again
           </button>
         </div>
+        {voice.notice !== null ? (
+          <p className="ai-panel__voice-status" role="status">
+            {voice.notice}
+            <button
+              type="button"
+              className="ai-panel__voice-dismiss"
+              aria-label="Dismiss the message"
+              onClick={voice.clearNotice}
+            >
+              ×
+            </button>
+          </p>
+        ) : null}
         <div className="ai-panel__context">
           <button
             type="button"
