@@ -2,7 +2,7 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 7 - Local Model Management (implemented, awaiting review).
+**Status:** Milestone 8 - Voice Assistant (implemented, awaiting review).
 See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the development checklist.
 
@@ -47,7 +47,13 @@ provider), approves and edits a plan, changes a permission category, reviews a
 revert conflict and checks the verification report, manages the local models
 (the list, the details, a download with its progress, the stop of a download,
 the confirmation of a deletion and the new model in the list of the chat), and
-reports every check it performed.
+reports every check it performed. It also exercises the voice assistant with a
+fake audio device and a mock engine: the local-only gate, a recording that only
+lands in the composer, and read-aloud start/stop. No real microphone, model or
+cloud speech service is used. The real-hardware procedure is documented in
+[`docs/development/REAL_VOICE_TESTING.md`](./docs/development/REAL_VOICE_TESTING.md)
+and was **not** run; the decisions and the differences from the specification
+are in [`docs/development/VOICE_DECISION.md`](./docs/development/VOICE_DECISION.md).
 
 Every run uses its own, temporary profile directory, which is deleted
 afterwards — the settings, the API keys and the conversations of the user are
@@ -66,7 +72,7 @@ pnpm package        # package the app (asar, hardened fuses)
 pnpm make           # build distributable installers (Windows Squirrel, zip)
 ```
 
-## Features (Milestone 7)
+## Features (Milestones 7-8)
 
 Milestone 6 (planning, permissions and verification), Milestone 5 (the coding
 agent), Milestone 4 (the provider layer and the chat) and Milestone 3
@@ -250,9 +256,31 @@ Milestone 7 adds the management of the local models:
   deletes or unloads a model, and the permission policy of the agent is
   unchanged.
 
+Milestone 8 adds the voice assistant:
+
+- **Voice input**: the microphone opens only after a main-process recording
+  session and only on the action of the user (the button or the configured
+  push-to-talk key). The audio is resampled to 16 kHz mono, bounded and piped
+  to a local whisper.cpp-compatible executable; it is never written to disk.
+  The recognised text appears in the composer for review and correction and
+  is **never** sent by itself. A model or an answer cannot start a recording.
+- **Read-aloud**: the operating system's offline speech voices read a finished
+  answer on request, with a voice and speed setting and a stop control that
+  cancels at once. Secrets are redacted, code blocks are skipped by default
+  and links are read as text, not as addresses. No sound is produced unless
+  the user presses **Read aloud**.
+- **The local-only mode** blocks every cloud provider and cloud voice in the
+  main process (default off, persisted); the header shows a **LOCAL ONLY**
+  badge. Cloud recognition would additionally need an approval for every
+  recording, but no cloud transport ships in this build.
+- **Honest limits**: the application never downloads an engine or a model —
+  the user picks both files, which must already exist. Piper and automatic
+  read-aloud are deliberately not implemented; see
+  [`VOICE_DECISION.md`](./docs/development/VOICE_DECISION.md).
+
 Not yet implemented (planned for later milestones): multi-agent systems,
-voice, the advanced computer control of Milestone 9, the extension
-marketplace and the release automation (see spec §23).
+the advanced computer control of Milestone 9, the extension marketplace and
+the release automation (see spec §23).
 
 ## Security model
 

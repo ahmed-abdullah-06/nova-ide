@@ -393,7 +393,53 @@ extension architecture and release automation of Milestones 8–10.
 voice assistant of Milestone 8, the advanced computer control of Milestone 9,
 the extension architecture and the release automation of Milestone 10.
 
-## Milestones 8-10
+## Milestone 8 — Voice Assistant
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 0 | The decision note | Completed | `docs/development/VOICE_DECISION.md` compares Web Speech API, a local Whisper-family engine and opt-in cloud STT, and OS `speechSynthesis`, Piper and other TTS options. Written before any voice code |
+| D1 | The verification never contacts the real service | Completed | The harness seeds an isolated profile with its own mock address before the app starts; a unit test proves that the default address of Ollama is never known to the app |
+| D2 | The local-only mode | Completed | A stored, validated main-process flag blocks every cloud provider and cloud voice; the UI shows a **LOCAL ONLY** badge. It is default off and no model routing was added |
+| 8A | The microphone and the session | Completed | A main-process recording session is opened before `getUserMedia`; only `media`/audio for the app origin is granted. The capture resamples to 16 kHz mono, is bounded and is released on stop, cancel, error, unmount, quit and crash |
+| 8B | Voice input into the composer | Completed | A whisper.cpp-compatible executable receives the WAV on stdin and prints text on stdout; no audio is written to disk. One process at a time, a 120 s timeout, a 64 KB output cap and a kill on cancel. The text only lands in the composer — never auto-sent |
+| 8C | Read-aloud | Completed | OS `speechSynthesis` speaks the answer on request. Secrets are redacted, code is skipped by default, links speak their text, the length is bounded and the voice/rate come from the settings. Stop cancels at once; a late `onend` cannot start a new sentence |
+| 8D | Voice settings and the privacy gate | Completed | A stored `voice-settings.json` is sanitized field by field; two new IPC channels are validated and reject relative paths; cloud STT needs approval for every recording and is always subordinate to the local-only mode. Push-to-talk uses a parsed key binding and ignores held keys and typing |
+| V | Runtime verification | Tested | 133/133 checks in the packaged app with an isolated profile, Chromium's fake audio device and a mock engine: sessions, no mic while off, the local-only gate, a transcript that lands without sending, and read-aloud start/stop; no console errors |
+| T | Unit tests | Tested | 677/677 tests in 46 files (new: recording sessions, audio/WAV/transcript, the engine contract, speech preparation and speaker, settings and push-to-talk, validators, channels, isolation) |
+| B | Build | Tested | `pnpm typecheck` exit 0; `pnpm package` and `pnpm make` exit 0 |
+| S | Security | Tested | All voice channels are whitelisted, trusted-sender checked and validated; the `ChannelsCovered` guard compiles. Fuses, CSP and the quit-cleanup checks are unchanged and pass |
+| M | Manual hardware test | Not run | The procedure is documented in `docs/development/REAL_VOICE_TESTING.md` and explicitly states that it was **not** run. No automated test touches a real microphone, engine, model or cloud service |
+
+### Milestone 8 Definition of Done
+
+- [x] Speech-to-text captures the microphone after a permission request and
+      shows the text for review and correction before the user sends it
+- [x] Text-to-speech reads an answer with a chosen voice and speed, with a
+      stop control, offline and without a new dependency
+- [x] Microphone controls, push-to-talk, voice settings and stop/interruption
+      controls are present
+- [x] The local-only mode blocks cloud voice in the main process; a model or
+      an answer can never start a recording, a speech or a download
+- [x] Every new IPC channel is covered by the whitelist, the trusted-sender
+      check, a per-channel validator and the compile-time coverage guard
+- [x] Audio is kept in memory, bounded and piped to a local process; no
+      engine or model is downloaded by the application
+- [x] 677/677 unit tests, typecheck clean, package/make clean, 133/133
+      packaged runtime checks, fuses and quit-cleanup clean
+- [x] The manual real-hardware procedure is documented and states that it was
+      **not** run
+
+**M8 implemented — awaiting review.** Differences from the specification are
+listed in `docs/development/VOICE_DECISION.md`: the STT uses an external
+whisper.cpp-compatible executable instead of an in-process Whisper.cpp module,
+the TTS uses the operating system's `speechSynthesis` instead of Piper
+(Piper remains planned), the app never downloads a model, cloud STT has no
+transport in this build, and automatic read-aloud was deliberately omitted
+because it would let model output trigger speech. Out of scope for M8 (planned):
+the advanced computer-control agent of Milestone 9 and the extensions/release
+automation of Milestone 10.
+
+## Milestone 9-10
 
 Not Started (see `NOVA_IDE_SPEC.md` §23 for scope).
 

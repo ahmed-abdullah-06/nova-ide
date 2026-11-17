@@ -303,6 +303,50 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     models of a mock service, opens the details of a model, starts a
     download, shows its progress, stops it, confirms a deletion and finds
     the new model in the list of the chat.
+- **Milestone 8 — Voice Assistant** (carry-overs first, then one commit per
+  sub-milestone):
+  - The runtime verification now seeds its isolated profile with the mock
+    address **before** the application starts. The default address of Ollama
+    is never known to the app under test, so no check can contact the real
+    service of the user.
+  - A global **local-only mode** (default off, persisted in the main process,
+    validated through its own IPC channel) blocks every cloud provider and
+    cloud voice. The AI panel shows a **LOCAL ONLY** badge. No model routing
+    was added.
+  - The microphone only opens after a main-process recording session, which
+    grants the media permission for the app origin and audio only. The
+    captured audio is resampled to 16 kHz mono, bounded, never written to
+    disk and released on stop, cancel, error, unmount, quit and crash.
+  - Speech-to-text uses an external whisper.cpp-compatible executable: the
+    WAV goes to its standard input and the clean text comes from its standard
+    output. One process runs at a time, with a hard timeout, a bounded output
+    and a kill on cancel. The recognised text is only inserted into the
+    composer for review; nothing is sent automatically and a spoken sentence
+    can never start an agent action.
+  - Read-aloud uses the offline voices of the operating system
+    (`speechSynthesis`), with voice and speed settings, a per-answer button,
+    a toolbar stop control and a stop that cancels immediately. Before
+    speaking, the text is redacted, code blocks are skipped by default and
+    link addresses are not spoken.
+  - The voice settings are stored in `voice-settings.json`, sanitized field
+    by field in the main process and saved through a validated channel that
+    refuses relative engine/model paths. The file picker runs in main. Cloud
+    STT needs an approval for **each** recording, is unavailable in this
+    build and is always blocked by the local-only mode. Push-to-talk uses a
+    parsed key binding (F8 by default) and ignores held keys and typing.
+  - New IPC channels are whitelisted, trusted-sender checked and validated
+    per channel; the compile-time coverage guard compiles. Fuses, CSP and
+    the quit-cleanup checks are unchanged.
+  - Tests: 677/677 unit tests in 46 files; `pnpm typecheck` exit 0;
+    `pnpm package` and `pnpm make` exit 0; `pnpm verify` 133/133 checks in
+    the packaged app with a fake audio device and a mock engine; fuses and
+    quit-cleanup clean. No test used a real microphone, model or cloud
+    service. The manual real-hardware procedure is
+    `docs/development/REAL_VOICE_TESTING.md` and states that it was **not**
+    run. The decisions and the differences from the specification (the
+    external engine instead of in-process Whisper.cpp, OS voices instead of
+    Piper, no model download, no cloud transport, no automatic read-aloud)
+    are documented in `docs/development/VOICE_DECISION.md`.
 
 ### Fixed
 
@@ -377,7 +421,7 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M4 — AI Providers and Chat | Implemented (awaiting review) |
 | M5 — AI Coding Agent (single bounded agent) | Implemented (awaiting review) |
 | M6 — Planning, Permissions, and Verification | Implemented (awaiting review) |
-| M7 — Local AI and Model Management | Not Started |
-| M8 — Voice Assistant | Not Started |
+| M7 — Local AI and Model Management | Implemented (awaiting review) |
+| M8 — Voice Assistant | Implemented (awaiting review) |
 | M9 — Advanced Computer-Control Agent | Not Started |
 | M10 — Extensions, Packaging, and Release | Not Started |
