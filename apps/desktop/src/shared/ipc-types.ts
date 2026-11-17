@@ -52,6 +52,8 @@ export const IpcChannels = {
   voiceSessionOpen: 'voice:session-open',
   voiceSessionClose: 'voice:session-close',
   voiceSettings: 'voice:settings',
+  voiceSettingsSet: 'voice:settings-set',
+  voicePickFile: 'voice:pick-file',
   voiceTranscribe: 'voice:transcribe',
   voiceCancel: 'voice:cancel',
   workspaceOpen: 'workspace:open',
@@ -439,15 +441,26 @@ export interface IpcInvokeMap {
   'voice:session-close': { args: [sessionId: string]; result: void };
   /** The settings of the voice assistant (never a secret). */
   'voice:settings': { args: []; result: VoiceSettings };
+  /** Stores the settings of the voice assistant (sanitized in main). */
+  'voice:settings-set': {
+    args: [settings: VoiceSettings];
+    result: VoiceSettings;
+  };
+  /** Lets the user pick the engine or the model file. */
+  'voice:pick-file': {
+    args: [kind: 'engine' | 'model'];
+    result: FsResult<string | null>;
+  };
   /**
    * Recognises the speech of one recording.
    *
    * The renderer sends the samples of the recording that the user made;
    * the engine, the model and the decision to share the audio stay in
-   * the main process.
+   * the main process. `cloudApproved` is true only when the user approved
+   * a cloud service for *this* recording.
    */
   'voice:transcribe': {
-    args: [sessionId: string, audio: ArrayBuffer];
+    args: [sessionId: string, audio: ArrayBuffer, cloudApproved: boolean];
     result: VoiceResult<VoiceTranscript>;
   };
   /** Stops the running recognition (no engine outlives it). */
@@ -1039,15 +1052,22 @@ export interface NovaVoiceApi {
   closeSession(sessionId: string): Promise<void>;
   /** The settings of the voice assistant (never a secret). */
   settings(): Promise<VoiceSettings>;
+  /** Stores the settings (the main process sanitizes and validates). */
+  saveSettings(settings: VoiceSettings): Promise<VoiceSettings>;
+  /** Lets the user pick the engine or the model file. */
+  pickFile(kind: 'engine' | 'model'): Promise<FsResult<string | null>>;
   /**
    * Recognises the speech of one recording.
    *
    * The audio is the `ArrayBuffer` of the 16 bit samples. The main
    * process owns the engine, the model and every privacy decision.
+   * `cloudApproved` is true only when the user approved a cloud service
+   * for this recording; the local-only mode always wins.
    */
   transcribe(
     sessionId: string,
     audio: ArrayBuffer,
+    cloudApproved: boolean,
   ): Promise<VoiceResult<VoiceTranscript>>;
   /** Stops the running recognition. */
   cancelTranscription(): Promise<void>;

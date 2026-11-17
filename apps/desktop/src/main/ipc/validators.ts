@@ -7,7 +7,11 @@
  */
 import type { IpcInvokeMap } from '../../shared/ipc-types';
 import type { AgentPermissionCategory } from '../../shared/agent-types';
-import { MAX_AUDIO_BYTES } from '../../shared/voice-types';
+import {
+  MAX_AUDIO_BYTES,
+  MAX_PUSH_TO_TALK_CHARS,
+  type VoiceSettings,
+} from '../../shared/voice-types';
 import { validateModelName } from '../providers/localModels/modelNames';
 
 /** Validates the argument list of a channel; throws on unexpected input. */
@@ -627,11 +631,15 @@ export function assertLocalOnly(
  */
 export function assertVoiceAudio(
   args: unknown[],
-): asserts args is [sessionId: string, audio: ArrayBuffer] {
-  if (args.length !== 2) {
-    throw new Error('Expected (sessionId, audio)');
+): asserts args is [
+  sessionId: string,
+  audio: ArrayBuffer,
+  cloudApproved: boolean,
+] {
+  if (args.length !== 3) {
+    throw new Error('Expected (sessionId, audio, cloudApproved)');
   }
-  const [sessionId, audio] = args;
+  const [sessionId, audio, cloudApproved] = args;
   if (typeof sessionId !== 'string' || sessionId.length === 0) {
     throw new Error('Expected the id of a recording session');
   }
@@ -644,6 +652,99 @@ export function assertVoiceAudio(
     audio.byteLength > MAX_AUDIO_BYTES
   ) {
     throw new Error('The recording has an invalid size');
+  }
+  if (typeof cloudApproved !== 'boolean') {
+    throw new Error('Expected the approval of the cloud service');
+  }
+}
+
+/** The settings of the voice assistant. */
+const SPEECH_ENGINES: ReadonlySet<string> = new Set(['none', 'local', 'cloud']);
+
+/** A string field of the voice settings. */
+function isBoundedString(value: unknown, limit: number): boolean {
+  return typeof value === 'string' && value.length <= limit;
+}
+
+/**
+ * The settings of the voice assistant.
+ *
+ * The validator only rejects the wrong shape: the sanitizer in the main
+ * process clamps the ranges and the lengths again, so a valid shape can
+ * never widen the risk. It never accepts an unknown engine.
+ */
+export function assertVoiceSettings(
+  args: unknown[],
+): asserts args is [settings: VoiceSettings] {
+  if (args.length !== 1) {
+    throw new Error('Expected the settings of the voice assistant');
+  }
+  const value = args[0];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Expected an object of voice settings');
+  }
+  const settings = value as Record<string, unknown>;
+  if (typeof settings.enabled !== 'boolean') {
+    throw new Error('Expected the enabled flag');
+  }
+  if (
+    typeof settings.engine !== 'string' ||
+    !SPEECH_ENGINES.has(settings.engine)
+  ) {
+    throw new Error('Expected a known speech engine');
+  }
+  if (!isBoundedString(settings.voice, 200)) {
+    throw new Error('Expected the name of the voice');
+  }
+  if (
+    typeof settings.rate !== 'number' ||
+    !Number.isFinite(settings.rate) ||
+    settings.rate < 0.5 ||
+    settings.rate > 2
+  ) {
+    throw new Error('Expected the rate of the speech');
+  }
+  if (!isBoundedString(settings.pushToTalkKey, MAX_PUSH_TO_TALK_CHARS)) {
+    throw new Error('Expected the push-to-talk key');
+  }
+  if (!isBoundedString(settings.enginePath, 1024)) {
+    throw new Error('Expected the path of the engine');
+  }
+  if (
+    !Array.isArray(settings.engineArgs) ||
+    settings.engineArgs.length > 16 ||
+    !settings.engineArgs.every((entry) => isBoundedString(entry, 512))
+  ) {
+    throw new Error('Expected the arguments of the engine');
+  }
+  if (!isBoundedString(settings.modelId, 64)) {
+    throw new Error('Expected the id of the model');
+  }
+  if (!isBoundedString(settings.modelPath, 1024)) {
+    throw new Error('Expected the path of the model');
+  }
+  if (
+    typeof settings.maxRecordingSeconds !== 'number' ||
+    !Number.isFinite(settings.maxRecordingSeconds) ||
+    settings.maxRecordingSeconds < 5 ||
+    settings.maxRecordingSeconds > 120
+  ) {
+    throw new Error('Expected the maximum length of a recording');
+  }
+  if (typeof settings.readCodeBlocks !== 'boolean') {
+    throw new Error('Expected the flag of the code blocks');
+  }
+}
+
+/** The file that the user may pick for the voice settings. */
+export function assertVoicePickKind(
+  args: unknown[],
+): asserts args is [kind: 'engine' | 'model'] {
+  if (
+    args.length !== 1 ||
+    (args[0] !== 'engine' && args[0] !== 'model')
+  ) {
+    throw new Error('Expected the kind of the file (engine or model)');
   }
 }
 

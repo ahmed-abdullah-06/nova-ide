@@ -35,9 +35,12 @@ import {
   assertSessionAndSize,
   assertStringArray,
   assertVoiceAudio,
+  assertVoicePickKind,
+  assertVoiceSettings,
 } from '../../apps/desktop/src/main/ipc/validators';
 import { isAllowedChannel } from '../../apps/desktop/src/main/security/channels';
 import { IpcChannels } from '../../apps/desktop/src/shared/ipc-types';
+import { defaultVoiceSettings } from '../../apps/desktop/src/shared/voice-types';
 
 describe('IPC argument validators', () => {
   it('rejects arguments on a channel that takes none', () => {
@@ -55,17 +58,53 @@ describe('IPC argument validators', () => {
 
   it('validates the audio of a recording', () => {
     const audio = new ArrayBuffer(3200);
-    expect(() => assertVoiceAudio(['mic-1', audio])).not.toThrow();
-    expect(() => assertVoiceAudio(['', audio])).toThrow();
-    expect(() => assertVoiceAudio([1, audio])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', audio, false])).not.toThrow();
+    expect(() => assertVoiceAudio(['mic-1', audio, true])).not.toThrow();
+    expect(() => assertVoiceAudio(['', audio, false])).toThrow();
+    expect(() => assertVoiceAudio([1, audio, false])).toThrow();
     expect(() => assertVoiceAudio(['mic-1'])).toThrow();
-    expect(() => assertVoiceAudio(['mic-1', 'audio'])).toThrow();
-    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(0)])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', 'audio', false])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(0), false])).toThrow();
     // An odd number of bytes cannot be 16 bit samples.
-    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(3)])).toThrow();
+    expect(() => assertVoiceAudio(['mic-1', new ArrayBuffer(3), false])).toThrow();
     expect(() =>
-      assertVoiceAudio(['mic-1', new ArrayBuffer(4 * 1024 * 1024 + 2)]),
+      assertVoiceAudio(['mic-1', new ArrayBuffer(4 * 1024 * 1024 + 2), false]),
     ).toThrow();
+    // The approval of a cloud service must be a real boolean.
+    expect(() => assertVoiceAudio(['mic-1', audio, 'yes'])).toThrow();
+  });
+
+  it('validates the settings of the voice assistant', () => {
+    const settings = defaultVoiceSettings();
+    expect(() => assertVoiceSettings([settings])).not.toThrow();
+    expect(() =>
+      assertVoiceSettings([{ ...settings, engine: 'cloud' }]),
+    ).not.toThrow();
+    // A wrong shape is rejected before the sanitizer runs.
+    expect(() => assertVoiceSettings([null])).toThrow();
+    expect(() => assertVoiceSettings([[]])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, engine: 'google' }])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, enabled: 'yes' }])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, rate: 9 }])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, rate: Number.NaN }])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, engineArgs: [1] }])).toThrow();
+    expect(() => assertVoiceSettings([{ ...settings, engineArgs: 'x' }])).toThrow();
+    expect(() =>
+      assertVoiceSettings([{ ...settings, modelPath: 'x'.repeat(2000) }]),
+    ).toThrow();
+    expect(() =>
+      assertVoiceSettings([{ ...settings, maxRecordingSeconds: 3 }]),
+    ).toThrow();
+    expect(() => assertVoiceSettings([])).toThrow();
+    expect(() => assertVoiceSettings([settings, settings])).toThrow();
+  });
+
+  it('validates the kind of a picked voice file', () => {
+    expect(() => assertVoicePickKind(['engine'])).not.toThrow();
+    expect(() => assertVoicePickKind(['model'])).not.toThrow();
+    expect(() => assertVoicePickKind(['other'])).toThrow();
+    expect(() => assertVoicePickKind([])).toThrow();
+    expect(() => assertVoicePickKind(['engine', 'model'])).toThrow();
   });
 
   it('validates the name of a local model', () => {

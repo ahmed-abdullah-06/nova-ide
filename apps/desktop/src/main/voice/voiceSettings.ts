@@ -1,9 +1,9 @@
 /**
  * The settings of the voice assistant (spec §15.3, Milestone 8).
  *
- * The settings live in the main process. The renderer may read them and,
- * from Milestone 8D, change them through a validated channel — it can
- * never inject a path or an argument that bypasses the sanitizer here.
+ * The settings live in the main process. The renderer may read them and
+ * change them through a validated channel — it can never inject a path or
+ * an argument that bypasses the sanitizer here.
  *
  * The file is `voice-settings.json` in the user data directory. A value
  * that does not pass the sanitizer falls back to its default, so a hand
@@ -12,8 +12,10 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { parsePushToTalkKey } from '../../shared/pushToTalk';
 import {
   defaultVoiceSettings,
+  MAX_PUSH_TO_TALK_CHARS,
   type SpeechEngine,
   type VoiceSettings,
 } from '../../shared/voice-types';
@@ -73,17 +75,20 @@ export function sanitizeVoiceSettings(input: unknown): VoiceSettings {
   const engine = ENGINES.includes(source.engine as SpeechEngine)
     ? (source.engine as SpeechEngine)
     : defaults.engine;
+  const pushToTalkKey = boundedString(
+    source.pushToTalkKey,
+    MAX_PUSH_TO_TALK_CHARS,
+    defaults.pushToTalkKey,
+  );
   return {
     enabled: source.enabled === true,
     engine,
-    readAloud: source.readAloud === true,
     voice: boundedString(source.voice, 200, defaults.voice),
     rate: Math.round(boundedNumber(source.rate, 0.5, 2, defaults.rate) * 100) / 100,
-    pushToTalkKey: boundedString(
-      source.pushToTalkKey,
-      64,
-      defaults.pushToTalkKey,
-    ),
+    pushToTalkKey:
+      parsePushToTalkKey(pushToTalkKey) !== null
+        ? pushToTalkKey
+        : defaults.pushToTalkKey,
     enginePath: boundedString(source.enginePath, 1024, defaults.enginePath),
     engineArgs: boundedArgs(source.engineArgs, defaults.engineArgs),
     modelId: boundedString(source.modelId, 64, defaults.modelId),
@@ -98,6 +103,29 @@ export function sanitizeVoiceSettings(input: unknown): VoiceSettings {
     ),
     readCodeBlocks: source.readCodeBlocks === true,
   };
+}
+
+/**
+ * Checks the paths of the settings before they are stored.
+ *
+ * A path that the user typed by hand must be absolute, so the engine is
+ * never looked up in the working directory of the application (which an
+ * attacker may control). The existence is checked again when a recording
+ * is recognised: a file that disappears in the meantime is refused there.
+ *
+ * @returns The message of the first invalid path, or null when both are
+ * acceptable.
+ */
+export function validateVoicePaths(settings: VoiceSettings): string | null {
+  for (const [label, value] of [
+    ['engine', settings.enginePath],
+    ['model', settings.modelPath],
+  ] as const) {
+    if (value.length > 0 && !path.isAbsolute(value)) {
+      return `The path of the ${label} must be absolute.`;
+    }
+  }
+  return null;
 }
 
 /** The store of the voice settings. */

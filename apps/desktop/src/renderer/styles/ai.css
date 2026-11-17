@@ -717,3 +717,35 @@
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
+
+.voice-settings {
+  border-top: 1px solid var(--color-border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.voice-settings__label {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  min-width: 110px;
+}
+
+.voice-settings__number {
+  width: 72px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 3px 6px;
+}
+
+.voice-settings__advanced summary {
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  margin: 4px 0;
+}
+
+.voice-settings__local-only {
+  color: var(--color-warning, var(--color-danger));
+}

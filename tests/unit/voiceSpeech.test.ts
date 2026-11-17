@@ -254,26 +254,36 @@ describe('the voice service', () => {
     }
   });
 
-  it('refuses the cloud engine in the local-only mode', async () => {
+  it('refuses the cloud engine in the local-only mode even when approved', async () => {
     const { service: voice } = service(
       { ...baseSettings(), engine: 'cloud' },
       { running: false, transcribe: vi.fn(), cancel: vi.fn() },
       true,
     );
-    const outcome = await voice.transcribe(new Int16Array(16000));
+    const outcome = await voice.transcribe(new Int16Array(16000), {
+      cloudApproved: true,
+    });
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
       expect(outcome.code).toBe('local-only');
     }
   });
 
-  it('is honest about the cloud engine without the mode', async () => {
+  it('needs the approval of the user for each cloud recording', async () => {
     const { service: voice } = service({ ...baseSettings(), engine: 'cloud' });
-    const outcome = await voice.transcribe(new Int16Array(16000));
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) {
-      expect(outcome.code).toBe('disabled');
-      expect(outcome.message).toContain('not available');
+    const refused = await voice.transcribe(new Int16Array(16000));
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) {
+      expect(refused.code).toBe('not-approved');
+      expect(refused.message).toContain('approval');
+    }
+    const approved = await voice.transcribe(new Int16Array(16000), {
+      cloudApproved: true,
+    });
+    expect(approved.ok).toBe(false);
+    if (!approved.ok) {
+      expect(approved.code).toBe('disabled');
+      expect(approved.message).toContain('not available');
     }
   });
 

@@ -15,6 +15,8 @@ import { useConversations } from './useConversations';
 import { insertTranscript } from '../voice/composer';
 import { useSpeech } from '../voice/useSpeech';
 import { useVoiceInput } from '../voice/useVoiceInput';
+import { useVoiceSettings } from '../voice/useVoiceSettings';
+import { VoiceSettingsPanel } from '../voice/VoiceSettingsPanel';
 
 export interface AiPanelProps {
   /** True when a workspace is open (the context needs one). */
@@ -38,7 +40,9 @@ export function AiPanel({
 }: AiPanelProps): React.JSX.Element {
   const ai = useAi();
   const conversations = useConversations();
+  const voiceSettings = useVoiceSettings();
   const voice = useVoiceInput({
+    settings: voiceSettings.settings,
     onTranscript: (text) => {
       // The recognised text only lands in the composer: the user reads it,
       // edits it and sends it. Nothing is sent here (spec §15.4).
@@ -262,14 +266,20 @@ export function AiPanel({
       ) : null}
 
       {showSettings ? (
-        <ProviderSettings
-          providers={ai.providers}
-          status={ai.status}
-          onRefresh={ai.refresh}
-          onModelsChanged={ai.refresh}
-          localOnly={ai.localOnly}
-          onLocalOnlyChange={ai.setLocalOnly}
-        />
+        <>
+          <ProviderSettings
+            providers={ai.providers}
+            status={ai.status}
+            onRefresh={ai.refresh}
+            onModelsChanged={ai.refresh}
+            localOnly={ai.localOnly}
+            onLocalOnlyChange={ai.setLocalOnly}
+          />
+          <VoiceSettingsPanel
+            state={voiceSettings}
+            localOnly={ai.localOnly}
+          />
+        </>
       ) : null}
 
       <div className="ai-panel__conversations">

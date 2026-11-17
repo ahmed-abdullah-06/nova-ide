@@ -56,6 +56,8 @@ import {
   assertStringArray,
   assertTwoStrings,
   assertVoiceAudio,
+  assertVoicePickKind,
+  assertVoiceSettings,
   assertWriteFileArgs,
   type ArgsValidator,
 } from './validators';
@@ -83,7 +85,7 @@ import { PermissionController } from '../agent/permissionController';
 import { PermissionSettingsStore } from '../agent/permissionStore';
 import { recordingSessions } from '../voice/recording';
 import { VoiceService } from '../voice/voiceService';
-import { VoiceSettingsStore } from '../voice/voiceSettings';
+import { VoiceSettingsStore, validateVoicePaths } from '../voice/voiceSettings';
 
 /** Channels that take exactly one string argument. */
 const assertOneStringArg = assertOneString;
@@ -420,15 +422,68 @@ export function registerIpcHandlers(
     },
   );
 
-  // The recognition (Milestone 8B). The audio belongs to a recording
-  // session that the user opened, and it is bounded by the validator.
+  // The recognition (Milestone 8B/8D). The audio belongs to a recording
+  // session that the user opened, and it is bounded by the validator. A
+  // cloud engine additionally needs the approval of the user for this
+  // recording; the local-only mode refuses it before it is considered.
   registerChannel(IpcChannels.voiceSettings, assertNoArgs, async () =>
     voiceSettings.get(),
   );
   registerChannel(
+    IpcChannels.voiceSettingsSet,
+    assertVoiceSettings,
+    async (settings) => {
+      // The engine and the model live outside the user data directory, so
+      // a relative path could resolve inside the working directory of the
+      // application. Such a path is refused before it is stored.
+      const message = validateVoicePaths(settings);
+      if (message !== null) {
+        throw new Error(message);
+      }
+      return voiceSettings.save(settings);
+    },
+  );
+  registerChannel(
+    IpcChannels.voicePickFile,
+    assertVoicePickKind,
+    async (kind: 'engine' | 'model') => {
+      try {
+        const result = await dialog.showOpenDialog({
+          title:
+            kind === 'engine'
+              ? 'Choose the local speech engine'
+              : 'Choose the speech model',
+          properties: ['openFile'],
+          filters:
+            kind === 'engine'
+              ? [{ name: 'Executables', extensions: ['exe', 'bin'] }]
+              : [{ name: 'Speech models', extensions: ['bin', 'gguf', 'ggml'] }],
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+          return { ok: true as const, value: null };
+        }
+        return { ok: true as const, value: result.filePaths[0] ?? null };
+      } catch (error) {
+        console.error(
+          '[voice] the file could not be picked:',
+          error instanceof Error ? error.message : 'unknown error',
+        );
+        return {
+          ok: false as const,
+          code: 'UNKNOWN' as const,
+          message: 'The file could not be picked.',
+        };
+      }
+    },
+  );
+  registerChannel(
     IpcChannels.voiceTranscribe,
     assertVoiceAudio,
-    async (sessionId: string, audio: ArrayBuffer) => {
+    async (
+      sessionId: string,
+      audio: ArrayBuffer,
+      cloudApproved: boolean,
+    ) => {
       if (!recordingSessions.isOpen(sessionId)) {
         return {
           ok: false as const,
@@ -437,7 +492,7 @@ export function registerIpcHandlers(
             'The recording session has ended. Record the message again.',
         };
       }
-      return voiceService.transcribe(new Int16Array(audio));
+      return voiceService.transcribe(new Int16Array(audio), { cloudApproved });
     },
   );
   registerChannel(IpcChannels.voiceCancel, assertNoArgs, async () => {

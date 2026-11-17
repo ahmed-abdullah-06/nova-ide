@@ -99,6 +99,8 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.voiceSessionOpen,
       IpcChannels.voiceSessionClose,
       IpcChannels.voiceSettings,
+      IpcChannels.voiceSettingsSet,
+      IpcChannels.voicePickFile,
       IpcChannels.voiceTranscribe,
       IpcChannels.voiceCancel,
     ]) {

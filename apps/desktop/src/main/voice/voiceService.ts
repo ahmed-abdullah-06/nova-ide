@@ -84,11 +84,12 @@ export class VoiceService {
    * Recognises the speech of one recording.
    *
    * @param samples The samples (16 kHz, mono, 16 bit).
-   * @param meta `truncated` when the recording hit the limit.
+   * @param meta `truncated` when the recording hit the limit; `cloudApproved`
+   * only when the user approved a cloud service for *this* recording.
    */
   async transcribe(
     samples: Int16Array,
-    meta: { truncated?: boolean } = {},
+    meta: { truncated?: boolean; cloudApproved?: boolean } = {},
   ): Promise<VoiceResult<VoiceTranscript>> {
     const settings = await this.options.settings.get();
     if (!settings.enabled) {
@@ -114,6 +115,14 @@ export class VoiceService {
           code: 'local-only',
           message:
             'The local-only mode is switched on: the audio may not be sent to a cloud speech service.',
+        };
+      }
+      if (meta.cloudApproved !== true) {
+        return {
+          ok: false,
+          code: 'not-approved',
+          message:
+            'The audio was not sent: a cloud speech service needs your approval for this recording.',
         };
       }
       return {
