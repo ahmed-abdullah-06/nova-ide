@@ -378,8 +378,11 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
     `docs/architecture/ARCHITECTURE.md`, `docs/KNOWN_LIMITATIONS.md`; stale
     README status and development progress updated to M10 V1 RC while keeping
     the NOVA IDE branding until 10G.
-  - **10F (pending):** V1 definition-of-done walkthrough, full regression and
-    `docs/RELEASE_READINESS.md`.
+  - **10F:** V1 definition-of-done walkthrough (25 criteria with evidence) and
+    full regression in `docs/RELEASE_READINESS.md`: typecheck 0, 696/696 tests,
+    package/make 0, verify 133/133, fuses 6/6, quitcleanup clean, packaging
+    20/20, release checklist 17/17, `pnpm audit --audit-level high` 0. No push,
+    tag, release, certificate or secret.
   - **10G (pending, committed last):** isolated final rename to A6, logo/icon
     generation with committed generator, profile-survival tests and packaged
     isolated-profile verification.
@@ -460,4 +463,4 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 | M7 — Local AI and Model Management | Implemented (awaiting review) |
 | M8 — Voice Assistant | Implemented (awaiting review) |
 | M9 — Advanced Computer-Control Agent | Deferred (out of V1 scope) |
-| M10 — V1 Stabilization and Release | 10A–10E completed; 10F–10G pending |
+| M10 — V1 Stabilization and Release | 10A–10F completed; 10G pending |

@@ -2,9 +2,9 @@
 
 AI-powered, cross-platform desktop integrated development environment.
 
-**Status:** Milestone 10 — V1 release candidate (stabilization 10A–10E complete;
-10F definition-of-done and 10G final rename pending). Features from milestones
-1–8 are implemented and tested. See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for
+**Status:** Milestone 10 — V1 release candidate (stabilization 10A–10F complete;
+10G final rename pending). Features from milestones 1–8 are implemented and
+tested. See [`NOVA_IDE_SPEC.md`](./NOVA_IDE_SPEC.md) for
 the full product specification and
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) for the
 development checklist and the spec-vs-V1 scope decisions.
@@ -374,6 +374,7 @@ named in the spec's M10 task list — those are recorded as planned in
 - [Measured performance](./docs/development/PERFORMANCE.md)
 - [Packaging, licensing and signing](./docs/PACKAGING.md)
 - [V1 release checklist](./docs/RELEASE_CHECKLIST.md)
+- [V1 release readiness](./docs/RELEASE_READINESS.md)
 - [Real-model testing (manual)](./docs/development/REAL_MODEL_TESTING.md)
 - [Real-voice testing (manual)](./docs/development/REAL_VOICE_TESTING.md)
 - [Changelog](./CHANGELOG.md)

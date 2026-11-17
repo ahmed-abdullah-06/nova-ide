@@ -527,10 +527,15 @@ caused by M10 work.
 | 10E.6 | Stale docs cleanup | Completed | `README.md` status M8 → M10 V1 RC (NOVA IDE branding kept until 10G), full gate commands and doc index; this file and `CHANGELOG.md` updated through 10E |
 | 10E.7 | Gates | Pending | Full gate suite re-run before the 10E commit |
 
-### 10F — V1 definition-of-done walkthrough (pending)
+### 10F — V1 definition-of-done walkthrough (completed)
 
-Commit the V1 DoD table, a full final regression and
-`docs/RELEASE_READINESS.md`. No new features.
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 10F.1 | DoD walkthrough | Completed | `docs/RELEASE_READINESS.md` — 25 V1 DoD criteria with evidence, plus an honest "not claimed" table (signing, macOS/Linux, real-hardware tests, moderate audit findings) |
+| 10F.2 | Full regression | Tested | `pnpm typecheck=0`; `pnpm test=0` (696/696); `pnpm package=0`; `pnpm make=0`; `pnpm verify=0` (133/133); `pnpm verify:fuses=0` (6/6); `pnpm verify:quitcleanup=0`; `pnpm verify:packaging=0` (20/20); `pnpm verify:release=0` (17/17); `pnpm audit --audit-level high=0` |
+| 10F.3 | Files/deps/audit/performance record | Completed | The readiness report records files per sub-milestone, no new dependency, the DOMPurify override, the two moderate build-time findings, the exe `LegalCopyright` fix, measured performance and packaging metadata |
+| 10F.4 | No publishing side effects | Tested | No push, tag, release, certificate, secret or OS install/uninstall was performed; all artifacts local and uncommitted |
+| 10F.5 | Transparency note | Completed | One 10E `pnpm test` run exited 1 because a `node-pty` `AttachConsole failed` message crashed a Vitest worker (691/691 ran); the immediate re-run and the final regression both passed 696/696 |
 
 ### 10G — Final rename to A6 (pending, committed last)
 
