@@ -390,6 +390,77 @@ async function clickWithMouse(session, selector) {
 }
 
 /**
+ * Finds the centre of an element identified by its visible text.
+ *
+ * @param {import('./cdp.mjs').DevToolsSession} session The session.
+ * @param {string} selector The candidate selector.
+ * @param {string} text The visible label (or a fragment of it).
+ * @param {boolean} [exact] Require the whole label to match.
+ * @returns {Promise<{x: number, y: number} | null>} The centre point.
+ */
+async function pointForText(session, selector, text, exact = true) {
+  const matcher = exact
+    ? `node.textContent.trim() === ${JSON.stringify(text)}`
+    : `node.textContent.includes(${JSON.stringify(text)})`;
+  return session.evaluate(
+    `(() => {
+      const node = [...document.querySelectorAll(${JSON.stringify(selector)})]
+        .find((candidate) => ${matcher});
+      if (node === undefined) return null;
+      const rect = node.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`,
+  );
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session @param {{x: number, y: number} | null} point */
+async function moveMouseTo(session, point) {
+  if (point === null) return;
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: point.x,
+    y: point.y,
+  });
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session @param {{x: number, y: number} | null} point */
+async function clickAt(session, point) {
+  if (point === null) return;
+  await moveMouseTo(session, point);
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: point.x,
+    y: point.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await session.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: point.x,
+    y: point.y,
+    button: 'left',
+    clickCount: 1,
+  });
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session */
+async function traceSnapshot(session) {
+  return session.evaluate(
+    `typeof window.__a6CommandTrace === 'function'
+      ? window.__a6CommandTrace()
+      : null`,
+  );
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session */
+async function traceSequence(session) {
+  const snapshot = await traceSnapshot(session);
+  return Array.isArray(snapshot) && snapshot.length > 0
+    ? snapshot[snapshot.length - 1].sequence
+    : 0;
+}
+
+/**
  * Waits for the plan of the active run and approves it unchanged.
  *
  * @param {import('./cdp.mjs').DevToolsSession} session The session.
@@ -2578,6 +2649,569 @@ async function main() {
         persisted !== null &&
         persisted.read === false,
       JSON.stringify(persisted),
+    );
+
+    // -----------------------------------------------------------------------
+    // A6 commands, menus and keybindings (packaged build).
+    // -----------------------------------------------------------------------
+    const traceAvailable = await waitFor(
+      session,
+      `typeof window.__a6CommandTrace === 'function'`,
+      10000,
+    );
+    check('command trace accessor is exposed', traceAvailable === true);
+
+    const menuCategories = await session.evaluate(
+      `[...document.querySelectorAll('.menu-bar__top')].map((node) => node.textContent.trim())`,
+    );
+    check(
+      'renderer menu bar exposes every category',
+      JSON.stringify(menuCategories) ===
+        JSON.stringify(['File', 'Edit', 'View', 'Window', 'Help']),
+      JSON.stringify(menuCategories),
+    );
+
+    // Click opens, hover switches while open, Escape closes. The File menu is
+    // also where the Alt+F4-only label is checked (it is never pressed).
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'File'));
+    const fileMenu = await session.evaluate(
+      `(() => {
+        const menu = document.querySelector('.menu-bar__dropdown');
+        const top = [...document.querySelectorAll('.menu-bar__top')]
+          .find((node) => node.textContent.trim() === 'File');
+        const exit = menu === null ? null : [...menu.querySelectorAll('.menu-bar__item')]
+          .find((node) => node.textContent.includes('Exit'));
+        const label = exit === null ? null : exit.querySelector('.menu-bar__label');
+        const shortcut = exit === null ? null : exit.querySelector('.menu-bar__shortcut');
+        return {
+          label: menu === null ? null : menu.getAttribute('aria-label'),
+          expanded: top === undefined ? null : top.getAttribute('aria-expanded'),
+          role: document.querySelector('.menu-bar')?.getAttribute('role') ?? null,
+          itemRoles: menu === null ? [] : [...menu.querySelectorAll('.menu-bar__item')]
+            .map((node) => node.getAttribute('role')),
+          exitShortcut: shortcut === null ? null : shortcut.textContent.trim(),
+          aligned: label !== null && shortcut !== null
+            ? getComputedStyle(label).flexGrow === '1' &&
+              getComputedStyle(shortcut).marginLeft === '24px'
+            : false,
+        };
+      })()`,
+    );
+    const hoveredLabel = await (async () => {
+      await moveMouseTo(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+      return session.evaluate(
+        `document.querySelector('.menu-bar__dropdown')?.getAttribute('aria-label') ?? null`,
+      );
+    })();
+    await session.pressKey('Escape', 27);
+    const closedByEscape = await session.evaluate(
+      `(() => {
+        const menu = document.querySelector('.menu-bar__dropdown');
+        const top = [...document.querySelectorAll('.menu-bar__top')]
+          .find((node) => node.textContent.trim() === 'File');
+        return menu === null && top?.getAttribute('aria-expanded') === 'false';
+      })()`,
+    );
+    check(
+      'menu opens on click, switches on hover and closes on Escape',
+      fileMenu.role === 'menubar' &&
+        fileMenu.label === 'File menu' &&
+        fileMenu.expanded === 'true' &&
+        fileMenu.itemRoles.length > 0 &&
+        fileMenu.itemRoles.every((role) => role === 'menuitem' || role === 'menuitemcheckbox') &&
+        fileMenu.exitShortcut === 'Alt+F4' &&
+        fileMenu.aligned === true &&
+        hoveredLabel === 'Edit menu' &&
+        closedByEscape === true,
+      JSON.stringify({ fileMenu, hoveredLabel, closedByEscape }),
+    );
+
+    // Arrow keys move between items and categories; an outside pointer closes.
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    const firstItem = await session.evaluate(`document.activeElement?.textContent.trim() ?? null`);
+    await session.pressKey('ArrowDown', 40);
+    const secondItem = await session.evaluate(`document.activeElement?.textContent.trim() ?? null`);
+    await session.pressKey('ArrowRight', 39);
+    const keyboardCategory = await session.evaluate(
+      `document.querySelector('.menu-bar__dropdown')?.getAttribute('aria-label') ?? null`,
+    );
+    await session.evaluate(
+      `document.documentElement.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`,
+    );
+    const closedByOutside = await session.evaluate(
+      `document.querySelector('.menu-bar__dropdown') === null`,
+    );
+    check(
+      'menu supports keyboard navigation and outside-pointer close',
+      typeof firstItem === 'string' &&
+        typeof secondItem === 'string' &&
+        firstItem !== secondItem &&
+        keyboardCategory === 'Window menu' &&
+        closedByOutside === true,
+      JSON.stringify({ firstItem, secondItem, keyboardCategory, closedByOutside }),
+    );
+
+    // A click must execute the same command id through the trusted menu source.
+    const beforeMenuCommand = await traceSequence(session);
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    await clickAt(
+      session,
+      await pointForText(session, '.menu-bar__item', 'Toggle AI Panel', false),
+    );
+    const menuCommand = await session.evaluate(
+      `(() => {
+        const trace = window.__a6CommandTrace();
+        const last = trace[trace.length - 1] ?? null;
+        const panel = document.querySelector('.ai-panel');
+        return {
+          last,
+          closed: document.querySelector('.menu-bar__dropdown') === null,
+          panelVisible: panel !== null && !panel.classList.contains('ai-panel--hidden'),
+        };
+      })()`,
+    );
+    check(
+      'menu click executes the command with the user-menu source',
+      menuCommand.last !== null &&
+        menuCommand.last.sequence > beforeMenuCommand &&
+        menuCommand.last.id === 'a6.view.toggleAiPanel' &&
+        menuCommand.last.source === 'user-menu' &&
+        menuCommand.last.outcome === 'ran' &&
+        menuCommand.closed === true &&
+        menuCommand.panelVisible === true,
+      JSON.stringify(menuCommand),
+    );
+
+    // Toggles, disabled items, hints and right-aligned shortcuts must be honest.
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    const viewMenu = await session.evaluate(
+      `(() => {
+        const menu = document.querySelector('.menu-bar__dropdown');
+        const items = menu === null ? [] : [...menu.querySelectorAll('.menu-bar__item')];
+        const palette = items.find((node) => node.textContent.includes('Command Palette'));
+        const ai = items.find((node) => node.textContent.includes('Toggle AI Panel'));
+        const shortcut = ai === undefined ? null : ai.querySelector('.menu-bar__shortcut');
+        const label = ai === undefined ? null : ai.querySelector('.menu-bar__label');
+        return {
+          paletteDisabled: palette !== undefined && palette.disabled === true &&
+            palette.classList.contains('menu-bar__item--disabled') &&
+            (palette.getAttribute('title') ?? '').includes('planned'),
+          aiCheckbox: ai !== undefined &&
+            ai.getAttribute('role') === 'menuitemcheckbox' &&
+            ai.getAttribute('aria-checked') === 'true',
+          shortcut: shortcut === null ? null : shortcut.textContent.trim(),
+          aligned: label !== null && shortcut !== null
+            ? getComputedStyle(label).flexGrow === '1' &&
+              getComputedStyle(shortcut).marginLeft === '24px'
+            : false,
+        };
+      })()`,
+    );
+    await session.pressKey('Escape', 27);
+    check(
+      'view menu marks toggles, disabled items and shortcuts honestly',
+      viewMenu.paletteDisabled === true &&
+        viewMenu.aiCheckbox === true &&
+        viewMenu.shortcut === 'Ctrl+L' &&
+        viewMenu.aligned === true,
+      JSON.stringify(viewMenu),
+    );
+
+    // Hiding a panel must keep the live terminal mounted.
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    await clickAt(
+      session,
+      await pointForText(session, '.menu-bar__item', 'Toggle Terminal', false),
+    );
+    const hiddenPanel = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.bottom-panel');
+        return {
+          hidden: panel !== null && panel.classList.contains('bottom-panel--hidden'),
+          mounted: document.querySelector('.terminal-view') !== null,
+        };
+      })()`,
+    );
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    await clickAt(
+      session,
+      await pointForText(session, '.menu-bar__item', 'Toggle Terminal', false),
+    );
+    const shownPanel = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.bottom-panel');
+        return panel !== null && !panel.classList.contains('bottom-panel--hidden');
+      })()`,
+    );
+    check(
+      'hidden terminal panel stays mounted and can be restored',
+      hiddenPanel.hidden === true && hiddenPanel.mounted === true && shownPanel === true,
+      JSON.stringify({ hiddenPanel, shownPanel }),
+    );
+
+    // Ctrl+N reuses the explorer inline creation instead of an untitled buffer.
+    await session.pressShortcut('n', 'KeyN', 78, ['ctrl']);
+    const inlineCreate = await waitFor(
+      session,
+      `document.querySelector('.tree-node__input') !== null`,
+      5000,
+    );
+    await session.pressKey('Escape', 27);
+    check('Ctrl+N starts inline creation in the explorer', inlineCreate === true);
+
+    // The Edit menu must use the focus target captured before the menu opened.
+    const terminalFocusedForMenu = await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Terminal'));
+        if (tab !== undefined) tab.click();
+        const area = document.querySelector('.terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+    const editWithTerminal = await session.evaluate(
+      `(() => {
+        const menu = document.querySelector('.menu-bar__dropdown');
+        const items = menu === null ? [] : [...menu.querySelectorAll('.menu-bar__item')];
+        const undo = items.find((node) => node.textContent.includes('Undo'));
+        const copy = items.find((node) => node.textContent.includes('Copy'));
+        return {
+          undoDisabled: undo !== undefined && undo.disabled === true,
+          hint: undo === null ? null : undo.getAttribute('title'),
+          copyDisabled: copy !== undefined && copy.disabled === true,
+        };
+      })()`,
+    );
+    await session.pressKey('Escape', 27);
+    const fieldFocusedForMenu = await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.ai-panel__input');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+    const editWithField = await session.evaluate(
+      `(() => {
+        const menu = document.querySelector('.menu-bar__dropdown');
+        const items = menu === null ? [] : [...menu.querySelectorAll('.menu-bar__item')];
+        const cut = items.find((node) => node.textContent.includes('Cut'));
+        const copy = items.find((node) => node.textContent.includes('Copy'));
+        return {
+          cutEnabled: cut !== undefined && !cut.disabled,
+          copyEnabled: copy !== undefined && !copy.disabled,
+        };
+      })()`,
+    );
+    await session.pressKey('Escape', 27);
+    check(
+      'Edit menu uses the focus captured before it opened',
+      terminalFocusedForMenu === true &&
+        editWithTerminal.undoDisabled === true &&
+        (editWithTerminal.hint ?? '').includes('Terminal') &&
+        editWithTerminal.copyDisabled === true &&
+        fieldFocusedForMenu === true &&
+        editWithField.cutEnabled === true &&
+        editWithField.copyEnabled === true,
+      JSON.stringify({ editWithTerminal, editWithField }),
+    );
+
+    // Terminal key pass-through: no registry entries, no chord hint, no panel toggle.
+    const terminalRefocused = await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    const beforeTerminalKeys = await traceSequence(session);
+    const panelBeforeTerminalKeys = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel !== null && panel.classList.contains('ai-panel--hidden');
+      })()`,
+    );
+    for (const [key, code, keyCode] of [
+      ['l', 'KeyL', 76], ['w', 'KeyW', 87], ['k', 'KeyK', 75],
+      ['z', 'KeyZ', 90], ['c', 'KeyC', 67], ['v', 'KeyV', 86],
+    ]) {
+      await session.pressShortcut(key, code, keyCode, ['ctrl']);
+    }
+    const afterTerminalKeys = await traceSequence(session);
+    const terminalKeyState = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return {
+          panelHidden: panel !== null && panel.classList.contains('ai-panel--hidden'),
+          hint: document.querySelector('.menu-bar__hint')?.textContent ?? null,
+        };
+      })()`,
+    );
+    check(
+      'terminal passes Ctrl+L/W/K/Z/C/V through without commands',
+      terminalRefocused === true &&
+        beforeTerminalKeys === afterTerminalKeys &&
+        panelBeforeTerminalKeys === terminalKeyState.panelHidden &&
+        terminalKeyState.hint === null,
+      JSON.stringify({ beforeTerminalKeys, afterTerminalKeys, terminalKeyState }),
+    );
+
+    // Monaco owns Find/Replace/Undo/Redo; Ctrl+L is unbound there so the
+    // registry can still toggle the AI panel outside the terminal.
+    const monacoFocused = await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.monaco-editor textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    const beforeEditorKeys = await traceSequence(session);
+    await session.pressShortcut('f', 'KeyF', 70, ['ctrl']);
+    await session.pressShortcut('h', 'KeyH', 72, ['ctrl']);
+    await session.pressShortcut('z', 'KeyZ', 90, ['ctrl']);
+    await session.pressShortcut('y', 'KeyY', 89, ['ctrl']);
+    const afterEditorKeys = await traceSequence(session);
+    check(
+      'Monaco keeps Ctrl+F/H/Z/Y without registry commands',
+      monacoFocused === true && beforeEditorKeys === afterEditorKeys,
+      JSON.stringify({ beforeEditorKeys, afterEditorKeys }),
+    );
+
+    const panelBeforeCtrlL = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel !== null && panel.classList.contains('ai-panel--hidden');
+      })()`,
+    );
+    await session.pressShortcut('l', 'KeyL', 76, ['ctrl']);
+    const ctrlLEntry = await session.evaluate(
+      `(() => {
+        const trace = window.__a6CommandTrace();
+        const panel = document.querySelector('.ai-panel');
+        return {
+          last: trace[trace.length - 1] ?? null,
+          panelHidden: panel !== null && panel.classList.contains('ai-panel--hidden'),
+        };
+      })()`,
+    );
+    check(
+      'Ctrl+L toggles the AI panel outside the terminal',
+      ctrlLEntry.last !== null &&
+        ctrlLEntry.last.id === 'a6.view.toggleAiPanel' &&
+        ctrlLEntry.last.source === 'user-keyboard' &&
+        ctrlLEntry.last.outcome === 'ran' &&
+        ctrlLEntry.panelHidden !== panelBeforeCtrlL,
+      JSON.stringify(ctrlLEntry),
+    );
+
+    // A chord prefix shows a visible hint; Escape cancels it before it can
+    // open the native folder dialog.
+    await session.pressShortcut('k', 'KeyK', 75, ['ctrl']);
+    const chordHint = await session.evaluate(
+      `document.querySelector('.menu-bar__hint')?.textContent ?? null`,
+    );
+    await session.pressKey('Escape', 27);
+    const chordCancelled = await session.evaluate(
+      `document.querySelector('.menu-bar__hint') === null`,
+    );
+    check(
+      'chords show a status hint and Escape cancels them',
+      typeof chordHint === 'string' &&
+        chordHint.includes('Ctrl+K') &&
+        chordCancelled === true,
+      String(chordHint),
+    );
+
+    // Dirty buffers: closing a tab can be declined, and declining a window
+    // close or Exit leaves the application alive.
+    await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.editor-tabs__new');
+        if (button !== null) button.click();
+        return document.querySelector('.editor-tabs__new') !== null;
+      })()`,
+    );
+    const newEditorFocused = await waitFor(
+      session,
+      `(() => {
+        const area = document.querySelector('.monaco-editor textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+      5000,
+    );
+    await session.insertText('A6_VERIFY_DIRTY');
+    const dirtyTabVisible = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
+      5000,
+    );
+    const dirtyTabName = await session.evaluate(
+      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? null`,
+    );
+    check(
+      'editing a buffer marks its tab dirty',
+      newEditorFocused === true && dirtyTabVisible === true,
+      String(dirtyTabName),
+    );
+
+    await session.evaluate(
+      `window.__a6ConfirmMessages = [];
+       window.__a6OriginalConfirm = window.confirm;
+       window.confirm = (message) => {
+         window.__a6ConfirmMessages.push(String(message));
+         return false;
+       };`,
+    );
+    await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.editor-tab--active .editor-tab__close');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const tabCloseCancelled = await session.evaluate(
+      `(() => ({
+        messages: window.__a6ConfirmMessages.slice(),
+        stillOpen: [...document.querySelectorAll('.editor-tab__name')]
+          .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')}),
+      }))()`,
+    );
+    check(
+      'closing a dirty tab can be declined',
+      tabCloseCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
+        tabCloseCancelled.stillOpen === true,
+      JSON.stringify(tabCloseCancelled),
+    );
+
+    await session.evaluate(
+      `window.__a6ConfirmMessages = []; window.confirm = () => {
+        window.__a6ConfirmMessages.push('accepted');
+        return true;
+      };`,
+    );
+    await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.editor-tab--active .editor-tab__close');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const tabCloseAccepted = await waitFor(
+      session,
+      `(() => ![...document.querySelectorAll('.editor-tab__name')]
+        .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')}))()`,
+      5000,
+    );
+    check('an accepted dirty-tab close removes the tab', tabCloseAccepted === true);
+
+    // Recreate a dirty buffer for the window-level close checks.
+    await session.evaluate(`document.querySelector('.editor-tabs__new')?.click()`);
+    await waitFor(
+      session,
+      `(() => {
+        const area = document.querySelector('.monaco-editor textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+      5000,
+    );
+    await session.insertText('A6_VERIFY_CLOSE');
+    await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
+      5000,
+    );
+    await session.evaluate(
+      `window.__a6ConfirmMessages = [];
+       window.confirm = (message) => {
+         window.__a6ConfirmMessages.push(String(message));
+         return false;
+       };`,
+    );
+    await session.evaluate(`window.nova.window.close()`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const closeWindowCancelled = await session.evaluate(
+      `(() => ({
+        messages: window.__a6ConfirmMessages.slice(),
+        alive: document.readyState === 'complete',
+      }))()`,
+    );
+    check(
+      'declining a dirty window close leaves the app alive',
+      closeWindowCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
+        closeWindowCancelled.alive === true,
+      JSON.stringify(closeWindowCancelled),
+    );
+
+    await session.evaluate(
+      `window.__a6ConfirmMessages = [];
+       window.confirm = (message) => {
+         window.__a6ConfirmMessages.push(String(message));
+         return false;
+       };`,
+    );
+    await clickAt(session, await pointForText(session, '.menu-bar__top', 'File'));
+    await clickAt(session, await pointForText(session, '.menu-bar__item', 'Exit', false));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const exitCancelled = await session.evaluate(
+      `(() => ({
+        messages: window.__a6ConfirmMessages.slice(),
+        alive: document.readyState === 'complete',
+      }))()`,
+    );
+    check(
+      'declining Exit with unsaved changes leaves the app alive',
+      exitCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
+        exitCancelled.alive === true,
+      JSON.stringify(exitCancelled),
+    );
+    await session.evaluate(
+      `window.confirm = window.__a6OriginalConfirm ?? window.confirm;
+       delete window.__a6OriginalConfirm;
+       delete window.__a6ConfirmMessages;`,
+    );
+
+    // The trace must stay bounded, frozen and free of arguments or content.
+    const finalTrace = await traceSnapshot(session);
+    const traceIntegrity = await session.evaluate(
+      `(() => {
+        const snapshot = typeof window.__a6CommandTrace === 'function'
+          ? window.__a6CommandTrace()
+          : null;
+        if (snapshot === null) return { ok: false };
+        return {
+          ok: snapshot.length > 0 && snapshot.length <= 32 &&
+            Object.isFrozen(snapshot) &&
+            snapshot.every((entry) =>
+              Object.isFrozen(entry) &&
+              Object.keys(entry).sort().join(',') === 'id,outcome,sequence,source' &&
+              (entry.source === 'user-menu' || entry.source === 'user-keyboard') &&
+              (entry.outcome === 'ran' || entry.outcome === 'blocked')),
+        };
+      })()`,
+    );
+    check(
+      'command trace is bounded, frozen and non-sensitive',
+      traceIntegrity.ok === true,
+      JSON.stringify(Array.isArray(finalTrace) ? finalTrace.slice(-1) : null),
+    );
+    const beforeAccessorCall = await traceSequence(session);
+    await session.evaluate(`window.__a6CommandTrace()`);
+    const afterAccessorCall = await traceSequence(session);
+    check(
+      'command trace accessor cannot execute commands',
+      beforeAccessorCall === afterAccessorCall,
     );
 
     mockOllama.stop();

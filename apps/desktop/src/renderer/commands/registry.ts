@@ -44,7 +44,28 @@ function isTrustedSource(source: unknown): source is CommandSource {
 
 /** Returns a frozen snapshot; callers cannot mutate the trace. */
 export function getCommandTrace(): readonly CommandTraceEntry[] {
-  return trace.map((entry) => Object.freeze({ ...entry }));
+  return Object.freeze(trace.map((entry) => Object.freeze({ ...entry })));
+}
+
+/**
+ * Publishes the read-only trace accessor used by packaged verification.
+ *
+ * The accessor only returns frozen, non-sensitive entries and cannot run a
+ * command, so untrusted model/voice content that finds it learns nothing.
+ */
+export function exposeCommandTrace(): () => void {
+  // A narrow cast keeps this module type-safe in both the renderer and the
+  // unit-test tsconfig (which does not load the renderer env declaration).
+  const target = globalThis as typeof globalThis & {
+    __a6CommandTrace?: () => readonly CommandTraceEntry[];
+  };
+  if (typeof window === 'undefined' || target.__a6CommandTrace !== undefined) {
+    return () => undefined;
+  }
+  target.__a6CommandTrace = getCommandTrace;
+  return () => {
+    delete target.__a6CommandTrace;
+  };
 }
 
 function recordTrace(

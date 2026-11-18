@@ -158,23 +158,50 @@ export class DevToolsSession {
   }
 
   /**
-   * Presses a key (for example `Enter`).
+   * Presses a key, optionally with modifiers (for example Ctrl+K).
    *
-   * @param {string} key The key name.
+   * @param {string} key The key value (for example `Enter` or `k`).
    * @param {number} [keyCode] The Windows virtual key code.
+   * @param {string[]} [modifiers] Any of `alt`, `ctrl`, `meta`, `shift`.
    */
-  async pressKey(key, keyCode) {
-    const base = { key, code: key, windowsVirtualKeyCode: keyCode };
-    await this.send('Input.dispatchKeyEvent', {
-      ...base,
-      type: 'keyDown',
+  async pressKey(key, keyCode, modifiers = []) {
+    await this.#dispatchKey(key, key, keyCode, modifiers);
+  }
+
+  /**
+   * Presses a key with an explicit `code`, so shortcuts such as Ctrl+K can
+   * be driven exactly as the renderer's `KeyboardEvent.code` sees them.
+   *
+   * @param {string} key The key value (for example `k`).
+   * @param {string} code The physical key code (for example `KeyK`).
+   * @param {number} [keyCode] The Windows virtual key code.
+   * @param {string[]} [modifiers] Any of `alt`, `ctrl`, `meta`, `shift`.
+   */
+  async pressShortcut(key, code, keyCode, modifiers = []) {
+    await this.#dispatchKey(key, code, keyCode, modifiers);
+  }
+
+  /**
+   * @param {string} key
+   * @param {string} code
+   * @param {number} keyCode
+   * @param {string[]} modifiers
+   */
+  async #dispatchKey(key, code, keyCode, modifiers) {
+    const bits = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
+    const modifierMask = modifiers.reduce(
+      (mask, name) => mask | (bits[name] ?? 0),
+      0,
+    );
+    const base = {
+      key,
+      code,
+      windowsVirtualKeyCode: keyCode,
       nativeVirtualKeyCode: keyCode,
-    });
-    await this.send('Input.dispatchKeyEvent', {
-      ...base,
-      type: 'keyUp',
-      nativeVirtualKeyCode: keyCode,
-    });
+      modifiers: modifierMask,
+    };
+    await this.send('Input.dispatchKeyEvent', { ...base, type: 'keyDown' });
+    await this.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
   }
 
   /** Handles an incoming protocol message. */

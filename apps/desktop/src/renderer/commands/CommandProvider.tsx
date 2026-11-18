@@ -33,7 +33,7 @@ import { createCommandDefinitions } from './catalog';
 import { EMPTY_FOCUS, getFocusTarget } from './focus';
 import { KeybindingResolver } from './keybindings';
 import { buildMenuModel, type MenuSection } from './menuModel';
-import { CommandRegistry } from './registry';
+import { CommandRegistry, exposeCommandTrace } from './registry';
 import type {
   CommandContext,
   CommandDefinition,
@@ -280,6 +280,10 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
   menuFocusRef.current = menuFocus;
   const chordHintRef = useRef(chordHint);
   chordHintRef.current = chordHint;
+
+  // Harmless, read-only trace for packaged verification. It only exposes
+  // command ids/outcomes and never accepts an argument or executes a command.
+  useEffect(() => exposeCommandTrace(), []);
 
   // One resolver per platform. The hint is rendered in the menu bar.
   useEffect(() => {
