@@ -24,6 +24,13 @@ export function loadMonaco(): Promise<MonacoModule> {
     monacoPromise = (async (): Promise<MonacoModule> => {
       const monaco = await import('monaco-editor');
 
+      // Ctrl+L is reserved for "Toggle AI Panel". Remove Monaco's default
+      // "Expand Line Selection" binding so the shortcut cannot double-fire.
+      monaco.editor.addKeybindingRule({
+        keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL,
+        command: '-expandLineSelection',
+      });
+
       self.MonacoEnvironment = {
         getWorker: (_workerId: string, label: string): Worker => {
           switch (label) {

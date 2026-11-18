@@ -19,6 +19,10 @@ interface SidebarProps {
   onOpenSearchResult: (match: SearchMatch) => void;
   /** Opens a file of the workspace in the editor. */
   onOpenFile: (path: string) => void;
+  /** Visibility is CSS-only; the sidebar stays mounted to preserve state. */
+  visible: boolean;
+  /** Bumped by the New File command to start inline creation at the root. */
+  createFileSignal: number;
 }
 
 function bodyFor(
@@ -131,17 +135,20 @@ export function Sidebar({
   hasWorkspace,
   onOpenSearchResult,
   onOpenFile,
+  visible,
+  createFileSignal,
 }: SidebarProps): ReactNode {
+  const className = `sidebar${visible ? '' : ' sidebar--hidden'}`;
   // The explorer renders its own header (title + refresh/close actions).
   if (activity === 'explorer') {
     return (
-      <aside className="sidebar" aria-label="Explorer sidebar">
-        <Explorer focusSignal={focusSignal} />
+      <aside className={className} aria-label="Explorer sidebar" aria-hidden={!visible}>
+        <Explorer focusSignal={focusSignal} createFileSignal={createFileSignal} />
       </aside>
     );
   }
   return (
-    <aside className="sidebar" aria-label={`${TITLES[activity]} sidebar`}>
+    <aside className={className} aria-label={`${TITLES[activity]} sidebar`} aria-hidden={!visible}>
       <div className="sidebar__header">{TITLES[activity]}</div>
       {bodyFor(
         activity,

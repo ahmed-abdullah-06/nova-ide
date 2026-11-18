@@ -310,6 +310,7 @@ describe('delete', () => {
 
   it('unlinks a symlink itself and never its target', async () => {
     const secret = path.join(outsideDir, 'secret.txt');
+    await writeFile(secret, 'outside-target\n');
     const link = inRoot('link-to-outside');
     const { symlink } = await import('node:fs/promises');
     try {

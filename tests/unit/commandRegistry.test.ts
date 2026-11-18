@@ -26,6 +26,15 @@ function makeContext(): CommandContext {
   return {
     platform: 'win32',
     bridgeAvailable: true,
+    features: {
+      window: true,
+      edit: true,
+      filePicker: true,
+      logs: true,
+      devTools: true,
+      zoom: true,
+      quit: true,
+    },
     tabs: [],
     activeTabId: null,
     hasWorkspace: true,

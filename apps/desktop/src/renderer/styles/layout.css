@@ -2,10 +2,9 @@
 
 .app-shell {
   display: grid;
-  grid-template-columns:
-    var(--activitybar-width) var(--sidebar-width) minmax(0, 1fr)
-    var(--ai-panel-width);
-  grid-template-rows: minmax(0, 1fr) var(--statusbar-height);
+  grid-template-columns: var(--activitybar-width) auto minmax(0, 1fr) auto;
+  grid-template-rows:
+    var(--menubar-height) minmax(0, 1fr) var(--statusbar-height);
   height: 100vh;
   width: 100vw;
 }
@@ -13,7 +12,7 @@
 /* ---------- Activity bar ---------- */
 
 .activity-bar {
-  grid-row: 1;
+  grid-row: 2;
   grid-column: 1;
   display: flex;
   flex-direction: column;
@@ -73,13 +72,25 @@
 /* ---------- Sidebar ---------- */
 
 .sidebar {
-  grid-row: 1;
+  grid-row: 2;
   grid-column: 2;
+  width: var(--sidebar-width);
+  min-width: 0;
   background: var(--color-sidebar);
   border-right: 1px solid var(--color-border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Hidden panels stay mounted (xterm sessions, AI state) and collapse to 0px. */
+.sidebar--hidden,
+.ai-panel--hidden {
+  width: 0;
+  min-width: 0;
+  border-width: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .sidebar__header {
@@ -128,7 +139,7 @@
 /* ---------- Center column ---------- */
 
 .main-column {
-  grid-row: 1;
+  grid-row: 2;
   grid-column: 3;
   display: grid;
   grid-template-rows: minmax(0, 1fr) var(--bottompanel-height);
@@ -212,11 +223,25 @@
   overflow: hidden;
 }
 
+.bottom-panel--hidden {
+  display: none;
+}
+
+.bottom-panel__content {
+  height: 100%;
+  min-height: 0;
+}
+
+.bottom-panel__content--hidden {
+  display: none;
+}
+
 /* ---------- AI panel ---------- */
 
 .ai-panel {
-  grid-row: 1;
+  grid-row: 2;
   grid-column: 4;
+  width: var(--ai-panel-width);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -277,7 +302,7 @@
 /* ---------- Status bar ---------- */
 
 .status-bar {
-  grid-row: 2;
+  grid-row: 3;
   grid-column: 1 / -1;
   display: flex;
   align-items: center;

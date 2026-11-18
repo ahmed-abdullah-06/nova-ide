@@ -23,6 +23,8 @@ import { FileTreeNode } from './FileTreeNode';
 interface ExplorerProps {
   /** Bumped by Ctrl+Shift+E; focuses the tree when greater than zero. */
   focusSignal: number;
+  /** Bumped by New File (Ctrl+N); starts inline creation at the root. */
+  createFileSignal: number;
 }
 
 function isMacPlatform(): boolean {
@@ -37,7 +39,7 @@ function isMacPlatform(): boolean {
  * - opens text files in the existing Monaco tabs (reusing open tabs),
  * - shows structured filesystem errors as notifications.
  */
-export function Explorer({ focusSignal }: ExplorerProps): ReactNode {
+export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): ReactNode {
   const { state, dispatch } = useWorkspace();
   const actions = useWorkspaceActions();
   const fileOps = useFileOperations();
@@ -57,6 +59,31 @@ export function Explorer({ focusSignal }: ExplorerProps): ReactNode {
       treeRef.current?.focus();
     }
   }, [focusSignal]);
+
+  // New File (Ctrl+N) reuses this inline-create flow at the workspace root.
+  // A ref guard prevents a re-run when expanding the root changes state.
+  const lastCreateSignal = useRef(0);
+  useEffect(() => {
+    if (createFileSignal === 0 || createFileSignal === lastCreateSignal.current) {
+      return;
+    }
+    lastCreateSignal.current = createFileSignal;
+    const workspace = state.workspace;
+    if (!workspace) {
+      return;
+    }
+    if (!state.expandedPaths.includes(workspace.rootPath)) {
+      dispatch({ type: 'expand', path: workspace.rootPath });
+    }
+    dispatch({
+      type: 'start-input',
+      input: {
+        kind: 'create-file',
+        parentPath: workspace.rootPath,
+        targetPath: null,
+      },
+    });
+  }, [createFileSignal, dispatch, state.expandedPaths, state.workspace]);
 
   // Recent workspaces are read once when the explorer mounts.
   useEffect(() => {

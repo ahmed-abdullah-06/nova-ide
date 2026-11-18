@@ -1,13 +1,12 @@
 /**
  * Bottom panel of the application (spec §6.1).
  *
- * Hosts the panels that work on the project: the integrated terminal, the
- * problems list and the task output. Each panel is only mounted while it is
- * visible, so a hidden panel costs no resources.
+ * Hosts the terminal, problems list and task output. All three stay mounted
+ * and are hidden with CSS: hiding a tab must not kill a live shell session or
+ * discard its output.
  */
-import { useState, type ReactNode } from 'react';
-
-type BottomPanelTab = 'terminal' | 'problems' | 'output';
+import type { ReactNode } from 'react';
+import type { BottomPanelTab } from '../../commands/types';
 
 interface TabDefinition {
   id: BottomPanelTab;
@@ -29,6 +28,12 @@ export interface BottomPanelProps {
   renderOutput: () => ReactNode;
   /** Number of problems, shown as a badge on the problems tab. */
   problemCount?: number;
+  /** Active tab (controlled by the shell). */
+  active: BottomPanelTab;
+  /** Selects a tab while the panel is visible. */
+  onSelectTab: (tab: BottomPanelTab) => void;
+  /** CSS-only visibility so the terminal session survives a toggle. */
+  visible: boolean;
 }
 
 export function BottomPanel({
@@ -36,11 +41,16 @@ export function BottomPanel({
   renderProblems,
   renderOutput,
   problemCount = 0,
+  active,
+  onSelectTab,
+  visible,
 }: BottomPanelProps): ReactNode {
-  const [active, setActive] = useState<BottomPanelTab>('terminal');
-
   return (
-    <section className="bottom-panel" aria-label="Bottom panel">
+    <section
+      className={`bottom-panel${visible ? '' : ' bottom-panel--hidden'}`}
+      aria-label="Bottom panel"
+      aria-hidden={!visible}
+    >
       <div className="bottom-panel__header" role="tablist">
         {TABS.map((tab) => (
           <button
@@ -51,7 +61,7 @@ export function BottomPanel({
             className={`bottom-panel__tab${
               active === tab.id ? ' bottom-panel__tab--active' : ''
             }`}
-            onClick={() => setActive(tab.id)}
+            onClick={() => onSelectTab(tab.id)}
           >
             {tab.label}
             {tab.id === 'problems' && problemCount > 0 ? (
@@ -61,9 +71,15 @@ export function BottomPanel({
         ))}
       </div>
       <div className="bottom-panel__body" role="tabpanel">
-        {active === 'terminal' ? renderTerminal() : null}
-        {active === 'problems' ? renderProblems() : null}
-        {active === 'output' ? renderOutput() : null}
+        <div className={`bottom-panel__content${active === 'terminal' ? '' : ' bottom-panel__content--hidden'}`}>
+          {renderTerminal()}
+        </div>
+        <div className={`bottom-panel__content${active === 'problems' ? '' : ' bottom-panel__content--hidden'}`}>
+          {renderProblems()}
+        </div>
+        <div className={`bottom-panel__content${active === 'output' ? '' : ' bottom-panel__content--hidden'}`}>
+          {renderOutput()}
+        </div>
       </div>
     </section>
   );

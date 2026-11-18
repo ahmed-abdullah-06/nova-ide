@@ -88,9 +88,20 @@ export interface CommandServices {
   showAbout(): void | Promise<void>;
 }
 
+export interface CommandFeatures {
+  window: boolean;
+  edit: boolean;
+  filePicker: boolean;
+  logs: boolean;
+  devTools: boolean;
+  zoom: boolean;
+  quit: boolean;
+}
+
 export interface CommandContext {
   platform: Platform;
   bridgeAvailable: boolean;
+  features: CommandFeatures;
   tabs: readonly CommandTab[];
   activeTabId: string | null;
   hasWorkspace: boolean;
@@ -143,4 +154,6 @@ export interface CommandDefinition {
   editorOwned?: boolean;
   /** Disabled item with an honest explanation. */
   plannedHint?: string;
+  /** Reason shown when `enabled(context)` is false. */
+  disabledHint?(context: CommandContext): string;
 }

@@ -31,12 +31,15 @@ export interface AiPanelProps {
     startLine: number;
     endLine: number;
   } | null;
+  /** CSS-only visibility so conversations and voice state survive toggles. */
+  visible: boolean;
 }
 
 export function AiPanel({
   hasWorkspace,
   activeFile,
   selection,
+  visible,
 }: AiPanelProps): React.JSX.Element {
   const ai = useAi();
   const conversations = useConversations();
@@ -171,7 +174,11 @@ export function AiPanel({
   const isCloud = provider?.kind === 'cloud';
 
   return (
-    <aside className="ai-panel" aria-label="AI assistant">
+    <aside
+      className={`ai-panel${visible ? '' : ' ai-panel--hidden'}`}
+      aria-label="AI assistant"
+      aria-hidden={!visible}
+    >
       <div className="ai-panel__header">
         <div className="ai-panel__modes" role="tablist" aria-label="Mode">
           <button

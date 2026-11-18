@@ -4,6 +4,7 @@ import { App } from './app/App';
 import './styles/tokens.css';
 import './styles/global.css';
 import './styles/layout.css';
+import './styles/menu.css';
 import './styles/editor.css';
 import './styles/explorer.css';
 import './styles/panels.css';

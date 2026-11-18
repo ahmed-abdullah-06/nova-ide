@@ -1,0 +1,250 @@
+/* A6 — renderer menu bar and help dialogs */
+
+.menu-bar {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: var(--menubar-height);
+  padding: 0 8px;
+  background: var(--color-sidebar);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-small);
+}
+
+.menu-bar__group {
+  position: relative;
+  display: flex;
+}
+
+.menu-bar__top {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  transition: background var(--transition), color var(--transition);
+}
+
+.menu-bar__top:hover,
+.menu-bar__top--open {
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+
+.menu-bar__top--open {
+  background: var(--color-active);
+}
+
+.menu-bar__spacer {
+  flex: 1;
+}
+
+.menu-bar__hint {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--color-accent-text);
+  background: var(--color-accent-soft);
+  border-radius: var(--radius);
+}
+
+.menu-bar__dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 280px;
+  padding: 4px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.menu-bar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu-bar__item--active:not(:disabled) {
+  background: var(--color-active);
+}
+
+.menu-bar__item--disabled {
+  color: var(--color-faint);
+  opacity: 0.6;
+}
+
+.menu-bar__check {
+  flex: none;
+  width: 14px;
+  color: var(--color-accent-text);
+  text-align: center;
+}
+
+.menu-bar__label {
+  flex: 1;
+}
+
+.menu-bar__shortcut {
+  flex: none;
+  margin-left: 24px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.menu-bar__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--color-border);
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 90vw);
+  max-height: 80vh;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dialog__close {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.dialog__close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.dialog__search {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--color-input);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.dialog__list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dialog__group + .dialog__group {
+  margin-top: 12px;
+}
+
+.dialog__group-title {
+  margin: 0 0 4px;
+  color: var(--color-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dialog__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+}
+
+.dialog__row:nth-child(odd) {
+  background: var(--color-hover);
+}
+
+.dialog__row-shortcut {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.dialog__note,
+.dialog__empty {
+  margin: 0;
+  color: var(--color-faint);
+  font-size: 11px;
+}
+
+.dialog__meta {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.dialog__meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog__meta dt {
+  color: var(--color-muted);
+}
+
+.dialog__meta dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

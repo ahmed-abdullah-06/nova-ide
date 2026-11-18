@@ -3,14 +3,15 @@ import type { AppInfo, NovaApi, SearchMatch } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
 import { WorkspaceProvider, useWorkspace } from '../stores/workspace';
+import { UiProvider, useUi } from '../stores/ui';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
-import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
-import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
+import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
-import { ActivityBar, type ActivityId } from '../components/layout/ActivityBar';
+import { ActivityBar } from '../components/layout/ActivityBar';
 import { AiPanel } from '../features/ai/AiPanel';
 import { BottomPanel } from '../components/layout/BottomPanel';
+import { MenuBar } from '../components/layout/MenuBar';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
@@ -19,6 +20,8 @@ import { ProblemsPanel } from '../features/problems/ProblemsPanel';
 import { TaskOutputPanel } from '../features/tasks/TaskOutputPanel';
 import { useTasks } from '../features/tasks/useTasks';
 import { useProblems } from '../features/problems/useProblems';
+import { CommandProvider, useCommands } from '../commands/CommandProvider';
+import { requestEditorLayout } from '../features/editor/editorCommands';
 
 interface CursorPosition {
   line: number;
@@ -26,24 +29,22 @@ interface CursorPosition {
 }
 
 /**
- * Application layout (spec §6.1): Activity bar · Sidebar · Editor area ·
- * AI panel · Terminal panel · Status bar.
+ * Application layout (spec §6.1): Menu bar · Activity bar · Sidebar · Editor
+ * area · AI panel · Terminal panel · Status bar.
  */
 function Workspace(): ReactNode {
   const { theme, toggleTheme } = useTheme();
   const { state, dispatch } = useTabs();
   const { state: workspaceState } = useWorkspace();
   const workspaceActions = useWorkspaceActions();
-  const [activity, setActivity] = useState<ActivityId>('explorer');
+  const ui = useUi();
+  const commands = useCommands();
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
   const [selection, setSelection] = useState<{
     startLine: number;
     endLine: number;
   } | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
-  const { openFolder } = workspaceActions;
-  const { saveActive } = useFileOperations();
   const { openFile } = useFileOpener();
   const hasWorkspace = workspaceState.workspace !== null;
   useExternalFileChanges();
@@ -63,35 +64,14 @@ function Workspace(): ReactNode {
   // The task runner offers the scripts of the workspace package.json.
   const tasks = useTasks(hasWorkspace);
 
-  // Workspace shortcuts (spec §13): Ctrl/Cmd+Shift+E focuses the explorer,
-  // Ctrl/Cmd+Shift+O opens a folder, Ctrl/Cmd+S saves the active buffer.
-  // There is no native menu accelerator, so no conflict can occur.
+  // Monaco must be re-measured whenever a panel is shown, hidden, resized,
+  // or the window itself changes size. Panels stay mounted (CSS-only hiding).
   useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent): void => {
-      const modifier = event.ctrlKey || event.metaKey;
-      if (!modifier) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if (event.shiftKey) {
-        if (key === 'e') {
-          event.preventDefault();
-          setActivity('explorer');
-          setExplorerFocusSignal((signal) => signal + 1);
-        } else if (key === 'o') {
-          event.preventDefault();
-          void openFolder();
-        }
-        return;
-      }
-      if (key === 's' && !event.altKey) {
-        event.preventDefault();
-        void saveActive();
-      }
-    };
-    window.addEventListener('keydown', handleShortcut);
-    return () => window.removeEventListener('keydown', handleShortcut);
-  }, [openFolder, saveActive]);
+    requestEditorLayout();
+    const handleResize = (): void => requestEditorLayout();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [ui.layoutSignal]);
 
   // The workspace can be changed outside the renderer (another window, or
   // the main process), so the renderer re-reads it when it gains focus.
@@ -136,19 +116,41 @@ function Workspace(): ReactNode {
     }
   };
 
+  const shellClass = [
+    'app-shell',
+    ui.sidebarVisible ? '' : 'app-shell--no-sidebar',
+    ui.aiPanelVisible ? '' : 'app-shell--no-ai',
+  ]
+    .filter((value) => value !== '')
+    .join(' ');
+
   return (
-    <div className="app-shell">
-      <ActivityBar active={activity} onSelect={setActivity} />
+    <div className={shellClass}>
+      <MenuBar
+        sections={commands.sections}
+        chordHint={commands.chordHint}
+        onExecute={commands.executeFromMenu}
+        onCaptureFocus={commands.captureMenuFocus}
+        onOpenChange={commands.setMenuOpen}
+      />
+      <ActivityBar
+        active={ui.activity}
+        onSelect={(id) => ui.showActivity(id)}
+      />
       <Sidebar
-        activity={activity}
+        activity={ui.activity}
         theme={theme}
         onToggleTheme={toggleTheme}
-        focusSignal={explorerFocusSignal}
+        focusSignal={ui.explorerFocusSignal}
+        createFileSignal={ui.createFileSignal}
         hasWorkspace={hasWorkspace}
         onOpenSearchResult={handleOpenSearchResult}
         onOpenFile={handleOpenFile}
+        visible={ui.sidebarVisible}
       />
-      <div className="main-column">
+      <div
+        className={`main-column${ui.bottomPanelVisible ? '' : ' main-column--no-bottom-panel'}`}
+      >
         <EditorArea
           theme={theme}
           onCursorChange={setCursor}
@@ -181,6 +183,9 @@ function Workspace(): ReactNode {
               }
             />
           )}
+          active={ui.bottomPanelTab}
+          onSelectTab={ui.selectBottomPanelTab}
+          visible={ui.bottomPanelVisible}
         />
       </div>
       <AiPanel
@@ -205,6 +210,7 @@ function Workspace(): ReactNode {
               }
             : null
         }
+        visible={ui.aiPanelVisible}
       />
       <StatusBar
         language={activeTab?.language ?? null}
@@ -225,7 +231,11 @@ export function App(): ReactNode {
   return (
     <TabsProvider>
       <WorkspaceProvider>
-        <Workspace />
+        <UiProvider>
+          <CommandProvider>
+            <Workspace />
+          </CommandProvider>
+        </UiProvider>
       </WorkspaceProvider>
     </TabsProvider>
   );

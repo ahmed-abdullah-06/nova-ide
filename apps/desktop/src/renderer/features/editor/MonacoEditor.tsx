@@ -3,7 +3,7 @@ import type * as Monaco from 'monaco-editor';
 import type { EditorTab } from '../../stores/tabsReducer';
 import { disposeAllModels, getModel, getOrCreateModel } from './modelRegistry';
 import { loadMonaco } from './monacoSetup';
-import { onReveal } from './editorCommands';
+import { onEditorLayout, onReveal, setActiveEditor } from './editorCommands';
 
 interface MonacoEditorProps {
   tab: EditorTab | null;
@@ -47,6 +47,9 @@ export function MonacoEditor({
   useEffect(() => {
     let cancelled = false;
     let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
+    const disposeLayout = onEditorLayout(() => {
+      requestAnimationFrame(() => editor?.layout());
+    });
 
     void loadMonaco().then((monaco) => {
       if (cancelled || !containerRef.current) {
@@ -63,6 +66,7 @@ export function MonacoEditor({
         scrollBeyondLastLine: false,
       });
       editorRef.current = editor;
+      setActiveEditor(editor);
 
       editor.onDidChangeModelContent(() => {
         const id = activeTabIdRef.current;
@@ -96,8 +100,10 @@ export function MonacoEditor({
 
     return () => {
       cancelled = true;
+      disposeLayout();
       editor?.dispose();
       editorRef.current = null;
+      setActiveEditor(null);
       disposeAllModels();
       setReady(false);
     };
