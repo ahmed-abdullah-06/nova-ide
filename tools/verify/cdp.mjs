@@ -158,6 +158,30 @@ export class DevToolsSession {
   }
 
   /**
+   * Types text with real key events. Monaco ignores `Input.insertText`
+   * on some of its hidden textareas, but handles ordinary key events.
+   *
+   * @param {string} text The characters to type.
+   */
+  async typeText(text) {
+    for (const char of text) {
+      const upper = char.toUpperCase();
+      const base = {
+        key: char,
+        code: `Key${upper}`,
+        windowsVirtualKeyCode: upper.charCodeAt(0),
+        nativeVirtualKeyCode: upper.charCodeAt(0),
+      };
+      await this.send('Input.dispatchKeyEvent', {
+        ...base,
+        type: 'keyDown',
+        text: char,
+      });
+      await this.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+    }
+  }
+
+  /**
    * Presses a key, optionally with modifiers (for example Ctrl+K).
    *
    * @param {string} key The key value (for example `Enter` or `k`).

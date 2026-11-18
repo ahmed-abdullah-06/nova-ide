@@ -778,7 +778,7 @@ async function main() {
     // Typing into the terminal must produce output in the renderer.
     const focused = await session.evaluate(
       `(() => {
-        const area = document.querySelector('.terminal-view textarea');
+        const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
         if (area === null) return false;
         area.focus();
         return document.activeElement === area;
@@ -1272,29 +1272,62 @@ async function main() {
     );
     check('the terminal tab is reachable', terminalTab === true);
 
-    await session.evaluate(
+    // Earlier checks may have closed the original shell. Create a fresh
+    // session through the UI so the Stop button, the typed command and the
+    // rendered view all belong to one live session.
+    const sessionsBefore = await session.evaluate(
+      `document.querySelectorAll('.terminal-panel__tab').length`,
+    );
+    const newSessionClicked = await session.evaluate(
       `(() => {
-        const area = document.querySelector('.terminal-view textarea');
-        if (area === null) return false;
-        area.focus();
+        const buttons = [...document.querySelectorAll('.terminal-panel__action')];
+        const button = buttons.find((candidate) =>
+          candidate.textContent.trim() === '+' ||
+          candidate.getAttribute('title')?.includes('New terminal session') === true,
+        );
+        if (button === undefined) return false;
+        button.click();
         return true;
       })()`,
     );
-    // Collect pty output directly: scraping xterm's DOM is timing-sensitive.
-    await session.evaluate(
-      `window.__a6TermData = [];
-       window.__a6TermUnsub = window.nova.terminal.onData((event) => {
-         window.__a6TermData.push(String(event.data ?? ''));
-         if (window.__a6TermData.length > 200) window.__a6TermData.shift();
-       });`,
+    const freshSession = await waitFor(
+      session,
+      `document.querySelectorAll('.terminal-panel__tab').length > ${sessionsBefore}`,
+      15000,
     );
-    await session.insertText('Start-Sleep 30');
+    if (newSessionClicked !== true || freshSession !== true) {
+      throw new Error('could not create a fresh terminal session');
+    }
+
+    // The visible view is the one whose Stop button is exercised below.
+    const terminalTextExpr = `(() => [...document.querySelectorAll('.terminal-panel__view:not([hidden]) .terminal-view .xterm-rows > div')]
+      .map((row) => row.textContent ?? '')
+      .join(' ')
+      .replace(/\\s+/g, ' '))()`;
+    // A real click activates xterm's key handling before the text is sent.
+    await clickWithMouse(session, '.terminal-panel__view:not([hidden]) .terminal-view .xterm-screen');
+    const terminalFocused = await session.evaluate(
+      `(() => {
+        const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    if (terminalFocused !== true) {
+      throw new Error('the terminal view did not accept focus');
+    }
+
+    // Echo a unique marker before the long-running command: the marker is
+    // shell output, so it cannot be confused with a prompt, a wrapped line or
+    // a PSReadLine suggestion.
+    await session.insertText('echo NOVA_START; Start-Sleep 30');
     await session.pressKey('Enter', 13);
 
     // The command must really be running before it is interrupted.
     const commandStarted = await waitFor(
       session,
-      `window.__a6TermData.join('').includes('Start-Sleep 30')`,
+      `${terminalTextExpr}.includes('NOVA_START')`,
       30000,
     );
     check('the command in the terminal is running', commandStarted !== false);
@@ -1315,28 +1348,24 @@ async function main() {
 
     // The session must still be usable after the interrupt.
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    const terminalText = await session.evaluate(
-      `(() => {
-        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
-        return [...rows].map((row) => row.textContent).join('\\n');
-      })()`,
-    );
+    const terminalText = await session.evaluate(terminalTextExpr);
     // The shell needs a moment to return to the prompt; the command is
     // sent a few times, so a lost keystroke cannot fail the check.
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      await clickWithMouse(session, '.terminal-panel__view:not([hidden]) .terminal-view .xterm-screen');
       await session.evaluate(
         `(() => {
-          const area = document.querySelector('.terminal-view textarea');
+          const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
           if (area === null) return false;
           area.focus();
-          return true;
+          return document.activeElement === area;
         })()`,
       );
       await session.insertText('echo NOVA_AFTER_STOP');
       await session.pressKey('Enter', 13);
       await new Promise((resolve) => setTimeout(resolve, 700));
       const done = await session.evaluate(
-        `window.__a6TermData.join('').includes('NOVA_AFTER_STOP')`,
+        `${terminalTextExpr}.includes('NOVA_AFTER_STOP')`,
       );
       if (done === true) {
         break;
@@ -1344,10 +1373,9 @@ async function main() {
     }
     const afterStop = await waitFor(
       session,
-      `window.__a6TermData.join('').includes('NOVA_AFTER_STOP')`,
+      `${terminalTextExpr}.includes('NOVA_AFTER_STOP')`,
       30000,
     );
-    await session.evaluate(`window.__a6TermUnsub?.(); delete window.__a6TermUnsub; delete window.__a6TermData;`);
     check(
       'the terminal session survives the interrupt',
       afterStop !== false,
@@ -2952,12 +2980,15 @@ async function main() {
     check('Ctrl+N starts inline creation in the explorer', inlineCreate === true);
 
     // The Edit menu must use the focus target captured before the menu opened.
+    await session.evaluate(
+      `document.documentElement.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`,
+    );
     const terminalFocusedForMenu = await session.evaluate(
       `(() => {
         const tab = [...document.querySelectorAll('.bottom-panel__tab')]
           .find((node) => node.textContent.includes('Terminal'));
         if (tab !== undefined) tab.click();
-        const area = document.querySelector('.terminal-view textarea');
+        const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
         if (area === null) return false;
         area.focus();
         return document.activeElement === area;
@@ -3014,7 +3045,7 @@ async function main() {
       'Edit menu uses the focus captured before it opened',
       terminalFocusedForMenu === true &&
         editWithTerminal.undoDisabled === true &&
-        (editWithTerminal.hint ?? '').includes('Terminal') &&
+        (editWithTerminal.hint ?? '').includes('Focus a text field') &&
         editWithTerminal.copyDisabled === true &&
         fieldFocusedForMenu === true &&
         editWithField.cutEnabled === true &&
@@ -3027,10 +3058,16 @@ async function main() {
       }),
     );
 
+    // Make sure no dropdown is left open; the registry suppresses shortcuts
+    // while a menu owns the keyboard.
+    await session.evaluate(
+      `document.documentElement.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`,
+    );
+
     // Terminal key pass-through: no registry entries, no chord hint, no panel toggle.
     const terminalRefocused = await session.evaluate(
       `(() => {
-        const area = document.querySelector('.terminal-view textarea');
+        const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
         if (area === null) return false;
         area.focus();
         return document.activeElement === area;
@@ -3070,13 +3107,11 @@ async function main() {
 
     // Monaco owns Find/Replace/Undo/Redo; Ctrl+L is unbound there so the
     // registry can still toggle the AI panel outside the terminal.
-    const monacoFocused = await session.evaluate(
-      `(() => {
-        const area = document.querySelector('.monaco-editor textarea');
-        if (area === null) return false;
-        area.focus();
-        return document.activeElement === area;
-      })()`,
+    await clickWithMouse(session, '.editor-content .view-lines');
+    const monacoFocused = await waitFor(
+      session,
+      `document.activeElement?.closest('.monaco-editor') !== null`,
+      5000,
     );
     const beforeEditorKeys = await traceSequence(session);
     await session.pressShortcut('f', 'KeyF', 70, ['ctrl']);
@@ -3089,7 +3124,12 @@ async function main() {
       monacoFocused === true && beforeEditorKeys === afterEditorKeys,
       JSON.stringify({ beforeEditorKeys, afterEditorKeys }),
     );
+    // Ctrl+F/H opened Monaco's find/replace widget; close it so its inputs do
+    // not masquerade as the editor for the later typing checks.
+    await session.pressKey('Escape', 27);
 
+    // Focus a non-terminal, non-editor element for the registry shortcut.
+    const plainFocused = await focusText(session, '.menu-bar__top', 'File');
     const panelBeforeCtrlL = await session.evaluate(
       `(() => {
         const panel = document.querySelector('.ai-panel');
@@ -3109,7 +3149,8 @@ async function main() {
     );
     check(
       'Ctrl+L toggles the AI panel outside the terminal',
-      ctrlLEntry.last !== null &&
+      plainFocused === true &&
+        ctrlLEntry.last !== null &&
         ctrlLEntry.last.id === 'a6.view.toggleAiPanel' &&
         ctrlLEntry.last.source === 'user-keyboard' &&
         ctrlLEntry.last.outcome === 'ran' &&
@@ -3144,14 +3185,19 @@ async function main() {
         return document.querySelector('.editor-tabs__new') !== null;
       })()`,
     );
+    await clickWithMouse(session, '.editor-content .view-lines');
+    await session.evaluate(
+      `(() => {
+        const area = document.querySelector(
+          '.monaco-editor textarea[aria-label*="Editor content"], .monaco-editor textarea.inputarea',
+        );
+        if (area !== null) area.focus();
+        return area !== null;
+      })()`,
+    );
     const newEditorFocused = await waitFor(
       session,
-      `(() => {
-        const area = document.querySelector('.monaco-editor textarea');
-        if (area === null) return false;
-        area.focus();
-        return document.activeElement === area;
-      })()`,
+      `document.activeElement?.closest('.editor-content') !== null`,
       5000,
     );
     await session.typeText('A6_VERIFY_DIRTY');
@@ -3160,14 +3206,18 @@ async function main() {
       `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
       5000,
     );
-    const dirtyTabName = await session.evaluate(
-      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? null`,
+    const dirtyState = await session.evaluate(
+      `(() => ({
+        name: document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? null,
+        lines: document.querySelector('.editor-content .view-lines')?.textContent ?? null,
+      }))()`,
     );
     check(
       'editing a buffer marks its tab dirty',
       newEditorFocused === true && dirtyTabVisible === true,
-      String(dirtyTabName),
+      JSON.stringify(dirtyState),
     );
+    const dirtyTabName = dirtyState.name;
 
     await session.evaluate(
       `window.__a6ConfirmMessages = [];
@@ -3224,14 +3274,19 @@ async function main() {
     // Recreate a dirty buffer for the window-level close checks.
     console.log('  step: recreate dirty buffer');
     await session.evaluate(`document.querySelector('.editor-tabs__new')?.click()`);
+    await clickWithMouse(session, '.editor-content .view-lines');
+    await session.evaluate(
+      `(() => {
+        const area = document.querySelector(
+          '.monaco-editor textarea[aria-label*="Editor content"], .monaco-editor textarea.inputarea',
+        );
+        if (area !== null) area.focus();
+        return area !== null;
+      })()`,
+    );
     await waitFor(
       session,
-      `(() => {
-        const area = document.querySelector('.monaco-editor textarea');
-        if (area === null) return false;
-        area.focus();
-        return document.activeElement === area;
-      })()`,
+      `document.activeElement?.closest('.editor-content') !== null`,
       5000,
     );
     await session.typeText('A6_VERIFY_CLOSE');
@@ -3240,6 +3295,13 @@ async function main() {
       `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
       5000,
     );
+    const closeReady = await session.evaluate(
+      `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
+    );
+    if (closeReady !== true) {
+      check('declining a dirty window close leaves the app alive', false, 'no dirty buffer');
+      check('declining Exit with unsaved changes leaves the app alive', false, 'no dirty buffer');
+    } else {
     await session.evaluate(
       `window.__a6ConfirmMessages = [];
        window.confirm = (message) => {
@@ -3287,6 +3349,7 @@ async function main() {
         exitCancelled.alive === true,
       JSON.stringify(exitCancelled),
     );
+    }
     await session.evaluate(
       `window.confirm = window.__a6OriginalConfirm ?? window.confirm;
        delete window.__a6OriginalConfirm;
