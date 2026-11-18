@@ -25,6 +25,23 @@ export function assertNoArgs(args: unknown[]): asserts args is [] {
   }
 }
 
+/**
+ * `window:confirm-close` — a non-empty token and an explicit boolean.
+ * The token is checked against outstanding requests by the close flow itself.
+ */
+export function assertConfirmClose(
+  args: unknown[],
+): asserts args is [string, boolean] {
+  if (
+    args.length !== 2 ||
+    typeof args[0] !== 'string' ||
+    args[0].length === 0 ||
+    typeof args[1] !== 'boolean'
+  ) {
+    throw new Error('Expected (token, confirmed)');
+  }
+}
+
 export function assertOneString(args: unknown[]): asserts args is [string] {
   if (args.length !== 1 || typeof args[0] !== 'string') {
     throw new Error('Expected a single string argument');

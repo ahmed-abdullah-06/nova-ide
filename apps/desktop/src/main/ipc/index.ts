@@ -21,6 +21,8 @@ import { createTaskHandlers } from './tasks';
 import { createAiHandlers } from './ai';
 import { createAgentHandlers } from './agent';
 import { createLocalModelHandlers } from './localModels';
+import { createWindowHandlers } from './window';
+import { CloseFlow } from '../closeFlow';
 import {
   assertNoArgs,
   assertOneString,
@@ -28,6 +30,7 @@ import {
   assertAgentTask,
   assertApprovalAnswer,
   assertChatRequest,
+  assertConfirmClose,
   assertContextAttachments,
   assertConversation,
   assertConversationId,
@@ -159,7 +162,12 @@ async function confirmPermissionWidening(
  */
 export function registerIpcHandlers(
   appSettings: AppSettingsStore,
+  closeFlow: CloseFlow = new CloseFlow({
+    sendRequest: () => undefined,
+    onConfirmed: () => undefined,
+  }),
 ): () => Promise<void> {
+  const windowHandlers = createWindowHandlers(closeFlow);
   const watcher = new OpenFileWatcher((change) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(IpcPushChannels.fsExternalChange, change);
@@ -386,6 +394,41 @@ export function registerIpcHandlers(
   });
 
   registerChannel(IpcChannels.appGetInfo, assertNoArgs, createAppInfoHandler());
+
+  // Window and shell commands. Every argument list is either empty or a
+  // close token issued by this process; no renderer path is ever accepted.
+  registerChannel(IpcChannels.windowState, assertNoArgs, windowHandlers.state);
+  registerChannel(IpcChannels.windowMinimize, assertNoArgs, windowHandlers.minimize);
+  registerChannel(
+    IpcChannels.windowToggleMaximize,
+    assertNoArgs,
+    windowHandlers.toggleMaximize,
+  );
+  registerChannel(
+    IpcChannels.windowToggleFullScreen,
+    assertNoArgs,
+    windowHandlers.toggleFullScreen,
+  );
+  registerChannel(IpcChannels.windowClose, assertNoArgs, windowHandlers.close);
+  registerChannel(
+    IpcChannels.windowConfirmClose,
+    assertConfirmClose,
+    windowHandlers.confirmClose,
+  );
+  registerChannel(IpcChannels.windowZoomIn, assertNoArgs, windowHandlers.zoomIn);
+  registerChannel(IpcChannels.windowZoomOut, assertNoArgs, windowHandlers.zoomOut);
+  registerChannel(IpcChannels.windowZoomReset, assertNoArgs, windowHandlers.zoomReset);
+  registerChannel(IpcChannels.appQuit, assertNoArgs, windowHandlers.quit);
+  registerChannel(
+    IpcChannels.devToolsToggle,
+    assertNoArgs,
+    windowHandlers.toggleDevTools,
+  );
+  registerChannel(
+    IpcChannels.appOpenLogs,
+    assertNoArgs,
+    windowHandlers.openLogsFolder,
+  );
 
   // The local-only mode (Milestone 8). The rule is enforced in the main
   // process: the renderer can only switch the mode on or off.

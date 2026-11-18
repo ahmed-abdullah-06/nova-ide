@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   IpcChannels,
   IpcPushChannels,
+  type CloseRequest,
   type ExternalChange,
   type IpcInvokeMap,
   type NovaApi,
@@ -10,6 +11,7 @@ import {
   type SearchResults,
   type TerminalData,
   type TerminalExit,
+  type WindowStateSnapshot,
 } from '../shared/ipc-types';
 import type { AIStreamEvent } from '../shared/ai-types';
 import type { LocalDownloadProgress } from '../shared/local-model-types';
@@ -56,6 +58,31 @@ const novaApi: NovaApi = {
   openExternal: (url) => invoke(IpcChannels.appOpenExternal, url),
   localOnly: () => invoke(IpcChannels.appLocalOnly),
   setLocalOnly: (enabled) => invoke(IpcChannels.appLocalOnlySet, enabled),
+
+  window: {
+    state: () => invoke(IpcChannels.windowState),
+    minimize: () => invoke(IpcChannels.windowMinimize),
+    toggleMaximize: () => invoke(IpcChannels.windowToggleMaximize),
+    toggleFullScreen: () => invoke(IpcChannels.windowToggleFullScreen),
+    close: () => invoke(IpcChannels.windowClose),
+    confirmClose: (token, confirmed) =>
+      invoke(IpcChannels.windowConfirmClose, token, confirmed),
+    zoomIn: () => invoke(IpcChannels.windowZoomIn),
+    zoomOut: () => invoke(IpcChannels.windowZoomOut),
+    resetZoom: () => invoke(IpcChannels.windowZoomReset),
+    onStateChanged: (listener) =>
+      subscribe<WindowStateSnapshot>(
+        IpcPushChannels.windowStateChanged,
+        listener,
+      ),
+    onCloseRequest: (listener) =>
+      subscribe<CloseRequest>(IpcPushChannels.closeRequest, listener),
+  },
+  system: {
+    quit: () => invoke(IpcChannels.appQuit),
+    toggleDevTools: () => invoke(IpcChannels.devToolsToggle),
+    openLogsFolder: () => invoke(IpcChannels.appOpenLogs),
+  },
 
   workspace: {
     open: (pathValue?: string) =>

@@ -1,8 +1,28 @@
 import { BrowserWindow } from 'electron';
 import path from 'node:path';
+import {
+  IpcPushChannels,
+  type WindowStateSnapshot,
+} from '../shared/ipc-types';
 
 const MIN_WINDOW_WIDTH = 1024;
 const MIN_WINDOW_HEIGHT = 640;
+
+/**
+ * Windows that the main process has already approved for closing. The native
+ * `close` event is intercepted for every other close so unsaved work can be
+ * confirmed first.
+ */
+const approvedCloses = new WeakSet<BrowserWindow>();
+
+export function approveWindowClose(window: BrowserWindow): void {
+  approvedCloses.add(window);
+}
+
+export interface MainWindowOptions {
+  /** Called when the user clicks the native close control. */
+  onNativeClose: (window: BrowserWindow) => void;
+}
 
 function getAllowedNavigationPrefixes(): string[] {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -26,7 +46,7 @@ function isAllowedNavigationUrl(url: string): boolean {
  *  - navigation restricted to the application's own renderer
  *  - popups/new windows denied
  */
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -48,6 +68,38 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Keep the renderer's toggle marks honest when state changes outside a
+  // command (native maximize button, full-screen gesture, another display).
+  const pushState = (): void => {
+    if (mainWindow.isDestroyed()) {
+      return;
+    }
+    const state: WindowStateSnapshot = {
+      maximized: mainWindow.isMaximized(),
+      fullScreen: mainWindow.isFullScreen(),
+    };
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IpcPushChannels.windowStateChanged, state);
+      }
+    }
+  };
+  mainWindow.on('maximize', pushState);
+  mainWindow.on('unmaximize', pushState);
+  mainWindow.on('enter-full-screen', pushState);
+  mainWindow.on('leave-full-screen', pushState);
+
+  // Every close starts with the shared dirty check. An approved close is
+  // marked above and passes straight through.
+  mainWindow.on('close', (event) => {
+    if (approvedCloses.has(mainWindow)) {
+      approvedCloses.delete(mainWindow);
+      return;
+    }
+    event.preventDefault();
+    onNativeClose(mainWindow);
   });
 
   // Block any navigation away from the application renderer.

@@ -103,6 +103,18 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.voicePickFile,
       IpcChannels.voiceTranscribe,
       IpcChannels.voiceCancel,
+      IpcChannels.windowState,
+      IpcChannels.windowMinimize,
+      IpcChannels.windowToggleMaximize,
+      IpcChannels.windowToggleFullScreen,
+      IpcChannels.windowClose,
+      IpcChannels.windowConfirmClose,
+      IpcChannels.windowZoomIn,
+      IpcChannels.windowZoomOut,
+      IpcChannels.windowZoomReset,
+      IpcChannels.appQuit,
+      IpcChannels.devToolsToggle,
+      IpcChannels.appOpenLogs,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

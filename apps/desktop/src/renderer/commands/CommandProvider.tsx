@@ -49,17 +49,17 @@ for (const definition of DEFINITIONS) {
 }
 
 /**
- * Capabilities delivered by later milestones. Kept false until the matching
- * main-process channel exists so no menu item pretends to work.
+ * Capabilities with a real main-process channel. Remaining flags stay false
+ * until their channel exists so no menu item pretends to work.
  */
 const FEATURES: CommandFeatures = {
-  window: false,
+  window: true,
   edit: false,
   filePicker: false,
-  logs: false,
-  devTools: false,
-  zoom: false,
-  quit: false,
+  logs: true,
+  devTools: true,
+  zoom: true,
+  quit: true,
 };
 
 function detectPlatform(): Platform {
@@ -100,6 +100,10 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
   const [menuFocus, setMenuFocus] = useState<FocusTarget | null>(null);
   const platform = useMemo(detectPlatform, []);
   const resolverRef = useRef<KeybindingResolver | null>(null);
+  const nova = typeof window === 'undefined' ? undefined : window.nova;
+  const { setWindowState } = ui;
+  const tabsRef = useRef(tabsState);
+  tabsRef.current = tabsState;
 
   const notify = useCallback(
     (message: string): void => {
@@ -128,7 +132,10 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
           tabsDispatch({ type: 'close', id: tab.id });
         }
       },
-      exitApp: () => notify('Quit arrives with the desktop window milestone.'),
+      exitApp: () =>
+        nova === undefined
+          ? notify('Quit is unavailable outside A6')
+          : nova.system.quit(),
       undo: () => notify('Field editing actions arrive with the desktop editing milestone.'),
       redo: () => notify('Field editing actions arrive with the desktop editing milestone.'),
       cut: () => notify('Field editing actions arrive with the desktop editing milestone.'),
@@ -143,20 +150,53 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       toggleSourceControl: () => ui.toggleActivity('scm'),
       toggleAiPanel: () => ui.toggleAiPanel(),
       toggleTerminal: () => ui.toggleBottomPanel('terminal'),
-      zoomIn: () => notify('Zoom controls arrive with the desktop window milestone.'),
-      zoomOut: () => notify('Zoom controls arrive with the desktop window milestone.'),
-      resetZoom: () => notify('Zoom controls arrive with the desktop window milestone.'),
-      minimizeWindow: () => notify('Window controls arrive with the desktop window milestone.'),
-      toggleMaximize: () => notify('Window controls arrive with the desktop window milestone.'),
-      toggleFullScreen: () => notify('Window controls arrive with the desktop window milestone.'),
-      closeWindow: () => notify('Window controls arrive with the desktop window milestone.'),
+      zoomIn: async () => {
+        await nova?.window.zoomIn();
+      },
+      zoomOut: async () => {
+        await nova?.window.zoomOut();
+      },
+      resetZoom: async () => {
+        await nova?.window.resetZoom();
+      },
+      minimizeWindow: () => nova?.window.minimize(),
+      toggleMaximize: async () => {
+        if (nova !== undefined) {
+          setWindowState(await nova.window.toggleMaximize());
+        }
+      },
+      toggleFullScreen: async () => {
+        if (nova !== undefined) {
+          setWindowState(await nova.window.toggleFullScreen());
+        }
+      },
+      closeWindow: () =>
+        nova === undefined
+          ? notify('Window controls are unavailable outside A6')
+          : nova.window.close(),
       newWindow: () => undefined,
       showShortcuts: () => setDialog('shortcuts'),
-      toggleDevTools: () => notify('Developer tools arrive with the help milestone.'),
-      openLogsFolder: () => notify('Log folder access arrives with the help milestone.'),
+      toggleDevTools: async () => {
+        if (nova === undefined) {
+          notify('Developer tools are unavailable outside A6');
+          return;
+        }
+        const open = await nova.system.toggleDevTools();
+        notify(open ? 'Developer tools opened.' : 'Developer tools closed.');
+      },
+      openLogsFolder: async () => {
+        if (nova === undefined) {
+          notify('The logs folder is unavailable outside A6');
+          return;
+        }
+        const result = await nova.system.openLogsFolder();
+        if (!result.ok) {
+          notify(result.message);
+        }
+      },
       showAbout: () => setDialog('about'),
     }),
-    [fileOps, notify, openFolder, tabsDispatch, tabsState, ui],
+    [fileOps, nova, notify, openFolder, setWindowState, tabsDispatch, tabsState, ui],
   );
 
   const buildContext = useCallback(
@@ -288,6 +328,38 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       cancelled = true;
     };
   }, []);
+
+  // Window state pushes and the tokenized close handshake. The renderer only
+  // reports whether unsaved work may be discarded; the main process decides
+  // when to actually close or quit.
+  useEffect(() => {
+    if (nova === undefined) {
+      return;
+    }
+    const unsubscribeState = nova.window.onStateChanged((state) => {
+      setWindowState(state);
+    });
+    const unsubscribeClose = nova.window.onCloseRequest(async (request) => {
+      const dirty = tabsRef.current.tabs.filter((tab) => tab.isDirty);
+      let confirmed = true;
+      if (dirty.length > 0) {
+        const names = dirty.slice(0, 3).map((tab) => tab.name).join(', ');
+        const more = dirty.length > 3 ? ` and ${dirty.length - 3} more` : '';
+        confirmed = window.confirm(
+          `Close A6 IDE? Unsaved changes in ${names}${more} will be lost.`,
+        );
+      }
+      try {
+        await nova.window.confirmClose(request.token, confirmed);
+      } catch {
+        // The request may have expired; there is nothing left to approve.
+      }
+    });
+    return () => {
+      unsubscribeState();
+      unsubscribeClose();
+    };
+  }, [nova, setWindowState]);
 
   const captureMenuFocus = useCallback((): void => {
     setMenuFocus(getFocusTarget());

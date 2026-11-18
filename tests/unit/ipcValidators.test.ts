@@ -12,6 +12,7 @@ import {
   assertAgentTask,
   assertApprovalAnswer,
   assertChatRequest,
+  assertConfirmClose,
   assertDownloadId,
   assertLocalOnly,
   assertModelDefaults,
@@ -46,6 +47,16 @@ describe('IPC argument validators', () => {
   it('rejects arguments on a channel that takes none', () => {
     expect(() => assertNoArgs([])).not.toThrow();
     expect(() => assertNoArgs(['x'])).toThrow();
+  });
+
+  it('validates the tokenized close confirmation', () => {
+    expect(() => assertConfirmClose(['token-1', true])).not.toThrow();
+    expect(() => assertConfirmClose(['token-1', false])).not.toThrow();
+    expect(() => assertConfirmClose(['', true])).toThrow();
+    expect(() => assertConfirmClose([1, true])).toThrow();
+    expect(() => assertConfirmClose(['token-1', 'yes'])).toThrow();
+    expect(() => assertConfirmClose(['token-1'])).toThrow();
+    expect(() => assertConfirmClose(['token-1', true, 'extra'])).toThrow();
   });
 
   it('validates the state of the local-only mode', () => {

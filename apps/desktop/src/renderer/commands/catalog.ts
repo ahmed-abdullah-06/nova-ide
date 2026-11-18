@@ -166,7 +166,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       title: 'Exit',
       category: 'File',
       run: (context) => context.services.exitApp(),
-      enabled: (context) => context.features.quit,
+      enabled: (context) => context.features.quit && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -344,7 +344,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'View',
       keybindings: all(primary('Equal')),
       run: (context) => context.services.zoomIn(),
-      enabled: (context) => context.features.zoom,
+      enabled: (context) => context.features.zoom && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -353,7 +353,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'View',
       keybindings: all(primary('Minus')),
       run: (context) => context.services.zoomOut(),
-      enabled: (context) => context.features.zoom,
+      enabled: (context) => context.features.zoom && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -362,7 +362,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'View',
       keybindings: all(primary('Digit0')),
       run: (context) => context.services.resetZoom(),
-      enabled: (context) => context.features.zoom,
+      enabled: (context) => context.features.zoom && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -379,7 +379,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       title: 'Minimize',
       category: 'Window',
       run: (context) => context.services.minimizeWindow(),
-      enabled: (context) => context.features.window,
+      enabled: (context) => context.features.window && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -387,7 +387,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       title: 'Maximize / Restore',
       category: 'Window',
       run: (context) => context.services.toggleMaximize(),
-      enabled: (context) => context.features.window,
+      enabled: (context) => context.features.window && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -396,7 +396,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'Window',
       keybindings: all(plain('F11')),
       run: (context) => context.services.toggleFullScreen(),
-      enabled: (context) => context.features.window,
+      enabled: (context) => context.features.window && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
       checked: (context) => context.windowState.fullScreen,
     },
@@ -406,7 +406,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'Window',
       keybindings: all(primary('KeyW', true)),
       run: (context) => context.services.closeWindow(),
-      enabled: (context) => context.features.window,
+      enabled: (context) => context.features.window && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -421,7 +421,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'Help',
       keybindings: all(primary('KeyI', true)),
       run: (context) => context.services.toggleDevTools(),
-      enabled: (context) => context.features.devTools,
+      enabled: (context) => context.features.devTools && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {
@@ -429,7 +429,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       title: 'Open Logs / Data Folder',
       category: 'Help',
       run: (context) => context.services.openLogsFolder(),
-      enabled: (context) => context.features.logs,
+      enabled: (context) => context.features.logs && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
     {

@@ -49,6 +49,18 @@ export const IpcChannels = {
   appOpenExternal: 'app:open-external',
   appLocalOnly: 'app:local-only',
   appLocalOnlySet: 'app:local-only-set',
+  windowState: 'window:get-state',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowToggleFullScreen: 'window:toggle-full-screen',
+  windowClose: 'window:close',
+  windowConfirmClose: 'window:confirm-close',
+  windowZoomIn: 'window:zoom-in',
+  windowZoomOut: 'window:zoom-out',
+  windowZoomReset: 'window:zoom-reset',
+  appQuit: 'app:quit',
+  devToolsToggle: 'devtools:toggle',
+  appOpenLogs: 'app:open-logs',
   voiceSessionOpen: 'voice:session-open',
   voiceSessionClose: 'voice:session-close',
   voiceSettings: 'voice:settings',
@@ -132,6 +144,8 @@ export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
  * contract — they are subscriptions exposed through the preload bridge.
  */
 export const IpcPushChannels = {
+  windowStateChanged: 'window:state-changed',
+  closeRequest: 'window:close-request',
   fsExternalChange: 'fs:external-change',
   terminalData: 'terminal:data',
   terminalExit: 'terminal:exit',
@@ -156,6 +170,27 @@ export interface AppInfo {
   electronVersion: string;
   chromeVersion: string;
   nodeVersion: string;
+}
+
+/** Observable state of the (single) application window. */
+export interface WindowStateSnapshot {
+  maximized: boolean;
+  fullScreen: boolean;
+}
+
+/** Why the main process is asking the renderer to approve a close. */
+export type CloseRequestReason = 'close-window' | 'quit';
+
+/**
+ * Tokenized close handshake (main → renderer).
+ *
+ * The renderer may only answer with the token it received; it never names a
+ * window or a path. An unanswered request expires in the main process and
+ * cancels the close, so unsaved work is never dropped silently.
+ */
+export interface CloseRequest {
+  token: string;
+  reason: CloseRequestReason;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +464,28 @@ export interface IpcInvokeMap {
   'app:local-only': { args: []; result: boolean };
   /** Switches the local-only mode on or off. */
   'app:local-only-set': { args: [enabled: boolean]; result: boolean };
+
+  // --- Window / shell (renderer never supplies a path or a raw command) ---
+  'window:get-state': { args: []; result: WindowStateSnapshot };
+  'window:minimize': { args: []; result: void };
+  /** Returns the resulting state so the renderer can update toggle marks. */
+  'window:toggle-maximize': { args: []; result: WindowStateSnapshot };
+  'window:toggle-full-screen': { args: []; result: WindowStateSnapshot };
+  /** Starts the dirty-confirmation handshake; does not close immediately. */
+  'window:close': { args: []; result: void };
+  /** Answer to a `window:close-request`; the token must still be outstanding. */
+  'window:confirm-close': {
+    args: [token: string, confirmed: boolean];
+    result: void;
+  };
+  'window:zoom-in': { args: []; result: number };
+  'window:zoom-out': { args: []; result: number };
+  'window:zoom-reset': { args: []; result: number };
+  'app:quit': { args: []; result: void };
+  /** Returns whether developer tools are open after the toggle. */
+  'devtools:toggle': { args: []; result: boolean };
+  /** Opens the existing application logs folder; no renderer-supplied path. */
+  'app:open-logs': { args: []; result: FsResult<void> };
   /**
    * Opens a recording session (Milestone 8).
    *
@@ -1082,6 +1139,8 @@ export interface NovaApi {
   localOnly(): Promise<boolean>;
   /** Switches the local-only mode on or off. */
   setLocalOnly(enabled: boolean): Promise<boolean>;
+  window: NovaWindowApi;
+  system: NovaSystemApi;
   workspace: NovaWorkspaceApi;
   fs: NovaFsApi;
   terminal: NovaTerminalApi;
@@ -1092,6 +1151,36 @@ export interface NovaApi {
   agent: NovaAgentApi;
   localModels: NovaLocalModelsApi;
   voice: NovaVoiceApi;
+}
+
+/**
+ * Window controls exposed to the renderer (spec §6, §19.1).
+ *
+ * No method accepts a window id, a file path or a shell command: every
+ * operation targets the application's own window, chosen in the main process.
+ */
+export interface NovaWindowApi {
+  state(): Promise<WindowStateSnapshot>;
+  minimize(): Promise<void>;
+  toggleMaximize(): Promise<WindowStateSnapshot>;
+  toggleFullScreen(): Promise<WindowStateSnapshot>;
+  /** Requests a close; the main process first asks about unsaved work. */
+  close(): Promise<void>;
+  /** Answers a `window:close-request` with the token that was received. */
+  confirmClose(token: string, confirmed: boolean): Promise<void>;
+  zoomIn(): Promise<number>;
+  zoomOut(): Promise<number>;
+  resetZoom(): Promise<number>;
+  onStateChanged(listener: (state: WindowStateSnapshot) => void): () => void;
+  onCloseRequest(listener: (request: CloseRequest) => void): () => void;
+}
+
+/** Shell actions that need a main-process privilege (no renderer paths). */
+export interface NovaSystemApi {
+  /** Requests an application quit, with the same dirty check as Exit. */
+  quit(): Promise<void>;
+  toggleDevTools(): Promise<boolean>;
+  openLogsFolder(): Promise<FsResult<void>>;
 }
 
 /**

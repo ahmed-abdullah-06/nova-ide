@@ -2,12 +2,13 @@ import { app, BrowserWindow, dialog } from 'electron';
 import started from 'electron-squirrel-startup';
 import { AppSettingsStore } from './config/appSettings';
 import { resolveProfilePath } from './config/profilePath';
+import { CloseFlow } from './closeFlow';
 import { registerIpcHandlers } from './ipc';
 import { AppLogger, installErrorHandlers } from './logging/appLogger';
-import { installApplicationMenu } from './menu';
+import { IpcPushChannels } from '../shared/ipc-types';
 import { installContentSecurityPolicy } from './security/csp';
 import { installPermissionHandlers } from './security/permissions';
-import { createMainWindow } from './window';
+import { approveWindowClose, createMainWindow } from './window';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -39,6 +40,10 @@ installErrorHandlers({
   },
 });
 
+// Set once a close/quit has been approved, so the follow-up `app.quit()` does
+// not ask the same question twice. An unanswered request cancels the close.
+let quitApproved = false;
+
 app.whenReady().then(() => {
   // Security measures must be in place before any renderer loads (spec §19).
   installContentSecurityPolicy();
@@ -49,16 +54,63 @@ app.whenReady().then(() => {
   // local-only mode must be known before the first request (Milestone 8).
   const appSettings = new AppSettingsStore();
   void appSettings.load().then(() => {
+    const closeFlow = new CloseFlow({
+      sendRequest: (request) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send(IpcPushChannels.closeRequest, request);
+          }
+        }
+      },
+      onConfirmed: (reason, window) => {
+        quitApproved = true;
+        if (reason === 'quit') {
+          for (const candidate of BrowserWindow.getAllWindows()) {
+            if (!candidate.isDestroyed()) {
+              approveWindowClose(candidate);
+              candidate.close();
+            }
+          }
+          app.quit();
+          return;
+        }
+        if (window !== null && !window.isDestroyed()) {
+          approveWindowClose(window);
+          window.close();
+        }
+      },
+    });
+
     // The returned callback terminates every child process on quit.
-    const stopChildProcesses = registerIpcHandlers(appSettings);
-    installApplicationMenu();
-    createMainWindow();
+    const stopChildProcesses = registerIpcHandlers(appSettings, closeFlow);
+
+    // The renderer menu replaces the native application menu; keeping both
+    // would register each accelerator twice.
+    const openWindow = (): BrowserWindow =>
+      createMainWindow({
+        onNativeClose: (window) => {
+          void closeFlow.request('close-window', window);
+        },
+      });
+    openWindow();
 
     // macOS convention: re-create the window when the dock icon is clicked.
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createMainWindow();
+        openWindow();
       }
+    });
+
+    // Native/app-level quit requests use the same dirty check as Exit.
+    app.on('before-quit', (event) => {
+      if (quitApproved || closeFlow.hasPending) {
+        return;
+      }
+      event.preventDefault();
+      void closeFlow.request(
+        'quit',
+        BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+      );
     });
 
     // The quit is delayed until every child process is really gone, so a
@@ -71,15 +123,18 @@ app.whenReady().then(() => {
       event.preventDefault();
       void stopChildProcesses().finally(() => {
         cleanupDone = true;
+        closeFlow.dispose();
         app.quit();
       });
     });
   });
 });
 
-// Quit when all windows are closed, except on macOS.
+// Quit when all windows are closed, except on macOS. The close was already
+// confirmed at this point, so no second dirty check is needed.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    quitApproved = true;
     app.quit();
   }
 });
