@@ -61,6 +61,7 @@ export const IpcChannels = {
   appQuit: 'app:quit',
   devToolsToggle: 'devtools:toggle',
   appOpenLogs: 'app:open-logs',
+  editWebContentsAction: 'edit:web-contents-action',
   voiceSessionOpen: 'voice:session-open',
   voiceSessionClose: 'voice:session-close',
   voiceSettings: 'voice:settings',
@@ -171,6 +172,12 @@ export interface AppInfo {
   chromeVersion: string;
   nodeVersion: string;
 }
+
+/**
+ * Native editing actions the renderer may ask the main process to run.
+ * There is deliberately no `execCommand`, no arbitrary script and no path.
+ */
+export type EditWebContentsAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste';
 
 /** Observable state of the (single) application window. */
 export interface WindowStateSnapshot {
@@ -486,6 +493,14 @@ export interface IpcInvokeMap {
   'devtools:toggle': { args: []; result: boolean };
   /** Opens the existing application logs folder; no renderer-supplied path. */
   'app:open-logs': { args: []; result: FsResult<void> };
+  /**
+   * Runs a native editing action on `event.sender.webContents` only. The
+   * renderer supplies an action name from a fixed set, never a script or path.
+   */
+  'edit:web-contents-action': {
+    args: [action: EditWebContentsAction];
+    result: void;
+  };
   /**
    * Opens a recording session (Milestone 8).
    *
@@ -1141,6 +1156,7 @@ export interface NovaApi {
   setLocalOnly(enabled: boolean): Promise<boolean>;
   window: NovaWindowApi;
   system: NovaSystemApi;
+  edit: NovaEditApi;
   workspace: NovaWorkspaceApi;
   fs: NovaFsApi;
   terminal: NovaTerminalApi;
@@ -1173,6 +1189,14 @@ export interface NovaWindowApi {
   resetZoom(): Promise<number>;
   onStateChanged(listener: (state: WindowStateSnapshot) => void): () => void;
   onCloseRequest(listener: (request: CloseRequest) => void): () => void;
+}
+
+/**
+ * Native editing actions for non-Monaco text fields. Monaco keeps its own
+ * precise Undo/Redo stack; these actions only target the sending webContents.
+ */
+export interface NovaEditApi {
+  webContentsAction(action: EditWebContentsAction): Promise<void>;
 }
 
 /** Shell actions that need a main-process privilege (no renderer paths). */

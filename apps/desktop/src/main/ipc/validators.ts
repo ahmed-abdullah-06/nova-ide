@@ -5,7 +5,10 @@
  * malformed or hostile message can never reach a service. The validators
  * are exported separately so they can be unit tested without Electron.
  */
-import type { IpcInvokeMap } from '../../shared/ipc-types';
+import type {
+  EditWebContentsAction,
+  IpcInvokeMap,
+} from '../../shared/ipc-types';
 import type { AgentPermissionCategory } from '../../shared/agent-types';
 import {
   MAX_AUDIO_BYTES,
@@ -29,6 +32,16 @@ export function assertNoArgs(args: unknown[]): asserts args is [] {
  * `window:confirm-close` — a non-empty token and an explicit boolean.
  * The token is checked against outstanding requests by the close flow itself.
  */
+/** `edit:web-contents-action` — only a fixed native action name is allowed. */
+export function assertEditWebContentsAction(
+  args: unknown[],
+): asserts args is [EditWebContentsAction] {
+  const allowed = new Set<string>(['undo', 'redo', 'cut', 'copy', 'paste']);
+  if (args.length !== 1 || typeof args[0] !== 'string' || !allowed.has(args[0])) {
+    throw new Error('Expected a supported web contents action');
+  }
+}
+
 export function assertConfirmClose(
   args: unknown[],
 ): asserts args is [string, boolean] {

@@ -14,6 +14,7 @@ import {
   assertChatRequest,
   assertConfirmClose,
   assertDownloadId,
+  assertEditWebContentsAction,
   assertLocalOnly,
   assertModelDefaults,
   assertModelName,
@@ -47,6 +48,17 @@ describe('IPC argument validators', () => {
   it('rejects arguments on a channel that takes none', () => {
     expect(() => assertNoArgs([])).not.toThrow();
     expect(() => assertNoArgs(['x'])).toThrow();
+  });
+
+  it('validates the native web contents editing actions', () => {
+    for (const action of ['undo', 'redo', 'cut', 'copy', 'paste']) {
+      expect(() => assertEditWebContentsAction([action])).not.toThrow();
+    }
+    expect(() => assertEditWebContentsAction(['selectAll'])).toThrow();
+    expect(() => assertEditWebContentsAction(['run script'])).toThrow();
+    expect(() => assertEditWebContentsAction([42])).toThrow();
+    expect(() => assertEditWebContentsAction([])).toThrow();
+    expect(() => assertEditWebContentsAction(['copy', 'paste'])).toThrow();
   });
 
   it('validates the tokenized close confirmation', () => {

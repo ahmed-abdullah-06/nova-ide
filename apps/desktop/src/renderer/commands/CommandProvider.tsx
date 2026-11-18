@@ -54,7 +54,7 @@ for (const definition of DEFINITIONS) {
  */
 const FEATURES: CommandFeatures = {
   window: true,
-  edit: false,
+  edit: true,
   filePicker: false,
   logs: true,
   devTools: true,
@@ -136,11 +136,13 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         nova === undefined
           ? notify('Quit is unavailable outside A6')
           : nova.system.quit(),
-      undo: () => notify('Field editing actions arrive with the desktop editing milestone.'),
-      redo: () => notify('Field editing actions arrive with the desktop editing milestone.'),
-      cut: () => notify('Field editing actions arrive with the desktop editing milestone.'),
-      copy: () => notify('Field editing actions arrive with the desktop editing milestone.'),
-      paste: () => notify('Field editing actions arrive with the desktop editing milestone.'),
+      // These only run for non-Monaco text fields. Monaco uses its own precise
+      // actions via the catalog, not these native webContents actions.
+      undo: () => nova?.edit.webContentsAction('undo'),
+      redo: () => nova?.edit.webContentsAction('redo'),
+      cut: () => nova?.edit.webContentsAction('cut'),
+      copy: () => nova?.edit.webContentsAction('copy'),
+      paste: () => nova?.edit.webContentsAction('paste'),
       findInFile: () => requestEditorAction('actions.find'),
       replaceInFile: () => requestEditorAction('editor.action.startFindReplaceAction'),
       findInWorkspace: () => ui.showActivity('search', true),

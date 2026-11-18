@@ -83,6 +83,10 @@ const novaApi: NovaApi = {
     toggleDevTools: () => invoke(IpcChannels.devToolsToggle),
     openLogsFolder: () => invoke(IpcChannels.appOpenLogs),
   },
+  edit: {
+    webContentsAction: (action) =>
+      invoke(IpcChannels.editWebContentsAction, action),
+  },
 
   workspace: {
     open: (pathValue?: string) =>

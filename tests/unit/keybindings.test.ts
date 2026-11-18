@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { COMMAND_IDS, createCommandDefinitions } from '../../apps/desktop/src/renderer/commands/catalog';
 import {
   KeybindingResolver,
   assertNoKeybindingConflicts,
@@ -216,6 +217,21 @@ describe('keybinding resolver', () => {
     expect(resolver.handleKey(event('KeyL', { ctrlKey: true }), context())).toEqual({
       kind: 'command',
       commandId: 'a6.view.toggleAiPanel',
+    });
+    resolver.dispose();
+  });
+
+  it('keeps the real Ctrl+L binding out of the terminal', () => {
+    const resolver = new KeybindingResolver(createCommandDefinitions(), 'win32');
+    const terminal = context({
+      focus: { kind: 'terminal', element: null, label: 'Terminal' },
+    });
+    expect(resolver.handleKey(event('KeyL', { ctrlKey: true }), terminal)).toEqual({
+      kind: 'passthrough',
+    });
+    expect(resolver.handleKey(event('KeyL', { ctrlKey: true }), context())).toEqual({
+      kind: 'command',
+      commandId: COMMAND_IDS.toggleAiPanel,
     });
     resolver.dispose();
   });

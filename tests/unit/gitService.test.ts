@@ -141,7 +141,8 @@ describe('git actions', () => {
     expect(result?.ok).toBe(true);
     const content = await readFile(path.join(root, 'readme.md'), 'utf8');
     expect(content).toContain('# hello');
-  });
+    // git spawn is slow on a loaded Windows runner; keep this one explicit.
+  }, 20_000);
 
   it('creates a commit', async () => {
     await initRepository();

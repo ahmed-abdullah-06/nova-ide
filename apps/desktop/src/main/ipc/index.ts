@@ -1,4 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+} from 'electron';
 import path from 'node:path';
 import {
   IpcChannels,
@@ -22,6 +29,7 @@ import { createAiHandlers } from './ai';
 import { createAgentHandlers } from './agent';
 import { createLocalModelHandlers } from './localModels';
 import { createWindowHandlers } from './window';
+import { createEditHandlers } from './edit';
 import { CloseFlow } from '../closeFlow';
 import {
   assertNoArgs,
@@ -32,6 +40,7 @@ import {
   assertChatRequest,
   assertConfirmClose,
   assertContextAttachments,
+  assertEditWebContentsAction,
   assertConversation,
   assertConversationId,
   assertDownloadId,
@@ -104,6 +113,24 @@ function registerChannel<C extends keyof IpcInvokeMap & string>(
   validateArgs: ArgsValidator<C>,
   handler: (...args: IpcInvokeMap[C]['args']) => Promise<IpcInvokeMap[C]['result']>,
 ): void {
+  registerChannelWithSender(channel, validateArgs, (_event, ...args) =>
+    handler(...args),
+  );
+}
+
+/**
+ * Same guarantees as `registerChannel`, but passes the invoking event to the
+ * handler. Used only where the sender itself is the privilege boundary (the
+ * native Edit actions act on `event.sender.webContents`).
+ */
+function registerChannelWithSender<C extends keyof IpcInvokeMap & string>(
+  channel: C,
+  validateArgs: ArgsValidator<C>,
+  handler: (
+    event: IpcMainInvokeEvent,
+    ...args: IpcInvokeMap[C]['args']
+  ) => Promise<IpcInvokeMap[C]['result']>,
+): void {
   if (!isAllowedChannel(channel)) {
     // Defensive: prevents registering handlers outside the whitelist.
     throw new Error(`Refusing to register non-whitelisted IPC channel: ${channel}`);
@@ -114,7 +141,7 @@ function registerChannel<C extends keyof IpcInvokeMap & string>(
       throw new Error(`Rejected IPC message on "${channel}" from untrusted sender`);
     }
     validateArgs(rawArgs);
-    return handler(...(rawArgs as IpcInvokeMap[C]['args']));
+    return handler(event, ...(rawArgs as IpcInvokeMap[C]['args']));
   });
 }
 
@@ -168,6 +195,7 @@ export function registerIpcHandlers(
   }),
 ): () => Promise<void> {
   const windowHandlers = createWindowHandlers(closeFlow);
+  const editHandlers = createEditHandlers();
   const watcher = new OpenFileWatcher((change) => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(IpcPushChannels.fsExternalChange, change);
@@ -428,6 +456,11 @@ export function registerIpcHandlers(
     IpcChannels.appOpenLogs,
     assertNoArgs,
     windowHandlers.openLogsFolder,
+  );
+  registerChannelWithSender(
+    IpcChannels.editWebContentsAction,
+    assertEditWebContentsAction,
+    editHandlers.webContentsAction,
   );
 
   // The local-only mode (Milestone 8). The rule is enforced in the main

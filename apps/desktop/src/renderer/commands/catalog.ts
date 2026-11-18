@@ -66,6 +66,11 @@ function all(spec: KeybindingSpec): Record<Platform, KeybindingSpec> {
   return { win32: spec, darwin: spec, linux: spec };
 }
 
+/** Keyboard binding that must never steal a key from the integrated terminal. */
+function outsideTerminal(spec: KeybindingSpec): KeybindingSpec {
+  return { ...spec, when: 'notTerminalFocused' };
+}
+
 function active(context: CommandContext): boolean {
   return context.activeTabId !== null;
 }
@@ -326,7 +331,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       id: COMMAND_IDS.toggleAiPanel,
       title: 'Toggle AI Panel',
       category: 'View',
-      keybindings: all(primary('KeyL')),
+      keybindings: all(outsideTerminal(primary('KeyL'))),
       run: (context) => context.services.toggleAiPanel(),
       checked: (context) => context.aiPanelVisible,
     },
