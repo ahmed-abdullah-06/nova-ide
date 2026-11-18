@@ -10,8 +10,8 @@ on your machine unless you explicitly enable a cloud provider.
    The installer is per-user; no administrator rights are required. If you used
    the earlier NOVA IDE build, your settings, encrypted keys and conversations
    are preserved — the app keeps reading its existing profile.
-2. On first launch there is no workspace open. Use **File → Open Folder**
-   (or `Ctrl+Shift+O`) to choose a project directory.
+2. On first launch there is no workspace open. Use **File → Open Folder /
+   Workspace...** (or `Ctrl+K Ctrl+O`) to choose a project directory.
 3. The layout has five regions: the **activity bar** (left icons), the
    **sidebar** (explorer/search/source control/agent), the **editor**, the
    **AI panel**, the **bottom panel** (problems/output/terminal/tasks), and the
@@ -32,6 +32,52 @@ on your machine unless you explicitly enable a cloud provider.
   deleted file keeps its tab with a warning.
 - Binary files, oversized files (>10 MB read cap) and unreadable files show a
   clear message instead of opening.
+- **Save All** saves every dirty tab, including files opened from outside the
+  workspace. **Save As** is available for workspace and untitled tabs; it is
+  disabled for external files and reports why in the menu.
+- Closing a dirty tab, closing the window or quitting asks for confirmation.
+  Declining leaves the tab or the application open.
+
+### Menus and shortcuts
+
+A menu row sits above the workbench. Click a category to open it; while it is
+open, hovering another category switches menus. `Escape` or a click outside
+closes it, and arrow keys, `Home`/`End`, `Enter` and `Space` work as expected.
+Check marks show toggle state, disabled items are greyed with an explanation in
+their tooltip, and shortcuts are aligned to the right of each row. Everything
+in the menu runs the same command id as its keyboard shortcut.
+
+- **File:** New File (`Ctrl+N`), Open File... (`Ctrl+O`), Open Folder /
+  Workspace... (`Ctrl+K Ctrl+O`), Save (`Ctrl+S`), Save As... (`Ctrl+Shift+S`),
+  Save All, Close Tab (`Ctrl+W`) and Exit (`Alt+F4` shown as a label only — no
+  keybinding is installed).
+- **Edit:** Undo (`Ctrl+Z`), Redo (`Ctrl+Y`), Cut (`Ctrl+X`), Copy (`Ctrl+C`),
+  Paste (`Ctrl+V`), Find in File (`Ctrl+F`), Replace in File (`Ctrl+H`) and
+  Find in Workspace (`Ctrl+Shift+F`). The Edit menu acts on whatever had focus
+  before you opened it. Monaco keeps precise Undo/Redo and Find/Replace; plain
+  HTML text fields use the native edit fallback, whose Undo state cannot be
+  reported reliably, so Undo is enabled whenever such a field is editable.
+- **View:** Command Palette... (`Ctrl+Shift+P`, disabled/planned), Toggle
+  Explorer (`Ctrl+Shift+E`), Toggle Search, Toggle Source Control
+  (`Ctrl+Shift+G`), Toggle AI Panel (`Ctrl+L`), Toggle Terminal (``Ctrl+` ``),
+  Zoom In (`Ctrl+=`), Zoom Out (`Ctrl+-`) and Reset Zoom (`Ctrl+0`).
+- **Window:** New Window (`Ctrl+Shift+N`, disabled/planned), Minimize,
+  Maximize/Restore, Toggle Full Screen (`F11`) and Close Window
+  (`Ctrl+Shift+W`).
+- **Help:** Keyboard Shortcuts Reference, Toggle Developer Tools
+  (`Ctrl+Shift+I`), Open Logs / Data Folder and About A6 IDE.
+
+Chords such as `Ctrl+K Ctrl+O` show a status hint after the first key; press
+`Escape` to cancel before the second key. Command Palette and New Window are
+shown but disabled because they are planned, not implemented.
+
+### Opening files outside the workspace
+
+**File → Open File...** (`Ctrl+O`) opens a native dialog. A file inside the
+open workspace behaves like any other workspace file. A file outside it opens
+as an **external** tab with an explicit marker and a one-file, in-memory save
+grant. The grant is not persisted and ends when the app exits. External files
+can be saved with `Ctrl+S` and Save All, but Save As is not offered.
 
 ## 3. Terminal
 
@@ -43,6 +89,10 @@ on your machine unless you explicitly enable a cloud provider.
   closing the session. Closing a session terminates the whole process tree.
 - Closing the workspace or quitting the app terminates every session and its
   children; a watchdog also kills them if the app crashes.
+- While the terminal has focus, `Ctrl+L`, `Ctrl+W`, `Ctrl+K`, `Ctrl+Z`,
+  `Ctrl+C` and `Ctrl+V` go to the shell; they do not trigger menu commands.
+  `Ctrl+L` toggles the AI panel only outside the terminal. Hiding the bottom
+  panel keeps the session and its output mounted.
 
 ## 4. Search
 

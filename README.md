@@ -307,11 +307,51 @@ named in the spec's M10 task list — those are recorded as planned in
 [`docs/development/PROGRESS.md`](./docs/development/PROGRESS.md) and
 [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md).
 
+## A6 commands, menus and files
+
+- The renderer menu bar is generated from a single command registry. Mouse
+  clicks, keyboard shortcuts and the future palette all use the same stable
+  command ids; no menu item has its own action handler.
+- Windows shortcuts: `Ctrl+N` new file, `Ctrl+O` open file,
+  `Ctrl+K Ctrl+O` open folder, `Ctrl+S` save, `Ctrl+Shift+S` Save As,
+  `Ctrl+W` close tab, `Ctrl+Z/Y/X/C/V` Edit actions, `Ctrl+F/H` Find/Replace,
+  `Ctrl+Shift+F` Find in Workspace, `Ctrl+Shift+E/G` sidebar views, `Ctrl+L`
+  AI panel, ``Ctrl+` `` terminal, `F11` full screen and `Ctrl+Shift+I`
+  developer tools. `Alt+F4` is a label only — the app installs no `Alt+F4`
+  keybinding. Chords show a visible hint and `Escape` cancels them.
+- Monaco keeps `Ctrl+F/H/Z/Y`. `Ctrl+L` is explicitly unbound there, so the
+  AI panel toggles only outside the terminal. When the terminal has focus,
+  `Ctrl+L/W/K/Z/C/V` pass through to the shell instead of firing commands.
+- `Ctrl+N` reuses the explorer inline creation at the workspace root; it does
+  not create a fake untitled buffer. **Open File...** uses the native main
+  dialog: files inside the workspace open normally, while files outside are
+  marked external and read/saved through a one-file, in-memory grant. Grants
+  are never persisted and the renderer cannot send a path to those channels.
+- **Save All** includes granted external files. **Save As** is deliberately
+  disabled for external tabs and for builds with no workspace, with a clear
+  reason in the menu.
+- Exit, Close Window, Close Tab and app quit use the existing dirty-buffer
+  confirmation flow; declining keeps the tab or app open. Hidden panels stay
+  mounted, so terminal sessions and output survive a hide/show cycle.
+- Planned items (Command Palette, New Window) are disabled with honest hints.
+  macOS `Cmd` mappings are unit-tested; only Windows was packaged and verified.
+
 ## Security model
 
 - Renderer runs with `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`.
 - Renderer ↔ main communication only through a typed, whitelisted preload bridge;
   the renderer has no Node.js or raw filesystem API access.
+- Commands accept only two trusted renderer sources (`user-menu` and
+  `user-keyboard`). Model output, voice content and file contents are data and
+  can never execute a command. The optional command trace is read-only, frozen,
+  bounded to 32 entries and contains only `{sequence, id, source, outcome}` —
+  no arguments, paths, file contents or secrets.
+- Files opened outside the workspace are bound to an opaque in-memory grant.
+  Reads and writes re-verify the exact canonical file in the main process;
+  symlink swaps, forged ids and renderer-supplied paths are rejected.
+- Edit actions use the element focused before a menu opened, or the sender
+  `webContents` for non-Monaco text fields; no `document.execCommand` or
+  clipboard paste API is used by the app.
 - Every filesystem request is re-validated in the main process immediately
   before it runs: string/NUL checks, `realpath` canonicalisation (symlinks and
   traversal exposed), and containment via `path.relative` — never a string-prefix

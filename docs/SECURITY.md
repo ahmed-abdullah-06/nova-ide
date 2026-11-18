@@ -17,6 +17,15 @@ actually ran; unresolved items are listed in
   the main process and guarded by a trusted-sender check; a compile-time
   `ChannelsCovered` guard fails the build if a channel is missing from the
   coverage map.
+- Commands execute only from the two trusted renderer sources `user-menu` and
+  `user-keyboard`. File contents, model output and voice transcripts are data,
+  not commands, and cannot call the registry. The optional trace accessor
+  returns a frozen snapshot of at most 32 `{sequence, id, source, outcome}`
+  entries: no arguments, paths, file contents or secrets, and no way to run a
+  command.
+- Native Edit actions target only the `webContents` that sent the request;
+  non-Monaco fields use `webContents` edit commands, never `document.execCommand`
+  or a renderer clipboard paste.
 - Navigation and popup creation are denied; there is no `<webview>`. A Content
   Security Policy is installed via `onHeadersReceived`, restricting the
   renderer's connections to the application.
@@ -38,6 +47,17 @@ actually ran; unresolved items are listed in
   component is a file reports `INVALID_PATH` consistently across platforms.
 - Read caps (binary sniff, 10 MB text read, 2000-entry directory listing) keep
   hostile or oversized workspaces from freezing the editor.
+- **Open File...** runs in the main process and returns only metadata. A file
+  inside the workspace uses the existing workspace channels. A file outside it
+  receives an opaque, random grant id held only in memory; the renderer never
+  supplies a path for these files. `fs:read-external` and `fs:write-external`
+  resolve the grant again immediately before use, require the path still to be
+  the same canonical file, and reject symlink swaps, forged ids and unknown
+  tokens. Grants are not persisted and die with the process.
+- Closing and quitting use a tokenized handshake: the main process sends a
+  random token, the renderer may only answer that token, and an unanswered or
+  replayed request cancels the close. Child-process cleanup remains in
+  `will-quit`.
 
 ## 3. Credentials and privacy gate
 
@@ -64,6 +84,8 @@ instructions**. The chat system prompt states this; the agent's tool calls are
 checked against an allowlist, canonical path containment and permission
 settings before anything happens; model output cannot widen a permission or
 open a non-HTTP(S) URL (`assertExternalUrl` only accepts `http:`/`https:`).
+The same rule covers the command system: untrusted content never reaches the
+registry, and the read-only trace cannot be used as an execution surface.
 
 The Markdown renderer sanitizes untrusted model output with DOMPurify. During
 the 10A audit a dependency override pinned DOMPurify to a patched version; a
@@ -121,7 +143,11 @@ forced kill.
   until the owner signs. Signing and notarization are documented owner manual
   steps, not claimed as done.
 - Only **Windows x64** was built and verified. macOS/Linux native installers,
-  signing and notarization are not implemented.
+  signing and notarization are not implemented. `Cmd` keybindings are
+  unit-tested but are not claimed as platform-verified.
+- Undo/Redo are precise in Monaco. For arbitrary HTML text fields the browser
+  offers no reliable `canUndo` signal, so those menu items are enabled whenever
+  the field is editable rather than disabled speculatively.
 - The CSP is header-based; no nonce/hash-based strict-dynamic policy was added
   during V1 (a change would require full re-verification).
 - A complete real Squirrel install → uninstall cycle was not automated because

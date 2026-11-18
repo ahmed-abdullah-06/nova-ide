@@ -7,6 +7,37 @@ Format follows a simplified [Keep a Changelog](https://keepachangelog.com/) appr
 
 ### Added
 
+- **A6 command/menu/keybinding system** (commits `A6-1` … `A6-6`):
+  - Central renderer `CommandRegistry` with stable ids, titles, categories,
+    trusted execution sources, enabled/checked state, per-platform bindings
+    and derived display labels. Duplicate ids and same-context key conflicts
+    throw. A frozen, bounded, non-sensitive trace is available for packaged
+    verification only.
+  - Renderer menu bar driven entirely by the registry: click-to-open, hover
+    switching, right-aligned shortcuts, disabled reasons, check marks, ARIA
+    roles/states, outside-click/Escape close and full keyboard navigation.
+    The native Electron menu was removed so accelerators are not duplicated.
+  - Keybinding resolver with single keys and chords, a visible chord hint and
+    terminal pass-through for `Ctrl+L/W/K/Z/C/V`. Monaco retains
+    `Ctrl+F/Ctrl/H/Ctrl+Z/Ctrl+Y`; `Ctrl+L` is explicitly unbound there.
+    `Ctrl+Shift+O` was retired in favour of `Ctrl+K Ctrl+O`.
+  - Focus-aware Edit commands using Monaco actions, with a narrow native
+    `webContents` fallback for non-Monaco fields; no `document.execCommand`
+    or renderer clipboard paste API. Hidden panels stay mounted.
+  - Tokenized dirty-close handshake for Exit, Close Window, Close Tab and app
+    quit; unknown or replayed tokens are rejected and an unanswered request
+    cancels the close. `Ctrl+N` reuses explorer inline creation at the
+    workspace root.
+  - Native Open File dialog with exact, in-memory external-file grants. New
+    channels take no renderer path: the main process returns metadata, then
+    reads/saves through an opaque grant id after re-verifying the canonical
+    file. `pathSecurity` containment is unchanged. Save All includes external
+    tabs; Save As is disabled for them with a clear reason.
+  - Packaged CDP verification of menu ARIA/interaction, command sources,
+    terminal pass-through, Monaco-owned keys, chord cancellation, hidden-panel
+    persistence, dirty-close cancellation and the safe trace.
+  - Documentation updates in `README.md`, `docs/USER_GUIDE.md`,
+    `docs/SECURITY.md` and this changelog.
 - Project specification (`NOVA_IDE_SPEC.md`).
 - Repository initialized (git).
 - Development progress tracking (`docs/development/PROGRESS.md`).
