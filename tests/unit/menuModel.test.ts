@@ -115,7 +115,8 @@ describe('menu model', () => {
       shortcut: 'Ctrl+`',
     });
     expect(find(COMMAND_IDS.zoomIn, 2)).toMatchObject({ shortcut: 'Ctrl+=' });
-    expect(find(COMMAND_IDS.exit, 0)).toMatchObject({ shortcut: null });
+    // Exit shows the OS accelerator as a label only; no keybinding is installed.
+    expect(find(COMMAND_IDS.exit, 0)).toMatchObject({ shortcut: 'Alt+F4' });
     expect(find(COMMAND_IDS.toggleSearch, 2)).toMatchObject({ shortcut: null });
   });
 

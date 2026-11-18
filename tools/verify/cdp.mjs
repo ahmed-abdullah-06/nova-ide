@@ -182,6 +182,26 @@ export class DevToolsSession {
   }
 
   /**
+   * Types text with real `char` key events. Monaco does not reliably accept
+   * `Input.insertText`, but handles these like ordinary keyboard input.
+   *
+   * @param {string} text The characters to type.
+   */
+  async typeText(text) {
+    for (const char of text) {
+      const upper = char.toUpperCase();
+      await this.send('Input.dispatchKeyEvent', {
+        type: 'char',
+        text: char,
+        key: char,
+        code: `Key${upper}`,
+        windowsVirtualKeyCode: upper.charCodeAt(0),
+        nativeVirtualKeyCode: upper.charCodeAt(0),
+      });
+    }
+  }
+
+  /**
    * @param {string} key
    * @param {string} code
    * @param {number} keyCode

@@ -235,4 +235,12 @@ describe('keybinding resolver', () => {
     });
     resolver.dispose();
   });
+
+  it('never installs an Alt+F4 keybinding', () => {
+    const resolver = new KeybindingResolver(createCommandDefinitions(), 'win32');
+    expect(
+      resolver.handleKey(event('F4', { altKey: true }), context()),
+    ).toEqual({ kind: 'none' });
+    resolver.dispose();
+  });
 });

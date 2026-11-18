@@ -136,7 +136,9 @@ export function buildMenuModel(
         kind: 'item',
         id,
         label: definition.title,
-        shortcut: spec == null ? null : describeKeybinding(spec, platform),
+        shortcut:
+          definition.shortcutLabel ??
+          (spec == null ? null : describeKeybinding(spec, platform)),
         enabled,
         checked: definition.checked?.(context) ?? null,
         disabledReason: enabled

@@ -150,6 +150,8 @@ export interface CommandDefinition {
   enabled?(context: CommandContext): boolean;
   checked?(context: CommandContext): boolean;
   keybindings?: Partial<Record<Platform, KeybindingSpec | null>>;
+  /** Display-only accelerator label; it never installs a keybinding. */
+  shortcutLabel?: string;
   /** Monaco handles these keys itself while it has focus. */
   editorOwned?: boolean;
   /** Disabled item with an honest explanation. */

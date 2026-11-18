@@ -400,8 +400,8 @@ async function clickWithMouse(session, selector) {
  */
 async function pointForText(session, selector, text, exact = true) {
   const matcher = exact
-    ? `node.textContent.trim() === ${JSON.stringify(text)}`
-    : `node.textContent.includes(${JSON.stringify(text)})`;
+    ? `candidate.textContent.trim() === ${JSON.stringify(text)}`
+    : `candidate.textContent.includes(${JSON.stringify(text)})`;
   return session.evaluate(
     `(() => {
       const node = [...document.querySelectorAll(${JSON.stringify(selector)})]
@@ -441,6 +441,58 @@ async function clickAt(session, point) {
     button: 'left',
     clickCount: 1,
   });
+}
+
+/**
+ * Clicks an element identified by its visible text. This exercises the same
+ * React handler as a pointer click without depending on window coordinates.
+ *
+ * @param {import('./cdp.mjs').DevToolsSession} session The session.
+ * @param {string} selector The candidate selector.
+ * @param {string} text The visible label (or a fragment of it).
+ * @param {boolean} [exact] Require the whole label to match.
+ * @returns {Promise<boolean>} True when an element was clicked.
+ */
+async function clickText(session, selector, text, exact = true) {
+  const matcher = exact
+    ? `candidate.textContent.trim() === ${JSON.stringify(text)}`
+    : `candidate.textContent.includes(${JSON.stringify(text)})`;
+  return session.evaluate(
+    `(() => {
+      const node = [...document.querySelectorAll(${JSON.stringify(selector)})]
+        .find((candidate) => ${matcher});
+      if (node === undefined) return false;
+      node.click();
+      return true;
+    })()`,
+  );
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session @param {string} selector @param {string} text */
+async function hoverText(session, selector, text) {
+  return session.evaluate(
+    `(() => {
+      const node = [...document.querySelectorAll(${JSON.stringify(selector)})]
+        .find((candidate) => candidate.textContent.trim() === ${JSON.stringify(text)});
+      if (node === undefined) return false;
+      node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      node.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+      return true;
+    })()`,
+  );
+}
+
+/** @param {import('./cdp.mjs').DevToolsSession} session @param {string} selector @param {string} text */
+async function focusText(session, selector, text) {
+  return session.evaluate(
+    `(() => {
+      const node = [...document.querySelectorAll(${JSON.stringify(selector)})]
+        .find((candidate) => candidate.textContent.includes(${JSON.stringify(text)}));
+      if (node === undefined) return false;
+      node.focus();
+      return document.activeElement === node;
+    })()`,
+  );
 }
 
 /** @param {import('./cdp.mjs').DevToolsSession} session */
@@ -709,6 +761,19 @@ async function main() {
       20000,
     );
     check('terminal view renders in the panel', terminalVisible);
+
+    // The bottom panel may be hidden by default; selecting its Terminal tab
+    // shows it without recreating the live session.
+    await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Terminal'));
+        if (tab === undefined) return false;
+        tab.click();
+        return true;
+      })()`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Typing into the terminal must produce output in the renderer.
     const focused = await session.evaluate(
@@ -1215,18 +1280,21 @@ async function main() {
         return true;
       })()`,
     );
+    // Collect pty output directly: scraping xterm's DOM is timing-sensitive.
+    await session.evaluate(
+      `window.__a6TermData = [];
+       window.__a6TermUnsub = window.nova.terminal.onData((event) => {
+         window.__a6TermData.push(String(event.data ?? ''));
+         if (window.__a6TermData.length > 200) window.__a6TermData.shift();
+       });`,
+    );
     await session.insertText('Start-Sleep 30');
     await session.pressKey('Enter', 13);
 
     // The command must really be running before it is interrupted.
     const commandStarted = await waitFor(
       session,
-      `(() => {
-        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
-        if (rows.length === 0) return false;
-        const text = [...rows].map((row) => row.textContent).join('\\n');
-        return text.includes('Start-Sleep 30');
-      })()`,
+      `window.__a6TermData.join('').includes('Start-Sleep 30')`,
       30000,
     );
     check('the command in the terminal is running', commandStarted !== false);
@@ -1268,11 +1336,7 @@ async function main() {
       await session.pressKey('Enter', 13);
       await new Promise((resolve) => setTimeout(resolve, 700));
       const done = await session.evaluate(
-        `(() => {
-          const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
-          const text = [...rows].map((row) => row.textContent).join('\\n');
-          return text.includes('NOVA_AFTER_STOP');
-        })()`,
+        `window.__a6TermData.join('').includes('NOVA_AFTER_STOP')`,
       );
       if (done === true) {
         break;
@@ -1280,14 +1344,10 @@ async function main() {
     }
     const afterStop = await waitFor(
       session,
-      `(() => {
-        const rows = document.querySelectorAll('.terminal-view .xterm-rows > div');
-        if (rows.length === 0) return false;
-        const text = [...rows].map((row) => row.textContent).join('\\n');
-        return text.includes('NOVA_AFTER_STOP');
-      })()`,
+      `window.__a6TermData.join('').includes('NOVA_AFTER_STOP')`,
       30000,
     );
+    await session.evaluate(`window.__a6TermUnsub?.(); delete window.__a6TermUnsub; delete window.__a6TermData;`);
     check(
       'the terminal session survives the interrupt',
       afterStop !== false,
@@ -1860,6 +1920,27 @@ async function main() {
     // marker. No real model is downloaded, no cloud service is contacted
     // and no audio of the user is involved. The settings and the fake
     // model live in the isolated profile of this run.
+
+    // The AI panel is hidden by default now that visibility is a real command;
+    // show it before driving its microphone button.
+    const aiPanelHidden = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel === null || panel.classList.contains('ai-panel--hidden');
+      })()`,
+    );
+    if (aiPanelHidden === true) {
+      await clickText(session, '.menu-bar__top', 'View');
+      await clickText(session, '.menu-bar__item', 'Toggle AI Panel', false);
+    }
+    await waitFor(
+      session,
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel !== null && !panel.classList.contains('ai-panel--hidden');
+      })()`,
+      5000,
+    );
 
     const voiceBridge = await session.evaluate(
       `(() => {
@@ -2673,7 +2754,7 @@ async function main() {
 
     // Click opens, hover switches while open, Escape closes. The File menu is
     // also where the Alt+F4-only label is checked (it is never pressed).
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'File'));
+    await clickText(session, '.menu-bar__top', 'File');
     const fileMenu = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -2698,7 +2779,7 @@ async function main() {
       })()`,
     );
     const hoveredLabel = await (async () => {
-      await moveMouseTo(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+      await hoverText(session, '.menu-bar__top', 'Edit');
       return session.evaluate(
         `document.querySelector('.menu-bar__dropdown')?.getAttribute('aria-label') ?? null`,
       );
@@ -2727,7 +2808,12 @@ async function main() {
     );
 
     // Arrow keys move between items and categories; an outside pointer closes.
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    await clickText(session, '.menu-bar__top', 'View');
+    await waitFor(
+      session,
+      `document.activeElement?.classList.contains('menu-bar__item') === true`,
+      5000,
+    );
     const firstItem = await session.evaluate(`document.activeElement?.textContent.trim() ?? null`);
     await session.pressKey('ArrowDown', 40);
     const secondItem = await session.evaluate(`document.activeElement?.textContent.trim() ?? null`);
@@ -2753,11 +2839,14 @@ async function main() {
 
     // A click must execute the same command id through the trusted menu source.
     const beforeMenuCommand = await traceSequence(session);
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
-    await clickAt(
-      session,
-      await pointForText(session, '.menu-bar__item', 'Toggle AI Panel', false),
+    const beforePanelVisible = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel !== null && !panel.classList.contains('ai-panel--hidden');
+      })()`,
     );
+    await clickText(session, '.menu-bar__top', 'View');
+    await clickText(session, '.menu-bar__item', 'Toggle AI Panel', false);
     const menuCommand = await session.evaluate(
       `(() => {
         const trace = window.__a6CommandTrace();
@@ -2778,12 +2867,12 @@ async function main() {
         menuCommand.last.source === 'user-menu' &&
         menuCommand.last.outcome === 'ran' &&
         menuCommand.closed === true &&
-        menuCommand.panelVisible === true,
+        menuCommand.panelVisible !== beforePanelVisible,
       JSON.stringify(menuCommand),
     );
 
     // Toggles, disabled items, hints and right-aligned shortcuts must be honest.
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
+    await clickText(session, '.menu-bar__top', 'View');
     const viewMenu = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -2796,9 +2885,17 @@ async function main() {
           paletteDisabled: palette !== undefined && palette.disabled === true &&
             palette.classList.contains('menu-bar__item--disabled') &&
             (palette.getAttribute('title') ?? '').includes('planned'),
+          panelVisible: (() => {
+            const panel = document.querySelector('.ai-panel');
+            return panel !== null && !panel.classList.contains('ai-panel--hidden');
+          })(),
           aiCheckbox: ai !== undefined &&
             ai.getAttribute('role') === 'menuitemcheckbox' &&
-            ai.getAttribute('aria-checked') === 'true',
+            ai.getAttribute('aria-checked') ===
+              String((() => {
+                const panel = document.querySelector('.ai-panel');
+                return panel !== null && !panel.classList.contains('ai-panel--hidden');
+              })()),
           shortcut: shortcut === null ? null : shortcut.textContent.trim(),
           aligned: label !== null && shortcut !== null
             ? getComputedStyle(label).flexGrow === '1' &&
@@ -2812,17 +2909,15 @@ async function main() {
       'view menu marks toggles, disabled items and shortcuts honestly',
       viewMenu.paletteDisabled === true &&
         viewMenu.aiCheckbox === true &&
+        typeof viewMenu.panelVisible === 'boolean' &&
         viewMenu.shortcut === 'Ctrl+L' &&
         viewMenu.aligned === true,
       JSON.stringify(viewMenu),
     );
 
     // Hiding a panel must keep the live terminal mounted.
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
-    await clickAt(
-      session,
-      await pointForText(session, '.menu-bar__item', 'Toggle Terminal', false),
-    );
+    await clickText(session, '.menu-bar__top', 'View');
+    await clickText(session, '.menu-bar__item', 'Toggle Terminal', false);
     const hiddenPanel = await session.evaluate(
       `(() => {
         const panel = document.querySelector('.bottom-panel');
@@ -2832,11 +2927,8 @@ async function main() {
         };
       })()`,
     );
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'View'));
-    await clickAt(
-      session,
-      await pointForText(session, '.menu-bar__item', 'Toggle Terminal', false),
-    );
+    await clickText(session, '.menu-bar__top', 'View');
+    await clickText(session, '.menu-bar__item', 'Toggle Terminal', false);
     const shownPanel = await session.evaluate(
       `(() => {
         const panel = document.querySelector('.bottom-panel');
@@ -2871,7 +2963,7 @@ async function main() {
         return document.activeElement === area;
       })()`,
     );
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+    await clickText(session, '.menu-bar__top', 'Edit');
     const editWithTerminal = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -2886,6 +2978,16 @@ async function main() {
       })()`,
     );
     await session.pressKey('Escape', 27);
+    const aiHiddenForMenu = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel === null || panel.classList.contains('ai-panel--hidden');
+      })()`,
+    );
+    if (aiHiddenForMenu === true) {
+      await clickText(session, '.menu-bar__top', 'View');
+      await clickText(session, '.menu-bar__item', 'Toggle AI Panel', false);
+    }
     const fieldFocusedForMenu = await session.evaluate(
       `(() => {
         const area = document.querySelector('.ai-panel__input');
@@ -2894,7 +2996,7 @@ async function main() {
         return document.activeElement === area;
       })()`,
     );
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'Edit'));
+    await clickText(session, '.menu-bar__top', 'Edit');
     const editWithField = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -2917,7 +3019,12 @@ async function main() {
         fieldFocusedForMenu === true &&
         editWithField.cutEnabled === true &&
         editWithField.copyEnabled === true,
-      JSON.stringify({ editWithTerminal, editWithField }),
+      JSON.stringify({
+        terminalFocusedForMenu,
+        editWithTerminal,
+        fieldFocusedForMenu,
+        editWithField,
+      }),
     );
 
     // Terminal key pass-through: no registry entries, no chord hint, no panel toggle.
@@ -3047,7 +3154,7 @@ async function main() {
       })()`,
       5000,
     );
-    await session.insertText('A6_VERIFY_DIRTY');
+    await session.typeText('A6_VERIFY_DIRTY');
     const dirtyTabVisible = await waitFor(
       session,
       `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
@@ -3115,6 +3222,7 @@ async function main() {
     check('an accepted dirty-tab close removes the tab', tabCloseAccepted === true);
 
     // Recreate a dirty buffer for the window-level close checks.
+    console.log('  step: recreate dirty buffer');
     await session.evaluate(`document.querySelector('.editor-tabs__new')?.click()`);
     await waitFor(
       session,
@@ -3126,7 +3234,7 @@ async function main() {
       })()`,
       5000,
     );
-    await session.insertText('A6_VERIFY_CLOSE');
+    await session.typeText('A6_VERIFY_CLOSE');
     await waitFor(
       session,
       `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
@@ -3139,7 +3247,10 @@ async function main() {
          return false;
        };`,
     );
-    await session.evaluate(`window.nova.window.close()`);
+    // `void` prevents Runtime.evaluate from awaiting the close handshake; the
+    // renderer's mocked confirm answers it without ever closing the app.
+    console.log('  step: request window close');
+    await session.evaluate(`void window.nova.window.close()`);
     await new Promise((resolve) => setTimeout(resolve, 500));
     const closeWindowCancelled = await session.evaluate(
       `(() => ({
@@ -3161,8 +3272,8 @@ async function main() {
          return false;
        };`,
     );
-    await clickAt(session, await pointForText(session, '.menu-bar__top', 'File'));
-    await clickAt(session, await pointForText(session, '.menu-bar__item', 'Exit', false));
+    await clickText(session, '.menu-bar__top', 'File');
+    await clickText(session, '.menu-bar__item', 'Exit', false);
     await new Promise((resolve) => setTimeout(resolve, 500));
     const exitCancelled = await session.evaluate(
       `(() => ({
@@ -3183,6 +3294,7 @@ async function main() {
     );
 
     // The trace must stay bounded, frozen and free of arguments or content.
+    console.log('  step: verify trace integrity');
     const finalTrace = await traceSnapshot(session);
     const traceIntegrity = await session.evaluate(
       `(() => {

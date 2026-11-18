@@ -185,6 +185,9 @@ export function createCommandDefinitions(): CommandDefinition[] {
       id: COMMAND_IDS.exit,
       title: 'Exit',
       category: 'File',
+      // Windows shows Alt+F4 in the menu, but the app deliberately installs
+      // no such shortcut; the OS owns that key combination.
+      shortcutLabel: 'Alt+F4',
       run: (context) => context.services.exitApp(),
       enabled: (context) => context.features.quit && context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
