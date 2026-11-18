@@ -23,6 +23,7 @@ import {
   isEditorReady,
   requestEditorAction,
 } from '../features/editor/editorCommands';
+import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
 import { useTabs } from '../stores/tabs';
@@ -55,7 +56,7 @@ for (const definition of DEFINITIONS) {
 const FEATURES: CommandFeatures = {
   window: true,
   edit: true,
-  filePicker: false,
+  filePicker: true,
   logs: true,
   devTools: true,
   zoom: true,
@@ -91,6 +92,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
   const { state: workspaceState, dispatch: workspaceDispatch } = useWorkspace();
   const ui = useUi();
   const fileOps = useFileOperations();
+  const { openFromDialog } = useFileOpener();
   const { openFolder } = useWorkspaceActions();
 
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -115,11 +117,17 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
   const services = useMemo<CommandServices>(
     () => ({
       newFile: () => ui.requestNewFile(),
-      openFile: () => notify('Native file opening arrives with the desktop file picker.'),
+      openFile: () => {
+        if (nova === undefined) {
+          notify('File opening is unavailable outside A6');
+          return;
+        }
+        return openFromDialog();
+      },
       openWorkspace: () => openFolder(),
       saveActive: () => fileOps.saveActive(),
-      saveAsActive: () => notify('Save As for active files arrives with the file picker milestone.'),
-      saveAll: () => notify('Save All arrives with the file picker milestone.'),
+      saveAsActive: () => fileOps.saveAsActive(),
+      saveAll: () => fileOps.saveAll(),
       closeActiveTab: () => {
         const tab = tabsState.tabs.find((candidate) => candidate.id === tabsState.activeTabId);
         if (tab === undefined) {
@@ -198,7 +206,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       },
       showAbout: () => setDialog('about'),
     }),
-    [fileOps, nova, notify, openFolder, setWindowState, tabsDispatch, tabsState, ui],
+    [fileOps, nova, notify, openFolder, openFromDialog, setWindowState, tabsDispatch, tabsState, ui],
   );
 
   const buildContext = useCallback(
@@ -212,7 +220,8 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
           id: tab.id,
           name: tab.name,
           isDirty: tab.isDirty,
-          origin: 'workspace' as const,
+          origin: tab.origin,
+          externalGrantId: tab.externalGrantId,
         })),
         activeTabId: tabsState.activeTabId,
         hasWorkspace: workspaceState.workspace !== null,

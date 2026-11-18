@@ -33,6 +33,55 @@ describe('tabsReducer', () => {
     expect(state.tabs[0]?.isDirty).toBe(false);
   });
 
+  it('marks an external tab with its grant and keeps workspace tabs plain', () => {
+    const workspace = tabsReducer(initialTabsState, {
+      type: 'open',
+      id: '/ws/a.txt',
+      name: 'a.txt',
+      language: 'plaintext',
+      content: '',
+      filePath: '/ws/a.txt',
+    });
+    expect(workspace.tabs[0]?.origin).toBe('workspace');
+    expect(workspace.tabs[0]?.externalGrantId).toBeUndefined();
+
+    const external = tabsReducer(workspace, {
+      type: 'open',
+      id: '/outside/b.txt',
+      name: 'b.txt',
+      language: 'plaintext',
+      content: '',
+      filePath: '/outside/b.txt',
+      origin: 'external',
+      externalGrantId: 'grant-1',
+    });
+    expect(external.tabs[1]?.origin).toBe('external');
+    expect(external.tabs[1]?.externalGrantId).toBe('grant-1');
+  });
+
+  it('clears the grant when a tab is saved into the workspace', () => {
+    const external = tabsReducer(initialTabsState, {
+      type: 'open',
+      id: '/outside/b.txt',
+      name: 'b.txt',
+      language: 'plaintext',
+      content: '',
+      filePath: '/outside/b.txt',
+      origin: 'external',
+      externalGrantId: 'grant-1',
+    });
+    const bound = tabsReducer(external, {
+      type: 'set-file-path',
+      id: '/outside/b.txt',
+      filePath: '/ws/b.txt',
+      name: 'b.txt',
+      mtimeMs: 123,
+    });
+    expect(bound.tabs[0]?.origin).toBe('workspace');
+    expect(bound.tabs[0]?.externalGrantId).toBeUndefined();
+    expect(bound.tabs[0]?.filePath).toBe('/ws/b.txt');
+  });
+
   it('re-opening an existing tab focuses it without duplicating it', () => {
     const once = stateWithTabs(2);
     const twice = tabsReducer(once, {

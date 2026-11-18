@@ -26,6 +26,7 @@ function createInitialTabsState(): TabsState {
     content: '',
     isDirty: false,
     filePath: null,
+    origin: 'workspace',
     mtimeMs: null,
   };
   return {

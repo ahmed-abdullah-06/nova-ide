@@ -15,6 +15,7 @@ import {
   assertConfirmClose,
   assertDownloadId,
   assertEditWebContentsAction,
+  assertGrantId,
   assertLocalOnly,
   assertModelDefaults,
   assertModelName,
@@ -36,6 +37,7 @@ import {
   assertSessionAndData,
   assertSessionAndSize,
   assertStringArray,
+  assertWriteExternalArgs,
   assertVoiceAudio,
   assertVoicePickKind,
   assertVoiceSettings,
@@ -59,6 +61,23 @@ describe('IPC argument validators', () => {
     expect(() => assertEditWebContentsAction([42])).toThrow();
     expect(() => assertEditWebContentsAction([])).toThrow();
     expect(() => assertEditWebContentsAction(['copy', 'paste'])).toThrow();
+  });
+
+  it('accepts only opaque grant ids, never renderer paths', () => {
+    expect(() => assertGrantId(['grant-1'])).not.toThrow();
+    expect(() => assertGrantId([''])).toThrow();
+    expect(() => assertGrantId([42])).toThrow();
+    expect(() => assertGrantId([])).toThrow();
+    expect(() => assertGrantId(['grant-1', 'extra'])).toThrow();
+  });
+
+  it('validates external grant writes without accepting a path', () => {
+    expect(() => assertWriteExternalArgs(['grant-1', 'text', 123])).not.toThrow();
+    expect(() => assertWriteExternalArgs(['grant-1', 'text', null])).not.toThrow();
+    expect(() => assertWriteExternalArgs(['grant-1', 'text', '123'])).toThrow();
+    expect(() => assertWriteExternalArgs(['grant-1', 42, null])).toThrow();
+    expect(() => assertWriteExternalArgs(['', 'text', null])).toThrow();
+    expect(() => assertWriteExternalArgs(['grant-1', 'text'])).toThrow();
   });
 
   it('validates the tokenized close confirmation', () => {

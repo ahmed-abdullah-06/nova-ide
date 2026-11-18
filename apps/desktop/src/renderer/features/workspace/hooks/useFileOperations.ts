@@ -11,6 +11,7 @@
 import { useCallback } from 'react';
 import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
 import { useTabs } from '../../../stores/tabs';
+import type { EditorTab } from '../../../stores/tabsReducer';
 import { useWorkspace } from '../../../stores/workspace';
 import type { NotificationKind } from '../../../stores/workspaceReducer';
 import { disposeModel, renameModelKey } from '../../editor/modelRegistry';
@@ -26,6 +27,10 @@ export interface FileOperations {
   deleteEntry(entry: FileEntry): Promise<void>;
   /** Ctrl+S: saves the active tab (Save-As dialog for untitled buffers). */
   saveActive(): Promise<void>;
+  /** Saves every dirty tab, including granted external files. */
+  saveAll(): Promise<void>;
+  /** Ctrl+Shift+S: Save As for workspace/untitled tabs. */
+  saveAsActive(): Promise<void>;
 }
 
 export function useFileOperations(): FileOperations {
@@ -233,85 +238,144 @@ export function useFileOperations(): FileOperations {
     [dispatch, notify, tabsDispatch, tabsState.tabs],
   );
 
-  const saveActive = useCallback(async (): Promise<void> => {
-    if (!window.nova) {
-      notify('error', 'Filesystem access is unavailable outside A6');
-      return;
-    }
-    const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
-    if (!tab) {
-      return;
-    }
-    if (workspaceState.workspace === null && tab.filePath === null) {
-      notify('error', 'Open a folder before saving files');
-      return;
-    }
-
-    // Untitled buffer → native Save-As dialog (must stay in workspace).
-    if (tab.filePath === null) {
-      const result = await window.nova.fs.saveAs(null, tab.content);
-      if (!result.ok) {
-        notify('error', result.message);
+  /**
+   * Saves one tab. Workspace tabs use the workspace write channel; external
+   * tabs only use their exact grant. No path is fabricated in the renderer.
+   */
+  const saveTab = useCallback(
+    async (tab: EditorTab): Promise<void> => {
+      const api = window.nova;
+      if (!api) {
+        notify('error', 'Filesystem access is unavailable outside A6');
         return;
       }
-      if (result.value === null) {
-        return; // cancelled
-      }
-      const name = pathBaseName(result.value.path);
-      tabsDispatch({
-        type: 'set-file-path',
-        id: tab.id,
-        filePath: result.value.path,
-        name,
-        language: detectLanguage(name),
-        mtimeMs: result.value.mtimeMs,
-      });
-      return;
-    }
 
-    // File-backed: optimistic concurrency via expected mtime (spec §7.1).
-    const filePath = tab.filePath;
-    if (filePath === null) {
-      return; // unreachable — handled above; keeps narrowing total
-    }
-    const content = tab.content;
-    const expectedMtime = tab.mtimeMs;
-
-    let result = await window.nova.fs.writeFile(
-      filePath,
-      content,
-      expectedMtime,
-    );
-    if (!result.ok && result.code === 'CONFLICT') {
-      const overwrite = window.confirm(
-        `"${tab.name}" changed on disk since you opened it.\n\nOverwrite it with your version?`,
-      );
-      if (!overwrite) {
-        return;
-      }
-      // Explicit user overwrite → force the write (mtime check skipped).
-      result = await window.nova.fs.writeFile(filePath, content, null);
-    }
-    if (!result.ok) {
-      if (result.code === 'NOT_FOUND') {
-        const recreate = window.confirm(
-          `"${tab.name}" no longer exists on disk.\n\nRecreate it with your changes?`,
-        );
-        if (!recreate) {
+      // Untitled buffer → native Save-As dialog (must stay in workspace).
+      if (tab.filePath === null) {
+        if (workspaceState.workspace === null) {
+          notify('error', 'Open a folder before saving files');
           return;
         }
-        result = await window.nova.fs.writeFile(filePath, content, null);
+        const result = await api.fs.saveAs(null, tab.content);
         if (!result.ok) {
           notify('error', result.message);
           return;
         }
-      } else {
-        notify('error', result.message);
+        if (result.value === null) {
+          return; // cancelled
+        }
+        const name = pathBaseName(result.value.path);
+        tabsDispatch({
+          type: 'set-file-path',
+          id: tab.id,
+          filePath: result.value.path,
+          name,
+          language: detectLanguage(name),
+          mtimeMs: result.value.mtimeMs,
+        });
         return;
       }
-    }
-    tabsDispatch({ type: 'mark-saved', id: tab.id, mtimeMs: result.value.mtimeMs });
-  }, [dispatch, notify, tabsDispatch, tabsState, workspaceState.workspace]);
 
-  return { createEntry, renameEntry, deleteEntry, saveActive };
+      const externalGrant =
+        tab.origin === 'external' ? tab.externalGrantId : undefined;
+      if (tab.origin === 'external' && externalGrant === undefined) {
+        notify('error', 'This external file no longer has a save grant');
+        return;
+      }
+      const filePath = tab.filePath;
+      const content = tab.content;
+
+      // Optimistic concurrency via expected mtime (spec §7.1), for both
+      // workspace files and granted external files.
+      const write = (expectedMtimeMs: number | null) =>
+        externalGrant !== undefined
+          ? api.fs.writeExternal(externalGrant, content, expectedMtimeMs)
+          : api.fs.writeFile(filePath, content, expectedMtimeMs);
+
+      let result = await write(tab.mtimeMs);
+      if (!result.ok && result.code === 'CONFLICT') {
+        const overwrite = window.confirm(
+          `"${tab.name}" changed on disk since you opened it.\n\nOverwrite it with your version?`,
+        );
+        if (!overwrite) {
+          return;
+        }
+        result = await write(null); // explicit overwrite
+      }
+      if (!result.ok) {
+        if (result.code === 'NOT_FOUND') {
+          const recreate = window.confirm(
+            `"${tab.name}" no longer exists on disk.\n\nRecreate it with your changes?`,
+          );
+          if (!recreate) {
+            return;
+          }
+          result = await write(null);
+          if (!result.ok) {
+            notify('error', result.message);
+            return;
+          }
+        } else {
+          notify('error', result.message);
+          return;
+        }
+      }
+      tabsDispatch({
+        type: 'mark-saved',
+        id: tab.id,
+        mtimeMs: result.value.mtimeMs,
+      });
+    },
+    [notify, tabsDispatch, workspaceState.workspace],
+  );
+
+  const saveActive = useCallback(async (): Promise<void> => {
+    const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
+    if (tab !== undefined) {
+      await saveTab(tab);
+    }
+  }, [saveTab, tabsState]);
+
+  const saveAll = useCallback(async (): Promise<void> => {
+    // Sequential: each save rechecks the on-disk mtime before writing.
+    for (const tab of tabsState.tabs) {
+      if (tab.isDirty) {
+        await saveTab(tab);
+      }
+    }
+  }, [saveTab, tabsState.tabs]);
+
+  const saveAsActive = useCallback(async (): Promise<void> => {
+    const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
+    if (tab === undefined || !window.nova) {
+      return;
+    }
+    if (tab.origin === 'external') {
+      notify('error', 'Save As is not available for files opened outside the workspace');
+      return;
+    }
+    if (workspaceState.workspace === null) {
+      notify('error', 'Open a folder before saving files');
+      return;
+    }
+    const result = await window.nova.fs.saveAs(tab.filePath, tab.content);
+    if (!result.ok) {
+      notify('error', result.message);
+      return;
+    }
+    if (result.value === null) {
+      return; // cancelled
+    }
+    const name = pathBaseName(result.value.path);
+    tabsDispatch({
+      type: 'set-file-path',
+      id: tab.id,
+      filePath: result.value.path,
+      name,
+      language: detectLanguage(name),
+      mtimeMs: result.value.mtimeMs,
+    });
+  }, [notify, tabsDispatch, tabsState, workspaceState.workspace]);
+
+  return { createEntry, renameEntry, deleteEntry, saveActive, saveAll, saveAsActive };
 }

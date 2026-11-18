@@ -149,7 +149,7 @@ export class FileSystemService {
     return null;
   }
 
-  /** Reads a text file; binary/unsupported content is rejected up-front. */
+  /** Reads a workspace file; resolves and contains the path first. */
   async readFile(filePath: string): Promise<FsResult<FileContent>> {
     const rootResult = await this.requireRoot();
     if (!rootResult.ok) {
@@ -164,10 +164,18 @@ export class FileSystemService {
     if (!resolved.ok) {
       return resolved;
     }
+    return this.readCanonical(resolved.value);
+  }
 
+  /**
+   * Reads an already-authorized canonical path. Only main-process callers
+   * (workspace resolution or an external grant) may call this — the renderer
+   * can never reach it with an arbitrary path.
+   */
+  async readCanonical(canonicalPath: string): Promise<FsResult<FileContent>> {
     let stat: Stats;
     try {
-      stat = await fs.stat(resolved.value);
+      stat = await fs.stat(canonicalPath);
     } catch (error) {
       return mapFsError(error, 'Cannot open file');
     }
@@ -189,7 +197,7 @@ export class FileSystemService {
 
     let buffer: Buffer;
     try {
-      buffer = await fs.readFile(resolved.value);
+      buffer = await fs.readFile(canonicalPath);
     } catch (error) {
       return mapFsError(error, 'Cannot read file');
     }
@@ -209,7 +217,7 @@ export class FileSystemService {
     }
 
     return fsOk({
-      path: resolved.value,
+      path: canonicalPath,
       content,
       mtimeMs,
       size: stat.size,
@@ -292,8 +300,12 @@ export class FileSystemService {
     return this.writeCanonical(resolved.value, content, null);
   }
 
-  /** Shared write path (already resolved + contained). */
-  private async writeCanonical(
+  /**
+   * Shared write path for an already-authorized canonical path. Only
+   * main-process callers (workspace resolution or an external grant) reach
+   * this; it is not a renderer-facing path check.
+   */
+  async writeCanonical(
     canonicalPath: string,
     content: string,
     expectedMtimeMs: number | null,

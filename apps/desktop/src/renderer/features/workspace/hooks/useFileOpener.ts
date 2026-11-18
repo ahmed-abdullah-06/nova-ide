@@ -26,6 +26,11 @@ export interface FileOpener {
    * duplicated.
    */
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>;
+  /**
+   * Opens the native main-process dialog. Files inside the workspace use the
+   * normal path; files outside open under an exact, in-memory grant.
+   */
+  openFromDialog: () => Promise<void>;
 }
 
 export function useFileOpener(): FileOpener {
@@ -70,5 +75,70 @@ export function useFileOpener(): FileOpener {
     [dispatch, tabsDispatch, tabsState.tabs],
   );
 
-  return { openFile };
+  const openFromDialog = useCallback(async (): Promise<void> => {
+    const api = window.nova;
+    if (!api) {
+      dispatch({
+        type: 'notify',
+        kind: 'error',
+        message: 'File opening is unavailable outside A6',
+      });
+      return;
+    }
+
+    // The main process owns the dialog and the canonical result. The renderer
+    // never sends a path to this channel.
+    const chosen = await api.fs.openFileDialog();
+    if (!chosen.ok) {
+      dispatch({ type: 'notify', kind: 'error', message: chosen.message });
+      return;
+    }
+    const selection = chosen.value;
+    if (selection === null) {
+      return; // cancelled
+    }
+
+    const existing = tabsState.tabs.find(
+      (tab) => tab.filePath === selection.path,
+    );
+    if (existing !== undefined) {
+      tabsDispatch({ type: 'activate', id: existing.id });
+      requestReveal({ path: existing.id, line: 1, column: 1 });
+      return;
+    }
+    if (selection.origin === 'workspace') {
+      await openFile(selection.path);
+      return;
+    }
+
+    // Outside the workspace: read and later save through the opaque grant.
+    const grantId = selection.grantId;
+    if (grantId === undefined) {
+      dispatch({
+        type: 'notify',
+        kind: 'error',
+        message: 'The selected file did not receive a save grant',
+      });
+      return;
+    }
+    const result = await api.fs.readExternal(grantId);
+    if (!result.ok) {
+      dispatch({ type: 'notify', kind: 'error', message: result.message });
+      return;
+    }
+    tabsDispatch({
+      type: 'open',
+      id: result.value.path,
+      name: selection.name,
+      language: detectLanguage(selection.name),
+      content: result.value.content,
+      filePath: result.value.path,
+      origin: 'external',
+      externalGrantId: grantId,
+      mtimeMs: result.value.mtimeMs,
+    });
+    requestReveal({ path: result.value.path, line: 1, column: 1 });
+  }, [dispatch, openFile, tabsDispatch, tabsState.tabs]);
+
+  return { openFile, openFromDialog };
 }

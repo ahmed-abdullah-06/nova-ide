@@ -116,6 +116,9 @@ describe('IPC channel whitelist (security)', () => {
       IpcChannels.devToolsToggle,
       IpcChannels.appOpenLogs,
       IpcChannels.editWebContentsAction,
+      IpcChannels.fsOpenFile,
+      IpcChannels.fsReadExternal,
+      IpcChannels.fsWriteExternal,
     ]) {
       expect(isAllowedChannel(channel)).toBe(true);
     }

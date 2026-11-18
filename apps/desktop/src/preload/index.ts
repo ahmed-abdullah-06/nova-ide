@@ -106,6 +106,10 @@ const novaApi: NovaApi = {
   fs: {
     readDirectory: (pathValue) => invoke(IpcChannels.fsReadDir, pathValue),
     readFile: (pathValue) => invoke(IpcChannels.fsReadFile, pathValue),
+    openFileDialog: () => invoke(IpcChannels.fsOpenFile),
+    readExternal: (grantId) => invoke(IpcChannels.fsReadExternal, grantId),
+    writeExternal: (grantId, content, expectedMtimeMs) =>
+      invoke(IpcChannels.fsWriteExternal, grantId, content, expectedMtimeMs),
     writeFile: (pathValue, content, expectedMtimeMs) =>
       invoke(IpcChannels.fsWriteFile, pathValue, content, expectedMtimeMs),
     saveAs: (suggestedPath, content) =>

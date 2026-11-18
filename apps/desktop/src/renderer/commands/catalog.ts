@@ -75,6 +75,10 @@ function active(context: CommandContext): boolean {
   return context.activeTabId !== null;
 }
 
+function activeTab(context: CommandContext) {
+  return context.tabs.find((tab) => tab.id === context.activeTabId);
+}
+
 function editable(context: CommandContext): boolean {
   return (
     context.focus.kind === 'monaco' ||
@@ -146,8 +150,19 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'File',
       keybindings: all(primary('KeyS', true)),
       run: (context) => context.services.saveAsActive(),
-      enabled: active,
-      disabledHint: hint(NO_TAB),
+      enabled: (context) =>
+        active(context) &&
+        context.hasWorkspace &&
+        activeTab(context)?.origin !== 'external',
+      disabledHint: (context) => {
+        if (!active(context)) {
+          return NO_TAB;
+        }
+        if (activeTab(context)?.origin === 'external') {
+          return 'Save As is not available for files opened outside the workspace';
+        }
+        return NO_WORKSPACE;
+      },
     },
     {
       id: COMMAND_IDS.saveAll,

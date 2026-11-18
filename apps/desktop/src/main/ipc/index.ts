@@ -20,6 +20,7 @@ import { OpenFileWatcher } from '../services/fileWatcher';
 import { WorkspaceService } from '../services/workspaceService';
 import { createAppInfoHandler } from './app-info';
 import { createFileHandlers } from './files';
+import { createExternalFileHandlers } from './externalFiles';
 import { createWorkspaceHandlers } from './workspace';
 import { createTerminalHandlers } from './terminal';
 import { createSearchHandlers } from './search';
@@ -45,6 +46,7 @@ import {
   assertConversationId,
   assertDownloadId,
   assertExternalUrl,
+  assertGrantId,
   assertLocalOnly,
   assertModelDefaults,
   assertModelName,
@@ -70,9 +72,11 @@ import {
   assertVoiceAudio,
   assertVoicePickKind,
   assertVoiceSettings,
+  assertWriteExternalArgs,
   assertWriteFileArgs,
   type ArgsValidator,
 } from './validators';
+import { ExternalFileService } from '../services/externalFileService';
 import { TerminalService } from '../services/terminalService';
 import { SearchService } from '../services/searchService';
 import { GitService } from '../services/gitService';
@@ -208,6 +212,9 @@ export function registerIpcHandlers(
   );
 
   const fileHandlers = createFileHandlers(fileService);
+  const externalFileHandlers = createExternalFileHandlers(
+    new ExternalFileService(fileService, () => workspaceService.getActiveRoot()),
+  );
 
   // The watchdog terminates the children when the main process dies
   // unexpectedly (a crash skips every cleanup handler).
@@ -619,6 +626,18 @@ export function registerIpcHandlers(
   // Filesystem
   registerChannel(IpcChannels.fsReadDir, assertOneString, fileHandlers.readDir);
   registerChannel(IpcChannels.fsReadFile, assertOneString, fileHandlers.readFile);
+  // The dialog takes no path; external reads/writes take only an opaque grant.
+  registerChannel(IpcChannels.fsOpenFile, assertNoArgs, externalFileHandlers.open);
+  registerChannel(
+    IpcChannels.fsReadExternal,
+    assertGrantId,
+    externalFileHandlers.read,
+  );
+  registerChannel(
+    IpcChannels.fsWriteExternal,
+    assertWriteExternalArgs,
+    externalFileHandlers.write,
+  );
   registerChannel(
     IpcChannels.fsWriteFile,
     assertWriteFileArgs,

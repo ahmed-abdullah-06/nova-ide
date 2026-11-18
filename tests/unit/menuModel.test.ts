@@ -142,6 +142,41 @@ describe('menu model', () => {
     expect(byId(COMMAND_IDS.newWindow)).toMatchObject({ enabled: false });
   });
 
+  it('disables Save As for granted external tabs with a clear reason', () => {
+    const model = buildMenuModel(
+      definitions,
+      makeContext({
+        tabs: [
+          {
+            id: '/outside/note.txt',
+            name: 'note.txt',
+            isDirty: true,
+            origin: 'external',
+            externalGrantId: 'grant-1',
+          },
+        ],
+        activeTabId: '/outside/note.txt',
+      }),
+      'win32',
+    );
+    const item = model
+      .flatMap((section) => section.entries)
+      .find(
+        (entry) => entry.kind === 'item' && entry.id === COMMAND_IDS.saveAs,
+      );
+    expect(item).toMatchObject({
+      enabled: false,
+      disabledReason: expect.stringContaining('outside the workspace') as string,
+    });
+    // Save and Save All still work through the grant.
+    const byId = (id: string) =>
+      model.flatMap((section) => section.entries).find(
+        (entry) => entry.kind === 'item' && entry.id === id,
+      );
+    expect(byId(COMMAND_IDS.save)).toMatchObject({ enabled: true });
+    expect(byId(COMMAND_IDS.saveAll)).toMatchObject({ enabled: true });
+  });
+
   it('respects focus, workspace and feature flags for enabled state', () => {
     const context = makeContext({
       hasWorkspace: false,

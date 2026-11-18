@@ -75,6 +75,9 @@ export const IpcChannels = {
   workspaceActive: 'workspace:active',
   fsReadDir: 'fs:read-dir',
   fsReadFile: 'fs:read-file',
+  fsOpenFile: 'fs:open-file',
+  fsReadExternal: 'fs:read-external',
+  fsWriteExternal: 'fs:write-external',
   fsWriteFile: 'fs:write-file',
   fsSaveAs: 'fs:save-as',
   fsCreateFile: 'fs:create-file',
@@ -261,6 +264,26 @@ export interface FileContent {
 export interface SaveReceipt {
   path: string;
   mtimeMs: number;
+}
+
+/**
+ * Renderer-safe result of the native Open File dialog. The main process picks
+ * the file and canonicalises it; only metadata crosses the bridge. Content is
+ * fetched separately through a workspace read or an exact, in-memory grant.
+ */
+export interface OpenFileSelection {
+  /** Canonical path (symlinks resolved) chosen by the user in the main process. */
+  path: string;
+  /** Display name only — never used to build a path in the renderer. */
+  name: string;
+  /** Where the selected file lives relative to the active workspace. */
+  origin: 'workspace' | 'external';
+  /**
+   * Opaque grant id for external files only. It authorises exactly one
+   * canonical path for read/save until the app exits, is never persisted, and
+   * cannot be influenced by renderer-supplied paths.
+   */
+  grantId?: string;
 }
 
 /**
@@ -546,6 +569,18 @@ export interface IpcInvokeMap {
   'workspace:active': { args: []; result: FsResult<Workspace | null> };
   'fs:read-dir': { args: [path: string]; result: FsResult<DirListing> };
   'fs:read-file': { args: [path: string]; result: FsResult<FileContent> };
+  /**
+   * Native Open File dialog. No renderer path is accepted; the result is
+   * metadata only (`null` means the user cancelled).
+   */
+  'fs:open-file': { args: []; result: FsResult<OpenFileSelection | null> };
+  /** Reads the one canonical path bound to an in-memory external grant. */
+  'fs:read-external': { args: [grantId: string]; result: FsResult<FileContent> };
+  /** Saves through the grant; the renderer never supplies a path. */
+  'fs:write-external': {
+    args: [grantId: string, content: string, expectedMtimeMs: number | null];
+    result: FsResult<SaveReceipt>;
+  };
   /** `expectedMtimeMs: null` forces the write (explicit user overwrite). */
   'fs:write-file': {
     args: [path: string, content: string, expectedMtimeMs: number | null];
@@ -889,6 +924,16 @@ export interface NovaWorkspaceApi {
 export interface NovaFsApi {
   readDirectory(path: string): Promise<FsResult<DirListing>>;
   readFile(path: string): Promise<FsResult<FileContent>>;
+  /** Opens the native dialog in the main process; no renderer path is sent. */
+  openFileDialog(): Promise<FsResult<OpenFileSelection | null>>;
+  /** Reads an external file through its exact, in-memory grant. */
+  readExternal(grantId: string): Promise<FsResult<FileContent>>;
+  /** Saves an external file through its grant (no renderer path). */
+  writeExternal(
+    grantId: string,
+    content: string,
+    expectedMtimeMs: number | null,
+  ): Promise<FsResult<SaveReceipt>>;
   writeFile(
     path: string,
     content: string,

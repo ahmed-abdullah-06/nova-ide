@@ -80,6 +80,31 @@ export function assertOptionalString(args: unknown[]): asserts args is [string?]
   }
 }
 
+/** External grants accept only an opaque id — never a renderer path. */
+export function assertGrantId(args: unknown[]): asserts args is [string] {
+  if (args.length !== 1 || typeof args[0] !== 'string' || args[0].length === 0) {
+    throw new Error('Expected a grant id');
+  }
+}
+
+/** `fs:write-external` — grant id, content and optional expected mtime. */
+export function assertWriteExternalArgs(
+  args: unknown[],
+): asserts args is [string, string, number | null] {
+  if (
+    args.length !== 3 ||
+    typeof args[0] !== 'string' ||
+    args[0].length === 0 ||
+    typeof args[1] !== 'string'
+  ) {
+    throw new Error('Expected (grantId, content, expectedMtimeMs)');
+  }
+  const expected = args[2];
+  if (expected !== null && typeof expected !== 'number') {
+    throw new Error('expectedMtimeMs must be a number or null');
+  }
+}
+
 export function assertWriteFileArgs(
   args: unknown[],
 ): asserts args is [string, string, number | null] {

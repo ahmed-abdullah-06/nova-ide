@@ -50,7 +50,8 @@ afterEach(async () => {
     maxRetries: 20,
     retryDelay: 100,
   });
-});
+  // node-pty cleanup is slow on a loaded Windows runner.
+}, 20_000);
 
 /** Writes a package.json with the given scripts. */
 async function writePackage(

@@ -259,6 +259,47 @@ export async function resolveInWorkspace(
 }
 
 /**
+ * Canonicalises an existing file chosen by the MAIN process (native dialog)
+ * or stored in an in-memory grant. There is deliberately NO workspace
+ * containment here: the only callers are main-process services that already
+ * hold an explicit authorization. Renderer paths still go through
+ * `resolveInWorkspace` — this helper cannot be invoked from the renderer.
+ */
+export async function resolveMainProcessFile(
+  candidate: unknown,
+): Promise<FsResult<string>> {
+  if (typeof candidate !== 'string' || candidate.length === 0 || candidate.includes('\0')) {
+    return fsFail('INVALID_PATH', 'File path must be a non-empty string');
+  }
+  let absolute: string;
+  try {
+    absolute = path.resolve(candidate);
+  } catch {
+    return fsFail('INVALID_PATH', 'File path cannot be resolved');
+  }
+  const canonical = await canonicalize(absolute);
+  if (!canonical.ok) {
+    return canonical;
+  }
+  try {
+    const stat = await fs.stat(canonical.value);
+    if (!stat.isFile()) {
+      return fsFail('INVALID_PATH', 'Selected path is not a file');
+    }
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (errno === 'ENOENT') {
+      return fsFail('NOT_FOUND', 'File does not exist');
+    }
+    if (errno === 'ENOTDIR') {
+      return fsFail('INVALID_PATH', 'Path component is not a directory');
+    }
+    return mapFsError(error, 'Cannot access file');
+  }
+  return fsOk(canonical.value);
+}
+
+/**
  * Validates and canonicalises a folder the user wants to open as a
  * workspace (no boundary applies yet — this *becomes* the boundary).
  */

@@ -13,6 +13,10 @@ export interface EditorTab {
   isDirty: boolean;
   /** Absolute file path for file-backed tabs; null for untitled buffers. */
   filePath: string | null;
+  /** Workspace file, or an explicitly granted file outside the workspace. */
+  origin: 'workspace' | 'external';
+  /** Opaque in-memory grant id for external tabs; never a path or persisted. */
+  externalGrantId?: string;
   /** Disk modification time from the last read/save; null for untitled. */
   mtimeMs: number | null;
 }
@@ -32,6 +36,8 @@ export type TabsAction =
       language: string;
       content: string;
       filePath?: string | null;
+      origin?: 'workspace' | 'external';
+      externalGrantId?: string;
       mtimeMs?: number | null;
     }
   | { type: 'new-untitled'; language: string }
@@ -91,6 +97,8 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         content: action.content,
         isDirty: false,
         filePath: action.filePath ?? null,
+        origin: action.origin ?? 'workspace',
+        externalGrantId: action.externalGrantId,
         mtimeMs: action.mtimeMs ?? null,
       };
       return {
@@ -109,6 +117,7 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         content: '',
         isDirty: false,
         filePath: null,
+        origin: 'workspace',
         mtimeMs: null,
       };
       return {
@@ -187,6 +196,9 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
       tabs[index] = {
         ...current,
         filePath: action.filePath,
+        // A tab bound by Save-As is now a normal workspace file.
+        origin: 'workspace',
+        externalGrantId: undefined,
         name: action.name,
         language: action.language ?? current.language,
         mtimeMs: action.mtimeMs,
