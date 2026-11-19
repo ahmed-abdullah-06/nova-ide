@@ -2089,6 +2089,12 @@ async function main() {
       localOnlyOn === true && voiceLocalBadge === true && cloudBlocked === true,
       `badge=${String(voiceLocalBadge)} cloud=${String(cloudBlocked)}`,
     );
+    const statusLocalOn = await waitFor(
+      session,
+      `document.querySelector('.status-bar__privacy--on') !== null`,
+      10000,
+    );
+    check('the status bar shows local-only mode', statusLocalOn === true);
 
     const noSession = await session.evaluate(
       `(async () => {
@@ -2145,6 +2151,12 @@ async function main() {
       'the local-only mode can be switched off again',
       localOnlyOff === true && voiceLocalBadgeGone === true,
     );
+    const statusLocalOff = await waitFor(
+      session,
+      `document.querySelector('.status-bar__privacy--on') === null`,
+      10000,
+    );
+    check('the status bar clears local-only mode', statusLocalOff === true);
 
     // The mock is an executable on the disk: the command interpreter with
     // an echo argument. The model is an inert file in the isolated profile.

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AppInfo } from '../../../shared/ipc-types';
+import { Icon } from '../ui/icons';
 import type { Theme } from '../../hooks/useTheme';
 import { LANGUAGES } from '../../utils/language';
 
@@ -19,6 +20,8 @@ interface StatusBarProps {
   workspaceName: string | null;
   /** Canonical root of the active workspace (for the tooltip). */
   workspaceRoot: string | null;
+  /** Real local-only state from the shared AI controller. */
+  localOnly: boolean;
 }
 
 export function StatusBar({
@@ -30,6 +33,7 @@ export function StatusBar({
   appInfo,
   workspaceName,
   workspaceRoot,
+  localOnly,
 }: StatusBarProps): ReactNode {
   return (
     <footer className="status-bar" aria-label="Status bar">
@@ -39,8 +43,17 @@ export function StatusBar({
       >
         {workspaceName ?? 'No folder open'}
       </span>
-      <span className="status-bar__item" title="Git integration (Milestone 3)">
-        Git: —
+      <span
+        className={`status-bar__privacy${localOnly ? ' status-bar__privacy--on' : ''}`}
+        role="status"
+        title={
+          localOnly
+            ? 'Local-only mode is on: cloud providers and cloud voice are blocked by the main process'
+            : 'Local-only mode is off: cloud providers may be used'
+        }
+      >
+        <Icon name="shield" size={13} />
+        {localOnly ? 'Local-only: on' : 'Local-only: off'}
       </span>
 
       <span className="status-bar__spacer" />

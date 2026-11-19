@@ -10,7 +10,7 @@ import { useExternalFileChanges } from '../features/workspace/hooks/useExternalF
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar } from '../components/layout/ActivityBar';
 import { AiPanel } from '../features/ai/AiPanel';
-import { AiProvider } from '../features/ai/AiContext';
+import { AiProvider, useAiContext } from '../features/ai/AiContext';
 import { BottomPanel } from '../components/layout/BottomPanel';
 import { TitleBar } from '../components/layout/TitleBar';
 import { Sidebar } from '../components/layout/Sidebar';
@@ -41,6 +41,7 @@ function Workspace(): ReactNode {
   const workspaceActions = useWorkspaceActions();
   const ui = useUi();
   const commands = useCommands();
+  const ai = useAiContext();
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
   const [selection, setSelection] = useState<{
     startLine: number;
@@ -246,6 +247,7 @@ function Workspace(): ReactNode {
         appInfo={appInfo}
         workspaceName={workspaceState.workspace?.name ?? null}
         workspaceRoot={workspaceState.workspace?.rootPath ?? null}
+        localOnly={ai.localOnly}
       />
       <NotificationHost />
     </div>

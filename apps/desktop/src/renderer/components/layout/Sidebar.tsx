@@ -62,8 +62,8 @@ function bodyFor(
             Theme: {theme === 'dark' ? 'Dark' : 'Light'} (click to switch)
           </button>
           <p className="placeholder-view__note" style={{ textAlign: 'left' }}>
-            Only settings with working functionality are shown. Editor, AI,
-            terminal, and privacy settings arrive with their milestones.
+            Providers, models, agent, voice and privacy settings are in the
+            Settings editor tab.
           </p>
         </div>
       );

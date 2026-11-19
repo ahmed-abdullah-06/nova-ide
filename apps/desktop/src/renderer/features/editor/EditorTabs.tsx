@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Icon } from '../../components/ui/icons';
 import type { EditorTab } from '../../stores/tabsReducer';
 
 interface EditorTabsProps {
@@ -60,6 +61,13 @@ export function EditorTabs({
             }}
             title={tab.filePath ?? tab.name}
           >
+            {tab.kind === 'settings' ? (
+              <Icon
+                name="settings"
+                size={13}
+                className="editor-tab__icon"
+              />
+            ) : null}
             <span className="editor-tab__name">{tab.name}</span>
             {tab.isDirty && (
               <span
