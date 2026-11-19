@@ -1969,8 +1969,22 @@ async function main() {
     );
     check('the answer did not open a file', noFileWrite === true);
 
-    // Ctrl+, is the keyboard entry point for the same Settings tab.
-    await session.pressShortcut(',', 'Comma', 188, ['ctrl']);
+    // Ctrl+, is the keyboard entry point for the same Settings tab. Send the
+    // punctuation key with an explicit `text`, as a real Windows keyboard
+    // event does; CDP's modifier-only form is intermittently swallowed here.
+    const commaKey = {
+      key: ',',
+      code: 'Comma',
+      windowsVirtualKeyCode: 188,
+      nativeVirtualKeyCode: 188,
+      modifiers: 2, // ctrl
+    };
+    await session.send('Input.dispatchKeyEvent', {
+      ...commaKey,
+      type: 'keyDown',
+      text: ',',
+    });
+    await session.send('Input.dispatchKeyEvent', { ...commaKey, type: 'keyUp' });
     const settingsReopened = await waitFor(
       session,
       `document.querySelector('.editor-tab--settings.editor-tab--active') !== null &&
@@ -3051,6 +3065,10 @@ async function main() {
     check('Ctrl+N starts inline creation in the explorer', inlineCreate === true);
 
     // The Edit menu must use the focus target captured before the menu opened.
+    // Close any dropdown left by the previous checks and let React settle
+    // before the terminal takes focus.
+    await session.pressKey('Escape', 27);
+    await new Promise((resolve) => setTimeout(resolve, 150));
     await session.evaluate(
       `document.documentElement.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`,
     );
@@ -3065,7 +3083,16 @@ async function main() {
         return document.activeElement === area;
       })()`,
     );
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const terminalStillFocused = await session.evaluate(
+      `document.activeElement?.closest('.xterm') !== null`,
+    );
     await clickText(session, '.menu-bar__top', 'Edit');
+    await waitFor(
+      session,
+      `document.querySelector('.menu-bar__dropdown') !== null`,
+      2000,
+    );
     const editWithTerminal = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -3098,7 +3125,13 @@ async function main() {
         return document.activeElement === area;
       })()`,
     );
+    await new Promise((resolve) => setTimeout(resolve, 150));
     await clickText(session, '.menu-bar__top', 'Edit');
+    await waitFor(
+      session,
+      `document.querySelector('.menu-bar__dropdown') !== null`,
+      2000,
+    );
     const editWithField = await session.evaluate(
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
@@ -3115,6 +3148,7 @@ async function main() {
     check(
       'Edit menu uses the focus captured before it opened',
       terminalFocusedForMenu === true &&
+        terminalStillFocused === true &&
         editWithTerminal.undoDisabled === true &&
         (editWithTerminal.hint ?? '').includes('Focus a text field') &&
         editWithTerminal.copyDisabled === true &&
@@ -3123,6 +3157,7 @@ async function main() {
         editWithField.copyEnabled === true,
       JSON.stringify({
         terminalFocusedForMenu,
+        terminalStillFocused,
         editWithTerminal,
         fieldFocusedForMenu,
         editWithField,
