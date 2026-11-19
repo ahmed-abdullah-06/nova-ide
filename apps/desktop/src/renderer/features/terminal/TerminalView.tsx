@@ -53,8 +53,8 @@ export function TerminalView({
       theme: {
         background: '#111318',
         foreground: '#e5e7eb',
-        cursor: '#b9b1ff',
-        selectionBackground: '#7c6cff33',
+        cursor: '#8ad8ff',
+        selectionBackground: 'rgba(47, 155, 240, 0.25)',
       },
     });
     const fit = new FitAddon();

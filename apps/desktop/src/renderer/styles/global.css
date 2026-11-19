@@ -13,8 +13,8 @@ body,
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-text);
+  background: var(--surface-app);
+  color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
@@ -39,8 +39,8 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: -1px;
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 ::selection {
@@ -49,13 +49,13 @@ button:disabled {
 
 /* Restrained scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: 5px;
+  background: var(--border-strong);
+  border-radius: calc(var(--scrollbar-size) / 2);
   border: 2px solid transparent;
   background-clip: content-box;
 }

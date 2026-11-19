@@ -59,16 +59,6 @@
   flex: 1;
 }
 
-.activity-bar__badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-faint);
-}
-
 /* ---------- Sidebar ---------- */
 
 .sidebar {
@@ -129,10 +119,6 @@
 
 .sidebar__row svg {
   flex: none;
-  color: var(--color-faint);
-}
-
-.sidebar__row--muted {
   color: var(--color-faint);
 }
 
@@ -290,12 +276,6 @@
 }
 
 .ai-panel__input::placeholder {
-  color: var(--color-faint);
-}
-
-.ai-panel__hint {
-  margin-top: 6px;
-  font-size: 11px;
   color: var(--color-faint);
 }
 

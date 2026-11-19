@@ -1,51 +1,54 @@
 /**
- * A6 design tokens (spec §6.2).
- * Dark theme is the default; light theme overrides the same variables.
+ * A6 design tokens.
+ *
+ * New `ui-*` names are the foundation for the shared primitives and the
+ * polished layout. The old `--color-*` names remain as aliases until the
+ * layout sub-steps migrate; this keeps U1 appearance-only and non-breaking.
  */
 
 :root {
   color-scheme: dark;
 
   /* Surfaces */
-  --color-background: #111318;
-  --color-sidebar: #171a21;
-  --color-panel: #1c2029;
-  --color-activitybar: #14171d;
-  --color-input: #22262f;
+  --surface-app: #111318;
+  --surface-sidebar: #171a21;
+  --surface-panel: #1c2029;
+  --surface-input: #22262f;
+  --surface-raised: #262b35;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-active: rgba(255, 255, 255, 0.09);
 
   /* Lines */
-  --color-border: #2b303b;
-  --color-border-strong: #3a4050;
+  --border: #2b303b;
+  --border-strong: #3a4050;
 
   /* Text */
-  --color-text: #e5e7eb;
-  --color-muted: #9299a6;
-  --color-faint: #6b7280;
+  --text: #e5e7eb;
+  --text-muted: #9aa3af;
+  --text-faint: #6f7784;
 
-  /* Accent */
-  --color-accent: #7c6cff;
-  --color-accent-soft: rgba(124, 108, 255, 0.16);
-  --color-accent-text: #b9b1ff;
+  /* Accent — sampled from a6-logo.svg */
+  --accent: #2f9bf0;
+  --accent-hover: #4aa8f4;
+  --accent-pressed: #1a63d6;
+  --accent-soft: rgba(47, 155, 240, 0.16);
+  --accent-text: #8ad8ff;
 
   /* Semantic */
-  --color-danger: #e5484d;
-  --color-warning: #e2a336;
-  --color-success: #46a758;
+  --danger: #e5484d;
+  --warning: #e2a336;
+  --success: #46a758;
 
-  /* Tab / list states */
-  --color-tab-active: #1c2029;
-  --color-tab-inactive: transparent;
-  --color-hover: rgba(255, 255, 255, 0.05);
-  --color-active: rgba(255, 255, 255, 0.09);
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
 
-  /* Layout metrics */
-  --sidebar-width: 260px;
-  --activitybar-width: 52px;
-  --statusbar-height: 24px;
-  --menubar-height: 30px;
-  --ai-panel-width: 320px;
-  --bottompanel-height: 200px;
-  --tab-height: 36px;
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
 
   /* Typography */
   --font-ui:
@@ -55,39 +58,96 @@
     'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
   --font-size-base: 13px;
   --font-size-small: 12px;
-  --line-height-base: 1.5;
+  --font-size-code: 12px;
+  --line-height-base: 1.45;
 
-  /* Effects (restrained, spec §6.2) */
-  --radius: 4px;
+  /* Controls and rows */
+  --row-height: 24px;
+  --row-height-lg: 28px;
+  --control-height: 26px;
+  --control-height-lg: 32px;
+  --titlebar-height: 32px;
+  --statusbar-height: 24px;
+  --scrollbar-size: 8px;
+
+  /* Motion */
   --transition: 120ms ease;
+
+  /* Legacy aliases — retained for existing layout rules */
+  --color-background: var(--surface-app);
+  --color-sidebar: var(--surface-sidebar);
+  --color-panel: var(--surface-panel);
+  --color-activitybar: var(--surface-sidebar);
+  --color-input: var(--surface-input);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-tab-active: var(--surface-panel);
+  --color-tab-inactive: transparent;
+  --color-hover: var(--surface-hover);
+  --color-active: var(--surface-active);
+  --sidebar-width: 260px;
+  --activitybar-width: 52px;
+  --menubar-height: 30px;
+  --ai-panel-width: 320px;
+  --bottompanel-height: 200px;
+  --tab-height: 36px;
+  --radius: var(--radius-sm);
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --color-background: #f4f5f7;
-  --color-sidebar: #eceef1;
-  --color-panel: #ffffff;
-  --color-activitybar: #e7e9ed;
-  --color-input: #ffffff;
+  --surface-app: #ffffff;
+  --surface-sidebar: #f3f4f6;
+  --surface-panel: #f8f9fb;
+  --surface-input: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --surface-active: rgba(0, 0, 0, 0.09);
 
-  --color-border: #d5d8dd;
-  --color-border-strong: #b9bec7;
+  --border: #d7dce3;
+  --border-strong: #b8c0cc;
 
-  --color-text: #1f2328;
-  --color-muted: #5b6270;
-  --color-faint: #808795;
+  --text: #1f2328;
+  --text-muted: #5b6270;
+  --text-faint: #7a8290;
 
-  --color-accent: #5b4fd6;
-  --color-accent-soft: rgba(91, 79, 214, 0.12);
-  --color-accent-text: #4b3fc4;
+  --accent: #1a63d6;
+  --accent-hover: #2f7be8;
+  --accent-pressed: #124bae;
+  --accent-soft: rgba(26, 99, 214, 0.12);
+  --accent-text: #0f4fa8;
 
-  --color-danger: #cd2b31;
-  --color-warning: #8f6416;
-  --color-success: #2f7d3c;
+  --danger: #cd2b31;
+  --warning: #8f6416;
+  --success: #2f7d3c;
 
-  --color-tab-active: #ffffff;
-  --color-tab-inactive: transparent;
-  --color-hover: rgba(0, 0, 0, 0.05);
-  --color-active: rgba(0, 0, 0, 0.09);
+  --color-background: var(--surface-app);
+  --color-sidebar: var(--surface-sidebar);
+  --color-panel: var(--surface-panel);
+  --color-activitybar: var(--surface-sidebar);
+  --color-input: var(--surface-input);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-tab-active: var(--surface-panel);
+  --color-hover: var(--surface-hover);
+  --color-active: var(--surface-active);
 }
