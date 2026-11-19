@@ -14,17 +14,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
 import { Icon } from '../../components/ui/icons';
 import { IconButton } from '../../components/ui/IconButton';
+import { useTabs } from '../../stores/tabs';
 import { AgentPanel } from '../agent/AgentPanel';
 import { useAgent } from '../agent/useAgent';
+import { useAiContext } from './AiContext';
 import { MessageList } from './MessageList';
-import { ProviderSettings } from './ProviderSettings';
-import { useAi, type Attachment } from './useAi';
+import { type Attachment } from './useAi';
 import { useConversations } from './useConversations';
 import { insertTranscript } from '../voice/composer';
 import { useSpeech } from '../voice/useSpeech';
 import { useVoiceInput } from '../voice/useVoiceInput';
-import { useVoiceSettings } from '../voice/useVoiceSettings';
-import { VoiceSettingsPanel } from '../voice/VoiceSettingsPanel';
+import { useVoiceSettingsContext } from '../voice/VoiceSettingsContext';
 
 export interface AiPanelProps {
   /** True when a workspace is open (the context needs one). */
@@ -49,10 +49,11 @@ export function AiPanel({
   selection,
   visible,
 }: AiPanelProps): React.JSX.Element {
-  const ai = useAi();
+  const ai = useAiContext();
   const agent = useAgent();
   const conversations = useConversations();
-  const voiceSettings = useVoiceSettings();
+  const tabs = useTabs();
+  const voiceSettings = useVoiceSettingsContext();
   const voice = useVoiceInput({
     settings: voiceSettings.settings,
     onTranscript: (text) => {
@@ -65,7 +66,6 @@ export function AiPanel({
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [input, setInput] = useState('');
   const [title, setTitle] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
   const [approveCloud, setApproveCloud] = useState(false);
   const [agentApproveCloud, setAgentApproveCloud] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
@@ -254,9 +254,7 @@ export function AiPanel({
           className="ai-panel__settings-button"
           icon={<Icon name="settings" size={15} />}
           size="sm"
-          active={showSettings}
-          aria-expanded={showSettings}
-          onClick={() => setShowSettings((current) => !current)}
+          onClick={tabs.openSettings}
         />
       </div>
 
@@ -319,23 +317,6 @@ export function AiPanel({
           A large model needs a lot of memory and is slow on a machine
           without a dedicated GPU. A smaller model answers faster.
         </p>
-      ) : null}
-
-      {showSettings ? (
-        <>
-          <ProviderSettings
-            providers={ai.providers}
-            status={ai.status}
-            onRefresh={ai.refresh}
-            onModelsChanged={ai.refresh}
-            localOnly={ai.localOnly}
-            onLocalOnlyChange={ai.setLocalOnly}
-          />
-          <VoiceSettingsPanel
-            state={voiceSettings}
-            localOnly={ai.localOnly}
-          />
-        </>
       ) : null}
 
       {mode === 'chat' ? (

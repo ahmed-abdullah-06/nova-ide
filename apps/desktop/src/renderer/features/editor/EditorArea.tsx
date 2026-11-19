@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useTabs } from '../../stores/tabs';
 import type { Theme } from '../../hooks/useTheme';
+import { SettingsView } from '../settings/SettingsView';
 import { disposeModel } from './modelRegistry';
 import { EditorTabs } from './EditorTabs';
 import { MonacoEditor } from './MonacoEditor';
@@ -23,6 +24,7 @@ export function EditorArea({
   const { state, dispatch } = useTabs();
   const activeTab =
     state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
+  const settingsActive = activeTab?.kind === 'settings';
 
   const handleActivate = (id: string): void => {
     dispatch({ type: 'activate', id });
@@ -52,13 +54,17 @@ export function EditorArea({
         onClose={handleClose}
         onNew={handleNew}
       />
-      <MonacoEditor
-        tab={activeTab}
-        theme={theme}
-        onChange={handleChange}
-        onCursorChange={onCursorChange}
-        onSelectionChange={onSelectionChange}
-      />
+      {settingsActive ? (
+        <SettingsView />
+      ) : (
+        <MonacoEditor
+          tab={activeTab}
+          theme={theme}
+          onChange={handleChange}
+          onCursorChange={onCursorChange}
+          onSelectionChange={onSelectionChange}
+        />
+      )}
     </div>
   );
 }

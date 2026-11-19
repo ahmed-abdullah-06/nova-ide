@@ -331,7 +331,8 @@ export function useFileOperations(): FileOperations {
 
   const saveActive = useCallback(async (): Promise<void> => {
     const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
-    if (tab !== undefined) {
+    // The Settings tab is a view, not a file buffer.
+    if (tab !== undefined && tab.kind !== 'settings') {
       await saveTab(tab);
     }
   }, [saveTab, tabsState]);
@@ -339,7 +340,7 @@ export function useFileOperations(): FileOperations {
   const saveAll = useCallback(async (): Promise<void> => {
     // Sequential: each save rechecks the on-disk mtime before writing.
     for (const tab of tabsState.tabs) {
-      if (tab.isDirty) {
+      if (tab.isDirty && tab.kind !== 'settings') {
         await saveTab(tab);
       }
     }
@@ -347,7 +348,7 @@ export function useFileOperations(): FileOperations {
 
   const saveAsActive = useCallback(async (): Promise<void> => {
     const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
-    if (tab === undefined || !window.nova) {
+    if (tab === undefined || tab.kind === 'settings' || !window.nova) {
       return;
     }
     if (tab.origin === 'external') {

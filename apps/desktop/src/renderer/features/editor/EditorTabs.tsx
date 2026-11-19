@@ -41,7 +41,9 @@ export function EditorTabs({
             role="tab"
             aria-selected={active}
             tabIndex={active ? 0 : -1}
-            className={`editor-tab${active ? ' editor-tab--active' : ''}`}
+            className={`editor-tab${active ? ' editor-tab--active' : ''}${
+              tab.kind === 'settings' ? ' editor-tab--settings' : ''
+            }`}
             onClick={() => onActivate(tab.id)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {

@@ -1385,7 +1385,7 @@ async function main() {
     // The number of open tabs before the chat (the answer must not
     // change it).
     const tabsBeforeChat = await session.evaluate(
-      `document.querySelectorAll('.editor-tab').length`,
+      `document.querySelectorAll('.editor-tab:not(.editor-tab--settings)').length`,
     );
 
     // The application only knows the mock service: the address was
@@ -1416,8 +1416,8 @@ async function main() {
     // The chat panel must be able to talk to a provider. The harness
     // hosts a mock of the local Ollama service.
 
-    // The address is changed through the settings of the panel, the way a
-    // user would do it.
+    // The AI panel gear opens the Settings editor tab, where the address
+    // is changed the way a user would do it.
     const settingsOpened = await session.evaluate(
       `(() => {
         const button = document.querySelector('.ai-panel__settings-button');
@@ -1427,6 +1427,14 @@ async function main() {
       })()`,
     );
     check('the provider settings can be opened', settingsOpened === true);
+
+    const settingsTabOpened = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--settings.editor-tab--active') !== null &&
+       document.querySelector('.settings-view') !== null`,
+      10000,
+    );
+    check('the Settings editor tab is opened', settingsTabOpened === true);
 
     const settingsRendered = await waitFor(
       session,
@@ -1845,6 +1853,27 @@ async function main() {
       String(localBadge),
     );
 
+    // The Settings tab is a real editor tab. Close it so a file buffer is
+    // active for the context and editor checks below.
+    const settingsCloseClicked = await session.evaluate(
+      `(() => {
+        const tab = document.querySelector('.editor-tab--settings');
+        const close = tab?.querySelector('.editor-tab__close');
+        if (close === null || close === undefined) return false;
+        close.click();
+        return true;
+      })()`,
+    );
+    const settingsClosedForEditor = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--settings') === null`,
+      5000,
+    );
+    check(
+      'the Settings tab closes back to the editor',
+      settingsCloseClicked === true && settingsClosedForEditor === true,
+    );
+
     // The current file can be attached as context, and the panel shows
     // what will be sent.
     const attached = await session.evaluate(
@@ -1936,9 +1965,19 @@ async function main() {
     // The answer must not be written into a file (that is Milestone 5):
     // the number of open tabs must not change.
     const noFileWrite = await session.evaluate(
-      `(() => document.querySelectorAll('.editor-tab').length === ${tabsBeforeChat})()`,
+      `(() => document.querySelectorAll('.editor-tab:not(.editor-tab--settings)').length === ${tabsBeforeChat})()`,
     );
     check('the answer did not open a file', noFileWrite === true);
+
+    // Ctrl+, is the keyboard entry point for the same Settings tab.
+    await session.pressShortcut(',', 'Comma', 188, ['ctrl']);
+    const settingsReopened = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--settings.editor-tab--active') !== null &&
+       document.querySelector('.voice-settings') !== null`,
+      10000,
+    );
+    check('the Settings tab opens with Ctrl+,', settingsReopened === true);
 
     // --- Voice assistant (Milestone 8) --------------------------------
     //
@@ -2280,6 +2319,26 @@ async function main() {
         .then((s) => s.enabled === false && s.engine === 'none')`,
     );
     check('the voice settings are restored after verification', voiceRestored === true);
+
+    // Return to a file editor before the agent and editor-keyboard checks.
+    const settingsCloseAgainClicked = await session.evaluate(
+      `(() => {
+        const tab = document.querySelector('.editor-tab--settings');
+        const close = tab?.querySelector('.editor-tab__close');
+        if (close === null || close === undefined) return false;
+        close.click();
+        return true;
+      })()`,
+    );
+    const settingsClosedAgain = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--settings') === null`,
+      5000,
+    );
+    check(
+      'the Settings tab closes after the voice checks',
+      settingsCloseAgainClicked === true && settingsClosedAgain === true,
+    );
 
     // The agent mode of the AI panel.
     const agentTab = await session.evaluate(

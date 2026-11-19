@@ -88,7 +88,7 @@ export interface CommandsContextValue {
 const CommandsContext = createContext<CommandsContextValue | null>(null);
 
 export function CommandProvider({ children }: { children: ReactNode }): ReactNode {
-  const { state: tabsState, dispatch: tabsDispatch } = useTabs();
+  const { state: tabsState, dispatch: tabsDispatch, openSettings } = useTabs();
   const { state: workspaceState, dispatch: workspaceDispatch } = useWorkspace();
   const ui = useUi();
   const fileOps = useFileOperations();
@@ -139,6 +139,10 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         ) {
           tabsDispatch({ type: 'close', id: tab.id });
         }
+      },
+      openSettings: () => {
+        ui.showActivity('settings');
+        openSettings();
       },
       exitApp: () =>
         nova === undefined
@@ -206,7 +210,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       },
       showAbout: () => setDialog('about'),
     }),
-    [fileOps, nova, notify, openFolder, openFromDialog, setWindowState, tabsDispatch, tabsState, ui],
+    [fileOps, nova, notify, openFolder, openFromDialog, openSettings, setWindowState, tabsDispatch, tabsState, ui],
   );
 
   const buildContext = useCallback(
@@ -222,6 +226,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
           isDirty: tab.isDirty,
           origin: tab.origin,
           externalGrantId: tab.externalGrantId,
+          kind: tab.kind,
         })),
         activeTabId: tabsState.activeTabId,
         hasWorkspace: workspaceState.workspace !== null,

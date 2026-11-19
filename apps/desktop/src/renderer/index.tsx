@@ -11,6 +11,7 @@ import './styles/explorer.css';
 import './styles/panels.css';
 import './styles/ai.css';
 import './styles/agent.css';
+import './styles/settings.css';
 
 const container = document.getElementById('root');
 if (!container) {

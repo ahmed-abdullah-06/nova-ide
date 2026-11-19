@@ -33,6 +33,8 @@ export interface CommandTab {
   isDirty: boolean;
   origin: 'workspace' | 'external';
   externalGrantId?: string;
+  /** The Settings tab is a real editor tab but has no file buffer. */
+  kind?: 'file' | 'settings';
 }
 
 export type BottomPanelTab = 'terminal' | 'problems' | 'output';
@@ -59,6 +61,8 @@ export interface CommandServices {
   saveAsActive(): void | Promise<void>;
   saveAll(): void | Promise<void>;
   closeActiveTab(): void | Promise<void>;
+  /** Opens the Settings editor tab (Ctrl+,). Not exposed in the menu. */
+  openSettings(): void | Promise<void>;
   exitApp(): void | Promise<void>;
   undo(): void | Promise<void>;
   redo(): void | Promise<void>;

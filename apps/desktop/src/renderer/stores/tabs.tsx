@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useReducer,
@@ -39,6 +40,8 @@ function createInitialTabsState(): TabsState {
 interface TabsContextValue {
   state: TabsState;
   dispatch: Dispatch<TabsAction>;
+  /** Opens (or focuses) the one Settings editor tab. */
+  openSettings: () => void;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -49,7 +52,13 @@ export function TabsProvider({ children }: { children: ReactNode }): ReactNode {
     initialTabsState,
     createInitialTabsState,
   );
-  const value = useMemo(() => ({ state, dispatch }), [state]);
+  const openSettings = useCallback(() => {
+    dispatch({ type: 'open-settings' });
+  }, []);
+  const value = useMemo(
+    () => ({ state, dispatch, openSettings }),
+    [state, openSettings],
+  );
   return <TabsContext.Provider value={value}>{children}</TabsContext.Provider>;
 }
 

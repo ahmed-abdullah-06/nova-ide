@@ -14,8 +14,6 @@ import type {
   ProviderDescriptor,
   ProviderStatus,
 } from '../../../shared/ai-types';
-import { LocalModels } from './LocalModels';
-
 export interface ProviderSettingsProps {
   /** The providers. */
   providers: ProviderDescriptor[];
@@ -24,16 +22,12 @@ export interface ProviderSettingsProps {
   /** Re-reads the providers. */
   onRefresh: () => void;
   /**
-   * Called when the list of the installed models changed.
+   * Called when the provider settings changed.
    *
-   * The chat reads its models again, so a model that was just
-   * downloaded appears in the list without a restart.
+   * A different address can offer different models, so the Models section
+   * re-reads its catalog without a restart.
    */
   onModelsChanged?: () => void;
-  /** True when nothing may leave this machine. */
-  localOnly?: boolean;
-  /** Switches the local-only mode on or off. */
-  onLocalOnlyChange?: (enabled: boolean) => void;
 }
 
 /** The providers the application knows. */
@@ -61,8 +55,6 @@ export function ProviderSettings({
   status,
   onRefresh,
   onModelsChanged,
-  localOnly = false,
-  onLocalOnlyChange,
 }: ProviderSettingsProps): React.JSX.Element {
   const [key, setKey] = useState('');
   const [address, setAddress] = useState('');
@@ -73,19 +65,11 @@ export function ProviderSettings({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  /**
-   * Counts the refreshes of the providers.
-   *
-   * The models are read again when the address of the provider changed:
-   * a different service can offer other models.
-   */
-  const [revision, setRevision] = useState(0);
-
-  /** Reads the providers again and the models with them. */
+  /** Re-reads the providers and tells the Models section to refresh. */
   const handleRefresh = useCallback((): void => {
-    setRevision((current) => current + 1);
     onRefresh();
-  }, [onRefresh]);
+    onModelsChanged?.();
+  }, [onModelsChanged, onRefresh]);
 
   /** The provider whose settings are shown. */
   const selected =
@@ -263,44 +247,37 @@ export function ProviderSettings({
         </label>
       ) : null}
 
-      <label className="ai-settings__confirm ai-settings__confirm--local-only">
-        <input
-          type="checkbox"
-          aria-label="Local-only mode"
-          checked={localOnly}
-          onChange={(event) => onLocalOnlyChange?.(event.target.checked)}
-        />
-        Local-only mode: no cloud provider and no cloud voice service may be
-        used. The rule is enforced in the main process.
-      </label>
-
       <div className="ai-settings__row">
-        <input
-          type="password"
-          className="ai-settings__key"
-          placeholder="API key"
-          aria-label="API key"
-          autoComplete="off"
-          value={key}
-          disabled={busy}
-          onChange={(event) => setKey(event.target.value)}
-        />
-        <button
-          type="button"
-          className="ai-settings__action"
-          onClick={() => void handleSaveKey()}
-          disabled={busy || key.trim().length === 0}
-        >
-          Save key
-        </button>
-        <button
-          type="button"
-          className="ai-settings__action"
-          onClick={() => void handleClearKey()}
-          disabled={busy}
-        >
-          Remove key
-        </button>
+        {selected?.kind === 'cloud' || selected?.hasKey === true ? (
+          <>
+            <input
+              type="password"
+              className="ai-settings__key"
+              placeholder="API key"
+              aria-label="API key"
+              autoComplete="off"
+              value={key}
+              disabled={busy}
+              onChange={(event) => setKey(event.target.value)}
+            />
+            <button
+              type="button"
+              className="ai-settings__action"
+              onClick={() => void handleSaveKey()}
+              disabled={busy || key.trim().length === 0}
+            >
+              Save key
+            </button>
+            <button
+              type="button"
+              className="ai-settings__action"
+              onClick={() => void handleClearKey()}
+              disabled={busy}
+            >
+              Remove key
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className="ai-settings__action"
@@ -327,7 +304,6 @@ export function ProviderSettings({
         </p>
       ) : null}
 
-      <LocalModels onModelsChanged={onModelsChanged} revision={revision} />
     </section>
   );
 }

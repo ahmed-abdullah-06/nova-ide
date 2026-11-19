@@ -1,0 +1,132 @@
+/**
+ * The Settings editor tab (A6 UI review, step U4).
+ *
+ * A calm, scrollable settings page in the editor area. The nested provider,
+ * model, agent and voice controls keep their existing classes; this file
+ * only provides the page frame, section rhythm and a readable measure.
+ */
+
+.settings-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) clamp(var(--space-4), 5vw, 64px) 64px;
+  background: var(--surface-app);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+}
+
+.settings-view__header {
+  max-width: 880px;
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-view__title {
+  margin: 0 0 var(--space-1);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.settings-view__intro,
+.settings-view__section-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.settings-view__section {
+  max-width: 880px;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.settings-view__section-title {
+  margin: 0 0 var(--space-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-view__section-note {
+  margin-bottom: var(--space-3);
+}
+
+/* The nested controls were designed for the narrow AI panel. On the wide
+   page they keep their behaviour but lose their panel-only chrome. */
+.settings-view__section .ai-settings,
+.settings-view__section .voice-settings,
+.settings-view__section .ai-models,
+.settings-view__section .agent-panel__permissions {
+  padding: var(--space-2) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+
+.settings-view__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+}
+
+.settings-view__fact {
+  min-width: 220px;
+}
+
+.settings-view__fact dt {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+.settings-view__fact dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+}
+
+.settings-view__privacy-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  cursor: pointer;
+}
+
+.settings-view__privacy-toggle:hover {
+  border-color: var(--border-strong);
+}
+
+.settings-view__privacy-toggle input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.settings-view__privacy-toggle strong {
+  display: block;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.settings-view__privacy-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+/* Light theme keeps the same hierarchy with a white page surface. */
+:root[data-theme='light'] .settings-view {
+  background: var(--surface-app);
+}

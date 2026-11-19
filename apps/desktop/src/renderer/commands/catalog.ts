@@ -32,6 +32,8 @@ export const COMMAND_IDS = {
   toggleSearch: 'a6.view.toggleSearch',
   toggleSourceControl: 'a6.view.toggleSourceControl',
   toggleAiPanel: 'a6.view.toggleAiPanel',
+  /** Registered for Ctrl+, only; deliberately absent from the menu. */
+  openSettings: 'a6.view.openSettings',
   toggleTerminal: 'a6.view.toggleTerminal',
   zoomIn: 'a6.view.zoomIn',
   zoomOut: 'a6.view.zoomOut',
@@ -72,7 +74,10 @@ function outsideTerminal(spec: KeybindingSpec): KeybindingSpec {
 }
 
 function active(context: CommandContext): boolean {
-  return context.activeTabId !== null;
+  return (
+    context.activeTabId !== null &&
+    activeTab(context)?.kind !== 'settings'
+  );
 }
 
 function activeTab(context: CommandContext) {
@@ -352,6 +357,15 @@ export function createCommandDefinitions(): CommandDefinition[] {
       keybindings: all(outsideTerminal(primary('KeyL'))),
       run: (context) => context.services.toggleAiPanel(),
       checked: (context) => context.aiPanelVisible,
+    },
+    {
+      id: COMMAND_IDS.openSettings,
+      title: 'Open Settings',
+      category: 'View',
+      // The menu stays exactly as reviewed; Ctrl+, is the only entry point
+      // for this command besides the gear buttons.
+      keybindings: all(primary('Comma')),
+      run: (context) => context.services.openSettings(),
     },
     {
       id: COMMAND_IDS.toggleTerminal,

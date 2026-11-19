@@ -19,7 +19,16 @@ export interface EditorTab {
   externalGrantId?: string;
   /** Disk modification time from the last read/save; null for untitled. */
   mtimeMs: number | null;
+  /**
+   * The kind of editor view. File buffers omit it and keep the historic
+   * behaviour; the Settings tab is a real, closable editor tab that shows
+   * the settings view instead of a Monaco buffer.
+   */
+  kind?: 'file' | 'settings';
 }
+
+/** Stable id of the single Settings editor tab. */
+export const SETTINGS_TAB_ID = 'settings';
 
 export interface TabsState {
   tabs: EditorTab[];
@@ -41,6 +50,8 @@ export type TabsAction =
       mtimeMs?: number | null;
     }
   | { type: 'new-untitled'; language: string }
+  /** Opens (or focuses) the one Settings editor tab. */
+  | { type: 'open-settings' }
   | { type: 'close'; id: string }
   | { type: 'activate'; id: string }
   | { type: 'update-content'; id: string; content: string }
@@ -124,6 +135,29 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         tabs: [...state.tabs, newTab],
         activeTabId: newTab.id,
         untitledCounter: number,
+      };
+    }
+
+    case 'open-settings': {
+      const existing = state.tabs.find((tab) => tab.id === SETTINGS_TAB_ID);
+      if (existing !== undefined) {
+        return { ...state, activeTabId: SETTINGS_TAB_ID };
+      }
+      const settingsTab: EditorTab = {
+        id: SETTINGS_TAB_ID,
+        name: 'Settings',
+        language: '',
+        content: '',
+        isDirty: false,
+        filePath: null,
+        origin: 'workspace',
+        mtimeMs: null,
+        kind: 'settings',
+      };
+      return {
+        ...state,
+        tabs: [...state.tabs, settingsTab],
+        activeTabId: SETTINGS_TAB_ID,
       };
     }
 

@@ -10,12 +10,14 @@ import { useExternalFileChanges } from '../features/workspace/hooks/useExternalF
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ActivityBar } from '../components/layout/ActivityBar';
 import { AiPanel } from '../features/ai/AiPanel';
+import { AiProvider } from '../features/ai/AiContext';
 import { BottomPanel } from '../components/layout/BottomPanel';
 import { TitleBar } from '../components/layout/TitleBar';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
 import { TerminalPanel } from '../features/terminal/TerminalPanel';
+import { VoiceSettingsProvider } from '../features/voice/VoiceSettingsContext';
 import { ProblemsPanel } from '../features/problems/ProblemsPanel';
 import { TaskOutputPanel } from '../features/tasks/TaskOutputPanel';
 import { useTasks } from '../features/tasks/useTasks';
@@ -34,7 +36,7 @@ interface CursorPosition {
  */
 function Workspace(): ReactNode {
   const { theme, toggleTheme } = useTheme();
-  const { state, dispatch } = useTabs();
+  const { state, dispatch, openSettings } = useTabs();
   const { state: workspaceState } = useWorkspace();
   const workspaceActions = useWorkspaceActions();
   const ui = useUi();
@@ -109,10 +111,19 @@ function Workspace(): ReactNode {
 
   const activeTab =
     state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
+  const settingsActive = activeTab?.kind === 'settings';
+  /** The Settings tab is not a file buffer and has no editor context. */
+  const fileTab = settingsActive ? null : activeTab;
+
+  /** One entry point for the gear and Ctrl+,: open the Settings tab. */
+  const handleOpenSettings = (): void => {
+    ui.showActivity('settings');
+    openSettings();
+  };
 
   const handleLanguageChange = (language: string): void => {
-    if (activeTab) {
-      dispatch({ type: 'set-language', id: activeTab.id, language });
+    if (fileTab) {
+      dispatch({ type: 'set-language', id: fileTab.id, language });
     }
   };
 
@@ -139,11 +150,17 @@ function Workspace(): ReactNode {
         }
         aiPanelVisible={ui.aiPanelVisible}
         onToggleAiPanel={ui.toggleAiPanel}
-        onOpenSettings={() => ui.showActivity('settings')}
+        onOpenSettings={handleOpenSettings}
       />
       <ActivityBar
         active={ui.activity}
-        onSelect={(id) => ui.showActivity(id)}
+        onSelect={(id) => {
+          if (id === 'settings') {
+            handleOpenSettings();
+          } else {
+            ui.showActivity(id);
+          }
+        }}
       />
       <Sidebar
         activity={ui.activity}
@@ -199,19 +216,19 @@ function Workspace(): ReactNode {
       <AiPanel
         hasWorkspace={hasWorkspace}
         activeFile={
-          activeTab !== null
+          fileTab !== null
             ? {
-                path: activeTab.id,
-                name: activeTab.name,
-                sizeBytes: activeTab.content.length,
+                path: fileTab.id,
+                name: fileTab.name,
+                sizeBytes: fileTab.content.length,
               }
             : null
         }
         selection={
-          selection !== null && activeTab !== null
+          selection !== null && fileTab !== null
             ? {
-                path: activeTab.id,
-                name: activeTab.name,
+                path: fileTab.id,
+                name: fileTab.name,
                 sizeBytes: 0,
                 startLine: selection.startLine,
                 endLine: selection.endLine,
@@ -221,9 +238,9 @@ function Workspace(): ReactNode {
         visible={ui.aiPanelVisible}
       />
       <StatusBar
-        language={activeTab?.language ?? null}
+        language={settingsActive ? null : (fileTab?.language ?? null)}
         onLanguageChange={handleLanguageChange}
-        cursor={cursor}
+        cursor={settingsActive ? { line: 1, column: 1 } : cursor}
         theme={theme}
         onToggleTheme={toggleTheme}
         appInfo={appInfo}
@@ -240,9 +257,13 @@ export function App(): ReactNode {
     <TabsProvider>
       <WorkspaceProvider>
         <UiProvider>
-          <CommandProvider>
-            <Workspace />
-          </CommandProvider>
+          <AiProvider>
+            <VoiceSettingsProvider>
+              <CommandProvider>
+                <Workspace />
+              </CommandProvider>
+            </VoiceSettingsProvider>
+          </AiProvider>
         </UiProvider>
       </WorkspaceProvider>
     </TabsProvider>
