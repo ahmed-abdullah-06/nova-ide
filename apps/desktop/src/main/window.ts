@@ -1,4 +1,5 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import {
   IpcPushChannels,
@@ -36,6 +37,22 @@ function isAllowedNavigationUrl(url: string): boolean {
 }
 
 /**
+ * Resolves the committed A6 icon in both layouts:
+ *  - packaged: `extraResource` places it at `resources/a6.ico`,
+ *  - dev: `__dirname` is `apps/desktop/.vite/build`, two levels below the icon.
+ * Every candidate is checked because Electron's start mode can change which
+ * one exists; an absent icon must never stop the window from opening.
+ */
+function resolveAppIcon(): string | undefined {
+  const candidates = [
+    path.join(process.resourcesPath, 'a6.ico'),
+    path.join(__dirname, '..', '..', 'icons', 'a6.ico'),
+    path.join(app.getAppPath(), 'icons', 'a6.ico'),
+  ];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+/**
  * Creates the main application window with the hardened settings required by
  * the security specification (spec §19.1):
  *
@@ -55,6 +72,9 @@ export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserW
     show: false,
     backgroundColor: '#111318',
     title: 'A6',
+    // Windows uses this for the window, Alt+Tab and the taskbar button. The
+    // packaged executable keeps the icon already set by packagerConfig.
+    icon: resolveAppIcon(),
     // The renderer draws one title/menu row. Hide the native title bar and
     // let Windows draw the minimise/maximise/close overlay buttons on top of
     // it. The colours match the default dark theme tokens.

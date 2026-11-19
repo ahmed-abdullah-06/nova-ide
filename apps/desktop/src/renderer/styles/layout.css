@@ -33,6 +33,13 @@
   color: var(--accent);
 }
 
+.title-bar__brand img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  user-select: none;
+}
+
 .title-bar__title {
   min-width: 0;
   max-width: 40%;

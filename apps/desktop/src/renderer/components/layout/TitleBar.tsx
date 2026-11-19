@@ -7,6 +7,7 @@
  * far right; `title-bar__actions` reserves space for them in CSS.
  */
 import type { ReactNode } from 'react';
+import a6Mark from '../../../../icons/a6-32.png';
 import type { MenuSection } from '../../commands/menuModel';
 import { Icon } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
@@ -39,7 +40,7 @@ export function TitleBar({
   return (
     <header className="title-bar">
       <span className="title-bar__brand" aria-hidden="true">
-        <Icon name="app" size={18} />
+        <img src={a6Mark} alt="" width={18} height={18} draggable={false} />
       </span>
       <MenuBar
         sections={sections}

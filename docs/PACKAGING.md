@@ -58,7 +58,18 @@ The application icon is generated from the committed root SVG sources by
 16/24/32/48 px, the full SVG feeds 64/128/256 px, and `apps/desktop/icons/a6.ico`
 wraps all seven PNG-compressed entries. The generator is committed, uses the
 bundled Electron/Chromium as the rasterizer (no new image dependency), and the
-SVG sources are left unchanged. The ICO is wired through `packagerConfig.icon`.
+SVG sources are left unchanged.
+
+The ICO is wired through `packagerConfig.icon` and copied as an Electron Forge
+extra resource (`extraResource: ['icons/a6.ico']`) to `resources/a6.ico` outside
+the ASAR. The main process resolves that file in both layouts and passes it as
+the `BrowserWindow` `icon` so the window, Alt+Tab and taskbar button show the A6
+mark in development and packaged builds (`apps/desktop/src/main/window.ts`).
+Because development runs inside Electron’s own executable, the main process sets
+a dev-only App User Model ID (`A6.IDE.Dev`) before `ready`
+(`apps/desktop/src/main/index.ts`); the packaged/Squirrel AppUserModelID is not
+overridden. The renderer title row displays the generated A6 mark from
+`apps/desktop/icons/a6-32.png`.
 
 **Profile survival across the rename.** Electron derives `userData` from the
 product name, so renaming to A6 would otherwise strand every existing setting,
@@ -89,9 +100,15 @@ These files are build output and are **not committed**.
 ## 4. What was actually verified
 
 `pnpm verify:packaging` (script: `tools/verify/packaging.mjs`) drives the real
-packaged build and passed **26/26** checks:
+packaged build and includes checks for:
 
 - exe and nuspec metadata match the product (above);
+- the generated A6 icon is shipped as the packaged extra resource
+  `resources/a6.ico`, matching the committed source icon;
+- when installed Start Menu/Desktop shortcuts are present on the machine, their
+  extracted icon is compared to the generated A6 mark rather than Electron’s icon
+  (raw icon bytes are not compared because Windows uses resampled icon sizes);
+  this check is skipped when no installed A6 shortcut is found;
 - the app launches from a **fresh path whose name contains spaces** (like a
   real per-user install) — no hard-coded install location;
 - a **completely fresh profile** (no Ollama running, no local models, no API

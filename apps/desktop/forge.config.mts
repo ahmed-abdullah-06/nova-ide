@@ -24,8 +24,12 @@ const config: ForgeConfig = {
       unpack: '**/node_modules/node-pty/**',
     },
     // The application icon is rasterized from the committed A6 SVG sources by
-    // `pnpm generate:icons` (tools/release/generate-icons.cjs).
+    // `pnpm generate:icons` (tools/release/generate-icons.cjs). It is also
+    // shipped as an extra resource so the main process can set the window and
+    // taskbar icon from a real file in the packaged app (ASAR excludes icons,
+    // and extraResource copies the file to resources/a6.ico).
     icon: 'icons/a6.ico',
+    extraResource: ['icons/a6.ico'],
     // Display name comes from package.json `productName` ("A6"); the
     // executable must be a filesystem-safe name without spaces.
     executableName: 'A6IDE',

@@ -10,6 +10,14 @@ import { installContentSecurityPolicy } from './security/csp';
 import { installPermissionHandlers } from './security/permissions';
 import { approveWindowClose, createMainWindow } from './window';
 
+// Development runs inside Electron's own executable, so Windows groups the
+// window under Electron's taskbar icon without an explicit id. Set one before
+// `ready` and before any UI exists. Squirrel owns the packaged AppUserModelID
+// and must never be overridden.
+if (!app.isPackaged) {
+  app.setAppUserModelId('A6.IDE.Dev');
+}
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();

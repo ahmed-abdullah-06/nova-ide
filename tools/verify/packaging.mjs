@@ -170,6 +170,78 @@ async function run() {
     );
   }
 
+  // The main process resolves the window/taskbar icon from this extra resource
+  // because the committed icons/ directory is excluded from the ASAR.
+  const extraIcon = path.join(PACKAGED, 'resources', 'a6.ico');
+  const sourceIcon = path.join(DESKTOP, 'icons', 'a6.ico');
+  if (existsSync(sourceIcon) && existsSync(extraIcon)) {
+    const same =
+      readFileSync(sourceIcon).length > 0 &&
+      readFileSync(sourceIcon).equals(readFileSync(extraIcon));
+    check('packaged app ships the generated A6 icon as an extra resource', same);
+  } else {
+    check(
+      'packaged app ships the generated A6 icon as an extra resource',
+      false,
+      `source=${existsSync(sourceIcon)} extra=${existsSync(extraIcon)}`,
+    );
+  }
+
+  // Squirrel creates these shortcuts for the installed app on this machine.
+  // Compare the shortcut's extracted icon to the generated A6 mark instead of
+  // hashing raw icon bytes, because Windows uses resampled icon sizes.
+  if (process.platform === 'win32') {
+    const shortcutScript = `
+Add-Type -AssemblyName System.Drawing
+function MeanDiff([System.Drawing.Bitmap]$a,[System.Drawing.Bitmap]$b){
+  $w=[Math]::Min($a.Width,$b.Width); $h=[Math]::Min($a.Height,$b.Height)
+  $b1=New-Object System.Drawing.Bitmap $w,$h; $g1=[System.Drawing.Graphics]::FromImage($b1); $g1.InterpolationMode=[System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $g1.DrawImage($a,0,0,$w,$h); $g1.Dispose()
+  $b2=New-Object System.Drawing.Bitmap $w,$h; $g2=[System.Drawing.Graphics]::FromImage($b2); $g2.InterpolationMode=[System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic; $g2.DrawImage($b,0,0,$w,$h); $g2.Dispose()
+  $d=0; for($y=0;$y -lt $h;$y++){for($x=0;$x -lt $w;$x++){$p=$b1.GetPixel($x,$y);$q=$b2.GetPixel($x,$y);$d+=[Math]::Abs([int]$p.R-[int]$q.R)+[Math]::Abs([int]$p.G-[int]$q.G)+[Math]::Abs([int]$p.B-[int]$q.B)+[Math]::Abs([int]$p.A-[int]$q.A)}}
+  $b1.Dispose(); $b2.Dispose(); return [Math]::Round($d/($w*$h*4),3)
+}
+$links = @(
+  "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\A6 Project\\A6.lnk",
+  "$env:USERPROFILE\\Desktop\\A6.lnk"
+) | Where-Object { Test-Path $_ }
+if ($links.Count -eq 0) { Write-Output 'none'; exit 0 }
+$a6=[System.Drawing.Bitmap]::FromFile('${path.join(DESKTOP, 'icons', 'a6-32.png').replace(/'/g, "''")}')
+$el=[System.Drawing.Icon]::ExtractAssociatedIcon('${path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe').replace(/'/g, "''")}').ToBitmap()
+$ok=$true; $details=@()
+foreach($l in $links){
+  $ic=[System.Drawing.Icon]::ExtractAssociatedIcon($l); $bmp=$ic.ToBitmap()
+  $da=MeanDiff $bmp $a6; $de=MeanDiff $bmp $el
+  $details += "$(Split-Path $l -Leaf):a6=$da,electron=$de"
+  if ($da -ge $de) { $ok=$false }
+  $bmp.Dispose(); $ic.Dispose()
+}
+$a6.Dispose(); $el.Dispose()
+if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("bad|" + ($details -join ';')) }
+`;
+    const shortcutResult = powerShell(shortcutScript);
+    if (!shortcutResult || shortcutResult === 'none') {
+      check(
+        'installer shortcut icon shows A6 (Start Menu/Desktop)',
+        true,
+        'skipped: no installed A6 shortcut found on this machine',
+      );
+    } else if (shortcutResult.startsWith('ok|')) {
+      check('installer shortcut icon shows A6 (Start Menu/Desktop)', true, shortcutResult.slice(3));
+    } else {
+      check(
+        'installer shortcut icon shows A6 (Start Menu/Desktop)',
+        false,
+        shortcutResult.startsWith('bad|') ? shortcutResult.slice(4) : shortcutResult,
+      );
+    }
+  } else {
+    check(
+      'installer shortcut icon shows A6 (Start Menu/Desktop)',
+      true,
+      'skipped on this platform',
+    );
+  }
+
   // --- 2. Clean-location launch -----------------------------------------
   // Copy the portable app into a path that contains spaces, like a real
   // per-user Squirrel install under "Local Settings"/"Programs".

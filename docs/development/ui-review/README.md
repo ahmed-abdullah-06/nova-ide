@@ -46,7 +46,7 @@ No other main-process file was changed in this pass.
 
 ## Verification
 
-Final clean-tree results on Windows x64:
+U0–U6 were verified on a clean tree at `0134cee` (Windows x64):
 
 | Command | Result |
 | --- | --- |
@@ -64,6 +64,37 @@ a mock local provider. It includes the new Settings tab, its entry points, the
 shared composer, and the status-bar local-only indicator. An initial final run
 exposed two CDP focus/key timing flakes; after the harness steps were made
 deterministic, three consecutive runs passed 159/159.
+
+### Icon branding follow-up (post-U6)
+
+Committed A6 branding work added the generated icon to the window, taskbar and
+custom title row without changing behaviour or packaged identity:
+
+- `apps/desktop/forge.config.mts` copies `icons/a6.ico` as an extra resource so
+  the packaged app has `resources/a6.ico` outside the ASAR.
+- `apps/desktop/src/main/window.ts` resolves that icon in packaged and dev
+  layouts and passes it to `BrowserWindow`.
+- `apps/desktop/src/main/index.ts` sets a dev-only App User Model ID
+  (`A6.IDE.Dev`) before `ready` so Windows can group the development process
+  (running inside Electron’s executable) separately from Electron’s own taskbar
+  icon; the packaged/Squirrel AppUserModelID is not overridden.
+- `apps/desktop/src/renderer/components/layout/TitleBar.tsx` renders the
+  generated `icons/a6-32.png` mark (inlined by Vite) in the custom title row.
+
+Runtime verification now asserts the title-row image loads as the 32×32 A6 mark.
+Packaging verification now asserts the packaged extra resource matches the
+committed `a6.ico` and, when installed Start Menu/Desktop shortcuts are present,
+compares their extracted icon to the A6 mark rather than Electron’s icon (raw
+icon bytes differ across Windows icon sizes/resampling). On this machine the
+installed Start Menu and Desktop shortcuts resolved to the per-user installed
+`A6IDE.exe` and compared as closer to A6 than Electron. The packaged taskbar
+button was also compared programmatically against the A6 mark/Electron icon and
+showed the A6 mark.
+
+Dev taskbar grouping can be affected by Windows/Explorer icon caching when the
+same `electron.exe` path is used by multiple apps; after Explorer refresh during
+this session the dev window grouped under A6. End-to-end packaged/native-chrome
+verification remains Windows x64 only.
 
 ### Evidence method
 

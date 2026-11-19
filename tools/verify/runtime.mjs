@@ -717,6 +717,19 @@ async function main() {
     );
     check('layout renders all regions', rendered);
 
+    // The title row must use the generated A6 mark, not a generic placeholder.
+    const brandMark = await waitFor(
+      session,
+      `(() => {
+        const img = document.querySelector('.title-bar__brand img');
+        return img !== null && img.complete === true &&
+          img.naturalWidth === 32 && img.naturalHeight === 32 &&
+          img.getBoundingClientRect().width > 0;
+      })()`,
+      10000,
+    );
+    check('title row shows the generated A6 mark', brandMark);
+
     const bridge = await session.evaluate(
       `typeof window.nova === 'object' && window.nova !== null`,
     );
