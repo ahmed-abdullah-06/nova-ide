@@ -17,8 +17,6 @@ import type { CommandCategory } from '../../commands/types';
 
 interface MenuBarProps {
   sections: readonly MenuSection[];
-  /** Visible hint for the first half of a keybinding chord. */
-  chordHint: string | null;
   /** Runs a command through the registry with the trusted menu source. */
   onExecute: (id: string) => void;
   /** Captures the element focused before the menu stole focus. */
@@ -53,7 +51,6 @@ function edgeEnabledIndex(section: MenuSection, end: boolean): number {
 
 export function MenuBar({
   sections,
-  chordHint,
   onExecute,
   onCaptureFocus,
   onOpenChange,
@@ -282,12 +279,6 @@ export function MenuBar({
           </div>
         );
       })}
-      <span className="menu-bar__spacer" />
-      {chordHint === null ? null : (
-        <span className="menu-bar__hint" role="status">
-          {chordHint} · Esc to cancel
-        </span>
-      )}
     </div>
   );
 }

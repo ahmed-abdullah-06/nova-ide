@@ -67,6 +67,7 @@
   --control-height: 26px;
   --control-height-lg: 32px;
   --titlebar-height: 32px;
+  --titlebar-overlay-width: 138px;
   --statusbar-height: 24px;
   --scrollbar-size: 8px;
 
@@ -96,7 +97,7 @@
   --color-active: var(--surface-active);
   --sidebar-width: 260px;
   --activitybar-width: 52px;
-  --menubar-height: 30px;
+  --menubar-height: var(--titlebar-height);
   --ai-panel-width: 320px;
   --bottompanel-height: 200px;
   --tab-height: 36px;

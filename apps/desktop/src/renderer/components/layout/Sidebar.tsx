@@ -4,7 +4,6 @@ import type { Theme } from '../../hooks/useTheme';
 import { Explorer } from '../../features/explorer/components/Explorer';
 import { SearchView } from '../../features/search/SearchView';
 import { SourceControlView } from '../../features/git/SourceControlView';
-import { useAgent } from '../../features/agent/useAgent';
 import type { SearchMatch } from '../../../shared/ipc-types';
 
 interface SidebarProps {
@@ -48,8 +47,6 @@ function bodyFor(
           onOpenFile={onOpenFile}
         />
       );
-    case 'agent':
-      return <AgentRuns />;
     case 'settings':
       return (
         <div className="sidebar__section">
@@ -70,8 +67,6 @@ function bodyFor(
           </p>
         </div>
       );
-    case 'extensions':
-      return null;
     default:
       return null;
   }
@@ -81,51 +76,8 @@ const TITLES: Record<ActivityId, string> = {
   explorer: 'Explorer',
   search: 'Search',
   scm: 'Source Control',
-  agent: 'AI Agent',
-  extensions: 'Extensions',
   settings: 'Settings',
 };
-
-/**
- * The runs of the coding agent (spec §6.1).
- *
- * The panel of the AI assistant shows the details; the sidebar shows the
- * state of the current run.
- */
-function AgentRuns(): ReactNode {
-  const agent = useAgent();
-  const state = agent.state;
-  return (
-    <div className="sidebar__section">
-      <div className="sidebar__header">AI Agent</div>
-      {state.state === 'idle' ? (
-        <p className="placeholder-view__note" style={{ textAlign: 'left' }}>
-          No run yet. Open the agent in the AI assistant and describe what
-          should be done.
-        </p>
-      ) : (
-        <>
-          <p className="placeholder-view__note" style={{ textAlign: 'left' }}>
-            {state.state}
-            {state.kind === 'cloud' ? ' · CLOUD' : ' · LOCAL'}
-          </p>
-          {state.task.length > 0 ? (
-            <p className="placeholder-view__note" style={{ textAlign: 'left' }}>
-              {state.task}
-            </p>
-          ) : null}
-          <ul className="sidebar__list">
-            {state.events.slice(-8).map((event) => (
-              <li key={`${event.step}-${event.at}`} className="sidebar__row">
-                {event.summary}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
-  );
-}
 
 export function Sidebar({
   activity,

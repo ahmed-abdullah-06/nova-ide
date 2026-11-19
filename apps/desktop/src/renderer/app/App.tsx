@@ -11,7 +11,7 @@ import { NotificationHost } from '../features/workspace/components/NotificationH
 import { ActivityBar } from '../components/layout/ActivityBar';
 import { AiPanel } from '../features/ai/AiPanel';
 import { BottomPanel } from '../components/layout/BottomPanel';
-import { MenuBar } from '../components/layout/MenuBar';
+import { TitleBar } from '../components/layout/TitleBar';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
@@ -126,12 +126,20 @@ function Workspace(): ReactNode {
 
   return (
     <div className={shellClass}>
-      <MenuBar
+      <TitleBar
         sections={commands.sections}
         chordHint={commands.chordHint}
         onExecute={commands.executeFromMenu}
         onCaptureFocus={commands.captureMenuFocus}
         onOpenChange={commands.setMenuOpen}
+        title={
+          activeTab !== null
+            ? `${activeTab.name} — ${workspaceState.workspace?.name ?? 'A6'}`
+            : (workspaceState.workspace?.name ?? 'A6')
+        }
+        aiPanelVisible={ui.aiPanelVisible}
+        onToggleAiPanel={ui.toggleAiPanel}
+        onOpenSettings={() => ui.showActivity('settings')}
       />
       <ActivityBar
         active={ui.activity}

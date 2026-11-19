@@ -4,9 +4,61 @@
   display: grid;
   grid-template-columns: var(--activitybar-width) auto minmax(0, 1fr) auto;
   grid-template-rows:
-    var(--menubar-height) minmax(0, 1fr) var(--statusbar-height);
+    var(--titlebar-height) minmax(0, 1fr) var(--statusbar-height);
   height: 100vh;
   width: 100vw;
+}
+
+/* ---------- Title bar ---------- */
+
+.title-bar {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--titlebar-height);
+  padding-right: var(--titlebar-overlay-width);
+  background: var(--surface-sidebar);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.title-bar__brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex: none;
+  color: var(--accent);
+}
+
+.title-bar__title {
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-bar__spacer {
+  flex: 1;
+}
+
+.title-bar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding-right: var(--space-2);
+}
+
+.title-bar button,
+.title-bar .menu-bar,
+.title-bar .menu-bar__dropdown {
+  -webkit-app-region: no-drag;
 }
 
 /* ---------- Activity bar ---------- */

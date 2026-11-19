@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, Menu } from 'electron';
 import started from 'electron-squirrel-startup';
 import { AppSettingsStore } from './config/appSettings';
 import { resolveProfilePath } from './config/profilePath';
@@ -47,6 +47,10 @@ let quitApproved = false;
 app.whenReady().then(() => {
   // Security measures must be in place before any renderer loads (spec §19).
   installContentSecurityPolicy();
+  // The renderer owns the only menu row. Remove Electron's default native
+  // application menu so no second menu is registered (and no shortcut runs
+  // twice). Window-level native controls are removed in createMainWindow.
+  Menu.setApplicationMenu(null);
   // The microphone is only granted for the own origin, only for audio and
   // only while a recording session is open (spec §19.2).
   installPermissionHandlers();

@@ -55,6 +55,15 @@ export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserW
     show: false,
     backgroundColor: '#111318',
     title: 'A6',
+    // The renderer draws one title/menu row. Hide the native title bar and
+    // let Windows draw the minimise/maximise/close overlay buttons on top of
+    // it. The colours match the default dark theme tokens.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#171a21',
+      symbolColor: '#e5e7eb',
+      height: 32,
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -65,6 +74,10 @@ export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserW
       experimentalFeatures: false,
     },
   });
+
+  // Remove the window-level native menu as well; the renderer command menu is
+  // the single source of truth for every item and accelerator.
+  mainWindow.setMenu(null);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
