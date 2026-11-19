@@ -1,13 +1,21 @@
 /**
  * The AI assistant panel (spec §6.1, §9.1).
  *
- * The panel shows the conversation, the provider and the model that are
- * used, and the state of the provider (LOCAL or CLOUD). It never writes
- * the answer of a model into a file — that belongs to Milestone 5.
+ * Chat and Agent share one composer at the bottom of the panel. The mode
+ * only changes what the composer submits to and what is shown above it —
+ * there is never a second task box. Provider, model and privacy state live
+ * in the compact controls row; the header stays limited to the two modes
+ * and the settings action.
+ *
+ * The panel never writes the answer of a model into a file — that belongs
+ * to the agent, which the user starts from the same composer.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProviderDescriptor } from '../../../shared/ai-types';
+import { Icon } from '../../components/ui/icons';
+import { IconButton } from '../../components/ui/IconButton';
 import { AgentPanel } from '../agent/AgentPanel';
+import { useAgent } from '../agent/useAgent';
 import { MessageList } from './MessageList';
 import { ProviderSettings } from './ProviderSettings';
 import { useAi, type Attachment } from './useAi';
@@ -42,6 +50,7 @@ export function AiPanel({
   visible,
 }: AiPanelProps): React.JSX.Element {
   const ai = useAi();
+  const agent = useAgent();
   const conversations = useConversations();
   const voiceSettings = useVoiceSettings();
   const voice = useVoiceInput({
@@ -58,8 +67,19 @@ export function AiPanel({
   const [title, setTitle] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [approveCloud, setApproveCloud] = useState(false);
+  const [agentApproveCloud, setAgentApproveCloud] = useState(false);
+  const [agentBusy, setAgentBusy] = useState(false);
   /** The mode that was shown before (the agent has its own default). */
   const previousMode = useRef<'chat' | 'agent'>('chat');
+
+  const agentState = agent.state;
+  const agentRunning =
+    agentState.state === 'planning' ||
+    agentState.state === 'waitingForPlan' ||
+    agentState.state === 'running' ||
+    agentState.state === 'waitingForApproval';
+  const busy = mode === 'agent' ? agentRunning : ai.streaming;
+  const composerDisabled = mode === 'agent' ? agentRunning || agentBusy : ai.streaming;
 
   // The agent uses its own default model. It is only applied when the
   // user switches to the agent, so a manual choice is never overwritten.
@@ -131,12 +151,41 @@ export function AiPanel({
     }
   }, [ai.messages, ai.streaming, conversations]);
 
-  const handleSend = useCallback(async (): Promise<void> => {
+  /** Submits the one composer to the mode that is currently shown. */
+  const handleSubmit = useCallback(async (): Promise<void> => {
+    if (mode === 'agent') {
+      if (ai.providerId === null || ai.model.length === 0) {
+        agent.setError('Choose a provider and a model first.');
+        return;
+      }
+      setAgentBusy(true);
+      const runId = await agent.start(
+        input,
+        ai.providerId,
+        ai.model,
+        agentApproveCloud,
+      );
+      setAgentBusy(false);
+      if (runId !== null) {
+        setInput('');
+        setAgentApproveCloud(false);
+      }
+      return;
+    }
     const text = input;
     setInput('');
     await ai.send(text, approveCloud);
     setApproveCloud(false);
-  }, [ai, approveCloud, input]);
+  }, [agent, agentApproveCloud, ai, approveCloud, input, mode]);
+
+  /** Stops whichever operation the composer started. */
+  const handleStop = useCallback((): void => {
+    if (mode === 'agent') {
+      void agent.stop();
+    } else {
+      ai.stop();
+    }
+  }, [agent, ai, mode]);
 
   const handleOpenLink = useCallback((url: string): void => {
     void window.nova?.openExternal(url);
@@ -200,35 +249,15 @@ export function AiPanel({
             Agent
           </button>
         </div>
-        {provider !== null ? (
-          <span
-            className={`ai-badge ai-badge--${provider.kind}`}
-            title={
-              provider.kind === 'local'
-                ? 'The request stays on this machine'
-                : 'The request is sent to an external service'
-            }
-          >
-            {provider.kind === 'local' ? 'LOCAL' : 'CLOUD'}
-          </span>
-        ) : null}
-        {ai.localOnly ? (
-          <span
-            className="ai-badge ai-badge--local-only"
-            title="The local-only mode is switched on: no cloud provider and no cloud voice service may be used"
-          >
-            LOCAL ONLY
-          </span>
-        ) : null}
-        <button
-          type="button"
+        <IconButton
+          label="Settings"
           className="ai-panel__settings-button"
-          onClick={() => setShowSettings((current) => !current)}
-          title="Provider settings"
+          icon={<Icon name="settings" size={15} />}
+          size="sm"
+          active={showSettings}
           aria-expanded={showSettings}
-        >
-          Settings
-        </button>
+          onClick={() => setShowSettings((current) => !current)}
+        />
       </div>
 
       <div className="ai-panel__controls">
@@ -263,6 +292,26 @@ export function AiPanel({
             </option>
           ))}
         </select>
+        {provider !== null ? (
+          <span
+            className={`ai-badge ai-badge--${provider.kind} ai-panel__provider-chip`}
+            title={
+              provider.kind === 'local'
+                ? 'The request stays on this machine'
+                : 'The request is sent to an external service'
+            }
+          >
+            {provider.kind === 'local' ? 'LOCAL' : 'CLOUD'}
+          </span>
+        ) : null}
+        {ai.localOnly ? (
+          <span
+            className="ai-badge ai-badge--local-only"
+            title="The local-only mode is switched on: no cloud provider and no cloud voice service may be used"
+          >
+            LOCAL ONLY
+          </span>
+        ) : null}
       </div>
 
       {ai.models.some((entry) => (entry.sizeBytes ?? 0) > 4_000_000_000) ? (
@@ -289,95 +338,88 @@ export function AiPanel({
         </>
       ) : null}
 
-      <div className="ai-panel__conversations">
-        <select
-          className="ai-panel__select"
-          aria-label="Conversation"
-          value={conversations.current?.id ?? ''}
-          onChange={(event) => conversations.open(event.target.value)}
-        >
-          {conversations.conversations.length === 0 ? (
-            <option value="">No conversation yet</option>
+      {mode === 'chat' ? (
+        <div className="ai-panel__conversations">
+          <select
+            className="ai-panel__select"
+            aria-label="Conversation"
+            value={conversations.current?.id ?? ''}
+            onChange={(event) => conversations.open(event.target.value)}
+          >
+            {conversations.conversations.length === 0 ? (
+              <option value="">No conversation yet</option>
+            ) : null}
+            {conversations.conversations.map((conversation) => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.title}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ai-panel__action"
+            onClick={() => conversations.create()}
+            title="New conversation"
+          >
+            New
+          </button>
+          {conversations.current !== null ? (
+            <>
+              <input
+                type="text"
+                className="ai-panel__title"
+                aria-label="Name of the conversation"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                onBlur={() => {
+                  if (title.trim().length > 0) {
+                    conversations.rename(
+                      conversations.current?.id ?? '',
+                      title.trim(),
+                    );
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="ai-panel__action"
+                onClick={() => conversations.remove(conversations.current?.id ?? '')}
+                title="Delete the conversation"
+              >
+                Delete
+              </button>
+            </>
           ) : null}
-          {conversations.conversations.map((conversation) => (
-            <option key={conversation.id} value={conversation.id}>
-              {conversation.title}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="ai-panel__action"
-          onClick={() => conversations.create()}
-          title="New conversation"
-        >
-          New
-        </button>
-        {conversations.current !== null ? (
-          <>
-            <input
-              type="text"
-              className="ai-panel__title"
-              aria-label="Name of the conversation"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              onBlur={() => {
-                if (title.trim().length > 0) {
-                  conversations.rename(
-                    conversations.current?.id ?? '',
-                    title.trim(),
-                  );
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="ai-panel__action"
-              onClick={() => conversations.remove(conversations.current?.id ?? '')}
-              title="Delete the conversation"
-            >
-              Delete
-            </button>
-          </>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {mode === 'agent' ? (
-        <AgentPanel
-          providers={ai.providers}
-          models={ai.models}
-          providerId={ai.providerId}
-          model={ai.model}
-          onSelectProvider={ai.selectProvider}
-          onSelectModel={ai.selectModel}
-        />
+        <AgentPanel />
       ) : (
-        <>
-          <div className="ai-panel__body">
-            <MessageList
-              messages={ai.messages}
-              streaming={ai.streaming}
-              onOpenLink={handleOpenLink}
-              onReadAloud={speech.read}
-              speakingIndex={speech.speakingIndex}
-              onStopSpeech={speech.stop}
-            />
-          </div>
-        </>
+        <div className="ai-panel__body">
+          <MessageList
+            messages={ai.messages}
+            streaming={ai.streaming}
+            onOpenLink={handleOpenLink}
+            onReadAloud={speech.read}
+            speakingIndex={speech.speakingIndex}
+            onStopSpeech={speech.stop}
+          />
+        </div>
       )}
 
-      {ai.error !== null ? (
+      {mode === 'chat' && ai.error !== null ? (
         <p className="ai-panel__error" role="alert">
           {ai.error}
         </p>
       ) : null}
 
-      {ai.attachments.length > 0 ? (
+      {mode === 'chat' && ai.attachments.length > 0 ? (
         <div
           className="ai-panel__context-preview"
           data-preview-count={ai.preview.length}
@@ -431,75 +473,83 @@ export function AiPanel({
       <div className="ai-panel__composer">
         <textarea
           className="ai-panel__input"
-          placeholder="Ask a question about the code…"
-          aria-label="Chat input"
+          placeholder={
+            mode === 'agent'
+              ? 'Describe the task for the agent…'
+              : 'Ask a question about the code…'
+          }
+          aria-label={mode === 'agent' ? 'Task for the agent' : 'Chat input'}
           value={input}
-          disabled={ai.streaming}
+          disabled={composerDisabled}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
-              void handleSend();
+              void handleSubmit();
             }
           }}
         />
         <div className="ai-panel__actions">
-          <button
-            type="button"
-            className={`ai-panel__action ai-panel__action--mic${
-              voice.recording ? ' ai-panel__action--recording' : ''
-            }`}
-            onClick={() => {
-              if (voice.processing) {
-                voice.cancel();
-                return;
+          {mode === 'chat' ? (
+            <button
+              type="button"
+              className={`ai-panel__action ai-panel__action--mic${
+                voice.recording ? ' ai-panel__action--recording' : ''
+              }`}
+              onClick={() => {
+                if (voice.processing) {
+                  voice.cancel();
+                  return;
+                }
+                void voice.toggle();
+              }}
+              disabled={
+                ai.streaming ||
+                (voice.busy && !voice.recording && !voice.processing)
               }
-              void voice.toggle();
-            }}
-            disabled={
-              ai.streaming ||
-              (voice.busy && !voice.recording && !voice.processing)
-            }
-            aria-pressed={voice.recording}
-            title={
-              voice.recording
-                ? 'Stop the recording (the text is only placed in the input)'
-                : voice.processing
-                  ? 'Cancel the speech recognition'
-                  : 'Record a message with the microphone'
-            }
-          >
-            {voice.processing
-              ? 'Cancel'
-              : voice.recording
-                ? `Stop (${Math.ceil(voice.elapsedSeconds)} s)`
-                : 'Mic'}
-          </button>
+              aria-pressed={voice.recording}
+              title={
+                voice.recording
+                  ? 'Stop the recording (the text is only placed in the input)'
+                  : voice.processing
+                    ? 'Cancel the speech recognition'
+                    : 'Record a message with the microphone'
+              }
+            >
+              {voice.processing
+                ? 'Cancel'
+                : voice.recording
+                  ? `Stop (${Math.ceil(voice.elapsedSeconds)} s)`
+                  : 'Mic'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="ai-panel__action ai-panel__action--primary"
-            onClick={() => void handleSend()}
-            disabled={ai.streaming || input.trim().length === 0}
+            onClick={() => void handleSubmit()}
+            disabled={composerDisabled || input.trim().length === 0}
           >
-            Send
+            {mode === 'agent' ? 'Start' : 'Send'}
           </button>
           <button
             type="button"
             className="ai-panel__action"
-            onClick={ai.stop}
-            disabled={!ai.streaming}
+            onClick={handleStop}
+            disabled={!busy}
           >
             Stop
           </button>
-          <button
-            type="button"
-            className="ai-panel__action"
-            onClick={() => void ai.regenerate()}
-            disabled={ai.streaming || ai.messages.length === 0}
-          >
-            Ask again
-          </button>
-          {speech.speaking ? (
+          {mode === 'chat' ? (
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={() => void ai.regenerate()}
+              disabled={ai.streaming || ai.messages.length === 0}
+            >
+              Ask again
+            </button>
+          ) : null}
+          {mode === 'chat' && speech.speaking ? (
             <button
               type="button"
               className="ai-panel__action"
@@ -510,7 +560,7 @@ export function AiPanel({
             </button>
           ) : null}
         </div>
-        {voice.notice !== null ? (
+        {mode === 'chat' && voice.notice !== null ? (
           <p className="ai-panel__voice-status" role="status">
             {voice.notice}
             <button
@@ -523,7 +573,7 @@ export function AiPanel({
             </button>
           </p>
         ) : null}
-        {speech.notice !== null ? (
+        {mode === 'chat' && speech.notice !== null ? (
           <p className="ai-panel__voice-status" role="status">
             {speech.notice}
             <button
@@ -536,45 +586,56 @@ export function AiPanel({
             </button>
           </p>
         ) : null}
-        <div className="ai-panel__context">
-          <button
-            type="button"
-            className="ai-panel__action"
-            onClick={handleAttachFile}
-            disabled={!hasWorkspace || activeFile === null}
-            title="Attach the current file as context"
-          >
-            Attach file
-          </button>
-          <button
-            type="button"
-            className="ai-panel__action"
-            onClick={() => void ai.pickFiles()}
-            disabled={!hasWorkspace}
-            title="Choose the files that are attached as context"
-          >
-            Browse files
-          </button>
-          <button
-            type="button"
-            className="ai-panel__action"
-            onClick={handleAttachSelection}
-            disabled={!hasWorkspace || selection === null}
-            title="Attach the selected code as context"
-          >
-            Attach selection
-          </button>
-          {isCloud && ai.attachments.length > 0 ? (
-            <label className="ai-panel__approval">
-              <input
-                type="checkbox"
-                checked={approveCloud}
-                onChange={(event) => setApproveCloud(event.target.checked)}
-              />
-              Send the attached files to the cloud provider
-            </label>
-          ) : null}
-        </div>
+        {mode === 'chat' ? (
+          <div className="ai-panel__context">
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={handleAttachFile}
+              disabled={!hasWorkspace || activeFile === null}
+              title="Attach the current file as context"
+            >
+              Attach file
+            </button>
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={() => void ai.pickFiles()}
+              disabled={!hasWorkspace}
+              title="Choose the files that are attached as context"
+            >
+              Browse files
+            </button>
+            <button
+              type="button"
+              className="ai-panel__action"
+              onClick={handleAttachSelection}
+              disabled={!hasWorkspace || selection === null}
+              title="Attach the selected code as context"
+            >
+              Attach selection
+            </button>
+            {isCloud && ai.attachments.length > 0 ? (
+              <label className="ai-panel__approval">
+                <input
+                  type="checkbox"
+                  checked={approveCloud}
+                  onChange={(event) => setApproveCloud(event.target.checked)}
+                />
+                Send the attached files to the cloud provider
+              </label>
+            ) : null}
+          </div>
+        ) : isCloud ? (
+          <label className="ai-panel__approval">
+            <input
+              type="checkbox"
+              checked={agentApproveCloud}
+              onChange={(event) => setAgentApproveCloud(event.target.checked)}
+            />
+            Allow this run to send the content of the workspace to the cloud provider
+          </label>
+        ) : null}
       </div>
     </aside>
   );

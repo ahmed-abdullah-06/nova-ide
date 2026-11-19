@@ -1,13 +1,12 @@
 /**
  * The agent panel (spec §9, §13).
  *
- * The panel shows the task, the provider and the model (with the LOCAL
- * or CLOUD badge), the plan the agent proposes, the progress of the run,
- * the approvals the user has to give, the changes the agent proposes and
- * the final report.
+ * This is the run view only: the plan, progress, approvals, proposals and
+ * report. The provider/model selectors and the task composer are owned by
+ * the AI panel and shared with Chat, so an agent run never shows a second
+ * set of controls.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { ProviderDescriptor } from '../../../shared/ai-types';
 import type { AgentRevertPreview } from '../../../shared/agent-types';
 import { useTabs } from '../../stores/tabs';
 import { ProposalReview } from './ProposalReview';
@@ -15,33 +14,9 @@ import { AgentPermissionSettings } from './AgentPermissionSettings';
 import { PlanReview } from './PlanReview';
 import { useAgent } from './useAgent';
 
-export interface AgentPanelProps {
-  /** The providers the user can choose from. */
-  providers: ProviderDescriptor[];
-  /** The models of the selected provider. */
-  models: { id: string; name: string }[];
-  /** The selected provider. */
-  providerId: string | null;
-  /** The selected model. */
-  model: string;
-  /** Selects a provider. */
-  onSelectProvider: (providerId: string) => void;
-  /** Selects a model. */
-  onSelectModel: (model: string) => void;
-}
-
-export function AgentPanel({
-  providers,
-  models,
-  providerId,
-  model,
-  onSelectProvider,
-  onSelectModel,
-}: AgentPanelProps): React.JSX.Element {
+export function AgentPanel(): React.JSX.Element {
   const agent = useAgent();
   const tabs = useTabs();
-  const [task, setTask] = useState('');
-  const [approveCloud, setApproveCloud] = useState(false);
   const [busy, setBusy] = useState(false);
   const [openProposal, setOpenProposal] = useState<string | null>(null);
   const [revertPreview, setRevertPreview] = useState<AgentRevertPreview | null>(
@@ -51,13 +26,6 @@ export function AgentPanel({
   const [showAudit, setShowAudit] = useState(false);
 
   const state = agent.state;
-  const provider = providers.find((entry) => entry.id === providerId) ?? null;
-  const isCloud = provider?.kind === 'cloud';
-  const running =
-    state.state === 'planning' ||
-    state.state === 'waitingForPlan' ||
-    state.state === 'running' ||
-    state.state === 'waitingForApproval';
 
   // The changes of the run are the ones of the active run.
   useEffect(() => {
@@ -65,21 +33,6 @@ export function AgentPanel({
     setRevertPreview(null);
     setConfirmed(new Set());
   }, [state.runId]);
-
-  const handleStart = useCallback(async (): Promise<void> => {
-    if (providerId === null || model.length === 0) {
-      agent.setError('Choose a provider and a model first.');
-      return;
-    }
-    setBusy(true);
-    const runId = await agent.start(task, providerId, model, approveCloud);
-    setBusy(false);
-    if (runId === null) {
-      return;
-    }
-    setTask('');
-    setApproveCloud(false);
-  }, [agent, approveCloud, model, providerId, task]);
 
   const handleAccept = useCallback(
     async (proposalId: string): Promise<void> => {
@@ -167,47 +120,6 @@ export function AgentPanel({
 
   return (
     <div className="agent-panel">
-      <div className="agent-panel__controls">
-        <select
-          className="agent-panel__select"
-          aria-label="Provider"
-          value={providerId ?? ''}
-          onChange={(event) => onSelectProvider(event.target.value)}
-        >
-          {providers.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="agent-panel__select"
-          aria-label="Model"
-          value={model}
-          disabled={models.length === 0}
-          onChange={(event) => onSelectModel(event.target.value)}
-        >
-          {models.length === 0 ? <option value="">No models</option> : null}
-          {models.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.name}
-            </option>
-          ))}
-        </select>
-        {provider !== null ? (
-          <span
-            className={`ai-badge ai-badge--${provider.kind}`}
-            title={
-              provider.kind === 'local'
-                ? 'Everything stays on this machine'
-                : 'The content of the workspace is sent to this service'
-            }
-          >
-            {provider.kind === 'local' ? 'LOCAL' : 'CLOUD'}
-          </span>
-        ) : null}
-      </div>
-
       {state.state !== 'idle' ? (
         <div className="agent-panel__status">
           <span className={`agent-panel__state agent-panel__state--${state.state}`}>
@@ -546,52 +458,6 @@ export function AgentPanel({
           </div>
         </div>
       ) : null}
-
-      <div className="agent-panel__composer">
-        <textarea
-          className="agent-panel__input"
-          placeholder="What should the agent do?"
-          aria-label="Task for the agent"
-          value={task}
-          disabled={running}
-          onChange={(event) => setTask(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              void handleStart();
-            }
-          }}
-        />
-        {isCloud ? (
-          <label className="agent-panel__cloud-approval">
-            <input
-              type="checkbox"
-              checked={approveCloud}
-              onChange={(event) => setApproveCloud(event.target.checked)}
-            />
-            Allow this run to send the content of the workspace to{' '}
-            {provider?.name ?? 'the cloud provider'}
-          </label>
-        ) : null}
-        <div className="agent-panel__actions">
-          <button
-            type="button"
-            className="agent-panel__action agent-panel__action--primary"
-            onClick={() => void handleStart()}
-            disabled={running || busy || task.trim().length === 0}
-          >
-            Start
-          </button>
-          <button
-            type="button"
-            className="agent-panel__action"
-            onClick={() => void agent.stop()}
-            disabled={!running}
-          >
-            Stop
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

@@ -14,23 +14,6 @@
   padding: 8px;
 }
 
-.agent-panel__controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.agent-panel__select {
-  flex: 1;
-  min-width: 0;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-size: var(--font-size-small);
-  padding: 2px 4px;
-}
-
 .agent-panel__status {
   display: flex;
   align-items: center;
@@ -482,39 +465,6 @@
   display: flex;
   gap: 6px;
   margin-top: 4px;
-}
-
-.agent-panel__composer {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--color-border);
-}
-
-.agent-panel__input {
-  min-height: 56px;
-  resize: vertical;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-small);
-  padding: 6px;
-}
-
-.agent-panel__cloud-approval {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-  color: var(--color-warning);
-  font-size: var(--font-size-small);
-}
-
-.agent-panel__actions {
-  display: flex;
-  gap: 6px;
 }
 
 .agent-panel__action {

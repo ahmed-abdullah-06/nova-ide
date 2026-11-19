@@ -1828,11 +1828,11 @@ async function main() {
     const localBadge = await waitFor(
       session,
       `(() => {
-        // The badge of the header of the panel shows the provider that
-        // the chat uses.
-        const header = document.querySelector('.ai-panel__header');
-        if (header === null) return false;
-        const badge = header.querySelector('.ai-badge');
+        // The compact provider chip next to the model picker shows which
+        // kind of provider the shared composer uses.
+        const controls = document.querySelector('.ai-panel__controls');
+        if (controls === null) return false;
+        const badge = controls.querySelector('.ai-panel__provider-chip');
         if (badge === null) return false;
         const text = badge.textContent.trim();
         return text === 'LOCAL' ? text : false;
@@ -2296,7 +2296,7 @@ async function main() {
     // The task of the agent.
     const taskTyped = await session.evaluate(
       `(() => {
-        const input = document.querySelector('.agent-panel__input');
+        const input = document.querySelector('.ai-panel__input');
         if (input === null) return false;
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLTextAreaElement.prototype, 'value').set;
@@ -2309,7 +2309,7 @@ async function main() {
 
     const started = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
         const start = buttons.find((b) => b.textContent.trim() === 'Start');
         if (start === undefined || start.disabled) return false;
         start.click();
@@ -2476,7 +2476,7 @@ async function main() {
     );
     const secondRun = await session.evaluate(
       `(() => {
-        const input = document.querySelector('.agent-panel__input');
+        const input = document.querySelector('.ai-panel__input');
         if (input === null) return false;
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLTextAreaElement.prototype, 'value').set;
@@ -2489,7 +2489,7 @@ async function main() {
 
     const secondStarted = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
         const start = buttons.find((b) => b.textContent.trim() === 'Start');
         if (start === undefined || start.disabled) return false;
         start.click();
@@ -2615,13 +2615,13 @@ async function main() {
     // A rejected plan stops the run before the first tool call.
     const thirdStarted = await session.evaluate(
       `(() => {
-        const input = document.querySelector('.agent-panel__input');
+        const input = document.querySelector('.ai-panel__input');
         if (input === null) return false;
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLTextAreaElement.prototype, 'value').set;
         setter.call(input, 'Do something that must not run');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
         const start = buttons.find((b) => b.textContent.trim() === 'Start');
         if (start === undefined || start.disabled) return false;
         start.click();
@@ -2693,13 +2693,13 @@ async function main() {
     );
     await session.evaluate(
       `(() => {
-        const input = document.querySelector('.agent-panel__input');
+        const input = document.querySelector('.ai-panel__input');
         if (input === null) return false;
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLTextAreaElement.prototype, 'value').set;
         setter.call(input, 'Stop me');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
         const start = buttons.find((b) => b.textContent.trim() === 'Start');
         if (start === undefined) return false;
         start.click();
@@ -2710,7 +2710,7 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const stopped = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.agent-panel__action')];
+        const buttons = [...document.querySelectorAll('.ai-panel__action')];
         const stop = buttons.find((b) => b.textContent.trim() === 'Stop');
         if (stop === undefined || stop.disabled) return false;
         stop.click();
