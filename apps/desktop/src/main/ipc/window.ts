@@ -8,6 +8,7 @@
 import { app, BrowserWindow, shell } from 'electron';
 import type {
   FsResult,
+  TitleBarOverlayColors,
   WindowStateSnapshot,
 } from '../../shared/ipc-types';
 import type { CloseFlow } from '../closeFlow';
@@ -39,6 +40,7 @@ function changeZoom(window: BrowserWindow | undefined, delta: number | 'reset'):
 
 export interface WindowHandlers {
   state(): Promise<WindowStateSnapshot>;
+  setTitleBarOverlay(colors: TitleBarOverlayColors): Promise<void>;
   minimize(): Promise<void>;
   toggleMaximize(): Promise<WindowStateSnapshot>;
   toggleFullScreen(): Promise<WindowStateSnapshot>;
@@ -56,6 +58,22 @@ export function createWindowHandlers(closeFlow: CloseFlow): WindowHandlers {
   return {
     async state() {
       return snapshot(targetWindow());
+    },
+
+    async setTitleBarOverlay(colors) {
+      const window = targetWindow();
+      if (
+        window === undefined ||
+        window.isDestroyed() ||
+        typeof window.setTitleBarOverlay !== 'function'
+      ) {
+        return;
+      }
+      window.setTitleBarOverlay({
+        color: colors.color,
+        symbolColor: colors.symbolColor,
+        height: 32,
+      });
     },
 
     async minimize() {

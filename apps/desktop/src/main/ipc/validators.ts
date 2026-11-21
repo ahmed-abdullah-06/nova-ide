@@ -55,6 +55,36 @@ export function assertConfirmClose(
   }
 }
 
+/**
+ * `window:set-titlebar-overlay` — only the two colour values the renderer may
+ * change. Height stays controlled by the main process.
+ */
+export function assertTitleBarOverlay(
+  args: unknown[],
+): asserts args is [{ color: string; symbolColor: string }] {
+  if (args.length !== 1 || typeof args[0] !== 'object' || args[0] === null) {
+    throw new Error('Expected the title bar overlay colours');
+  }
+  const record = args[0] as { color?: unknown; symbolColor?: unknown };
+  const keys = Object.keys(record);
+  if (
+    keys.length !== 2 ||
+    !keys.includes('color') ||
+    !keys.includes('symbolColor')
+  ) {
+    throw new Error('Expected the title bar overlay colours');
+  }
+  const hex = /^#[0-9a-fA-F]{6}$/;
+  if (
+    typeof record.color !== 'string' ||
+    !hex.test(record.color) ||
+    typeof record.symbolColor !== 'string' ||
+    !hex.test(record.symbolColor)
+  ) {
+    throw new Error('Invalid title bar overlay colour');
+  }
+}
+
 export function assertOneString(args: unknown[]): asserts args is [string] {
   if (args.length !== 1 || typeof args[0] !== 'string') {
     throw new Error('Expected a single string argument');

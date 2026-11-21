@@ -61,6 +61,8 @@ const novaApi: NovaApi = {
 
   window: {
     state: () => invoke(IpcChannels.windowState),
+    setTitleBarOverlay: (colors) =>
+      invoke(IpcChannels.windowSetTitleBarOverlay, colors),
     minimize: () => invoke(IpcChannels.windowMinimize),
     toggleMaximize: () => invoke(IpcChannels.windowToggleMaximize),
     toggleFullScreen: () => invoke(IpcChannels.windowToggleFullScreen),

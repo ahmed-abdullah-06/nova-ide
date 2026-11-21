@@ -6,7 +6,7 @@
  * panel controls. `titleBarOverlay` draws the Windows window buttons on the
  * far right; `title-bar__actions` reserves space for them in CSS.
  */
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import a6Mark from '../../../../icons/a6-32.png';
 import type { MenuSection } from '../../commands/menuModel';
 import { Icon } from '../ui/icons';
@@ -26,6 +26,30 @@ export interface TitleBarProps {
   onOpenSettings: () => void;
 }
 
+const DEFAULT_OVERLAY_WIDTH = 138;
+
+function overlayWidth(): number {
+  if (typeof navigator === 'undefined') {
+    return DEFAULT_OVERLAY_WIDTH;
+  }
+  const overlay = (
+    navigator as Navigator & {
+      windowControlsOverlay?: {
+        visible?: boolean;
+        getTitlebarAreaRect?: () => DOMRectReadOnly;
+      };
+    }
+  ).windowControlsOverlay;
+  if (overlay?.visible && overlay.getTitlebarAreaRect) {
+    const rect = overlay.getTitlebarAreaRect();
+    const width = Math.max(0, Math.round(window.innerWidth - rect.x));
+    if (width > 0) {
+      return width;
+    }
+  }
+  return DEFAULT_OVERLAY_WIDTH;
+}
+
 export function TitleBar({
   sections,
   chordHint,
@@ -37,6 +61,30 @@ export function TitleBar({
   onToggleAiPanel,
   onOpenSettings,
 }: TitleBarProps): ReactNode {
+  useEffect(() => {
+    const apply = (): void => {
+      document.documentElement.style.setProperty(
+        '--titlebar-overlay-width',
+        `${overlayWidth()}px`,
+      );
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    const overlay = (
+      navigator as Navigator & {
+        windowControlsOverlay?: {
+          addEventListener?: (type: 'geometrychange', listener: () => void) => void;
+          removeEventListener?: (type: 'geometrychange', listener: () => void) => void;
+        };
+      }
+    ).windowControlsOverlay;
+    overlay?.addEventListener?.('geometrychange', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      overlay?.removeEventListener?.('geometrychange', apply);
+    };
+  }, []);
+
   return (
     <header className="title-bar">
       <span className="title-bar__brand" aria-hidden="true">

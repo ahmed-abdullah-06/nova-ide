@@ -9,6 +9,18 @@
   width: 100vw;
 }
 
+.app-shell--no-ai {
+  grid-template-columns: var(--activitybar-width) auto minmax(0, 1fr) 0;
+}
+
+.app-shell--no-sidebar.app-shell--no-ai {
+  grid-template-columns: var(--activitybar-width) minmax(0, 1fr) 0;
+}
+
+.app-shell--no-sidebar:not(.app-shell--no-ai) {
+  grid-template-columns: var(--activitybar-width) minmax(0, 1fr) auto;
+}
+
 /* ---------- Title bar ---------- */
 
 .title-bar {
@@ -18,7 +30,12 @@
   align-items: center;
   gap: var(--space-1);
   height: var(--titlebar-height);
-  padding-right: var(--titlebar-overlay-width);
+  /* Reserve space for Windows caption buttons. env() tracks the actual overlay
+     geometry; the token is the fallback when WCO geometry is unavailable. */
+  padding-right: max(
+    var(--titlebar-overlay-width),
+    calc(100vw - env(titlebar-area-x, calc(100vw - var(--titlebar-overlay-width))) - env(titlebar-area-width, var(--titlebar-overlay-width)))
+  );
   background: var(--surface-sidebar);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
@@ -294,6 +311,14 @@
   min-width: 0;
   background: var(--surface-panel);
   border-left: 1px solid var(--border);
+}
+
+.ai-panel.ai-panel--hidden {
+  width: 0;
+  min-width: 0;
+  border-width: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .ai-panel__header {

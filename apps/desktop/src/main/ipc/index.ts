@@ -68,6 +68,7 @@ import {
   assertSessionAndData,
   assertSessionAndSize,
   assertStringArray,
+  assertTitleBarOverlay,
   assertTwoStrings,
   assertVoiceAudio,
   assertVoicePickKind,
@@ -433,6 +434,11 @@ export function registerIpcHandlers(
   // Window and shell commands. Every argument list is either empty or a
   // close token issued by this process; no renderer path is ever accepted.
   registerChannel(IpcChannels.windowState, assertNoArgs, windowHandlers.state);
+  registerChannel(
+    IpcChannels.windowSetTitleBarOverlay,
+    assertTitleBarOverlay,
+    windowHandlers.setTitleBarOverlay,
+  );
   registerChannel(IpcChannels.windowMinimize, assertNoArgs, windowHandlers.minimize);
   registerChannel(
     IpcChannels.windowToggleMaximize,

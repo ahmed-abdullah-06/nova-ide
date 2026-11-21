@@ -730,6 +730,46 @@ async function main() {
     );
     check('title row shows the generated A6 mark', brandMark);
 
+    const titleBarBounds = await session.evaluate(
+      `(() => {
+        const bar = document.querySelector('.title-bar');
+        const actions = document.querySelector('.title-bar__actions');
+        if (bar === null || actions === null) return null;
+        const barRect = bar.getBoundingClientRect();
+        const actionRects = [...actions.querySelectorAll('button')].map((node) => {
+          const r = node.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+        });
+        const overlay = navigator.windowControlsOverlay;
+        const overlayRect = overlay?.visible && overlay.getTitlebarAreaRect
+          ? (() => { const r = overlay.getTitlebarAreaRect(); return { x: r.x, width: r.width }; })()
+          : null;
+        return {
+          innerWidth: window.innerWidth,
+          barRight: barRect.right,
+          actionsRight: Math.max(...actionRects.map((r) => r.right), 0),
+          actionRects,
+          overlayRect,
+        };
+      })()`,
+    );
+    check(
+      'title-row action buttons stay inside the visible title bar area',
+      titleBarBounds !== null &&
+        Array.isArray(titleBarBounds.actionRects) &&
+        titleBarBounds.actionRects.length >= 2 &&
+        titleBarBounds.actionRects.every(
+          (r) =>
+            r.width > 0 &&
+            r.height > 0 &&
+            r.left >= 0 &&
+            r.right <= titleBarBounds.innerWidth - 1 &&
+            (titleBarBounds.overlayRect === null ||
+              r.right <= titleBarBounds.overlayRect.x - 1),
+        ),
+      JSON.stringify(titleBarBounds),
+    );
+
     const bridge = await session.evaluate(
       `typeof window.nova === 'object' && window.nova !== null`,
     );
@@ -752,6 +792,41 @@ async function main() {
       15000,
     );
     check('explorer shows the opened workspace', explorerReady);
+
+    // Explorer empty state must derive its Open Folder hint from the command registry.
+    await session.evaluate(`window.nova.workspace.close()`);
+    const explorerEmpty = await waitFor(
+      session,
+      `(() => {
+        const hint = document.querySelector('.explorer__empty-hint');
+        const title = document.querySelector('.explorer__empty-title');
+        return hint !== null && title !== null ? hint.textContent.trim() : false;
+      })()`,
+      10000,
+    );
+    const expectedOpenHint = await session.evaluate(
+      `(() => {
+        // Mirror CommandRegistry display: openWorkspace chord is Ctrl+K Ctrl+O on win32/linux, Cmd+K Cmd+O on darwin.
+        const mac = navigator.userAgent.toLowerCase().includes('mac');
+        return mac ? 'Cmd+K Cmd+O' : 'Ctrl+K Ctrl+O';
+      })()`,
+    );
+    check(
+      'Explorer Open Folder hint matches the command registry shortcut',
+      explorerEmpty === expectedOpenHint,
+      JSON.stringify({ explorerEmpty, expectedOpenHint }),
+    );
+    const reopenedWorkspace = await session.evaluate(
+      `window.nova.workspace.open(${JSON.stringify(fixture)}).then((r) => r.ok)`,
+    );
+    check('workspace reopens after empty-state hint check', reopenedWorkspace === true);
+    await session.evaluate(`window.dispatchEvent(new Event('focus'))`);
+    const explorerReadyAgain = await waitFor(
+      session,
+      `document.querySelector('.explorer__title') !== null`,
+      15000,
+    );
+    check('explorer restored after empty-state hint check', explorerReadyAgain === true);
 
     // The terminal must start in the workspace root and answer commands.
     const terminal = await session.evaluate(
@@ -3275,6 +3350,60 @@ async function main() {
         ctrlLEntry.last.outcome === 'ran' &&
         ctrlLEntry.panelHidden !== panelBeforeCtrlL,
       JSON.stringify(ctrlLEntry),
+    );
+
+    const measureAiPanelLayout = async () =>
+      session.evaluate(
+        `(() => {
+          const shell = document.querySelector('.app-shell');
+          const panel = document.querySelector('.ai-panel');
+          const editor = document.querySelector('.editor-area');
+          if (shell === null || panel === null || editor === null) return null;
+          const shellRect = shell.getBoundingClientRect();
+          const panelRect = panel.getBoundingClientRect();
+          const editorRect = editor.getBoundingClientRect();
+          const hidden = panel.classList.contains('ai-panel--hidden');
+          const style = getComputedStyle(panel);
+          return {
+            hidden,
+            shellRight: shellRect.right,
+            panelWidth: panelRect.width,
+            panelRight: panelRect.right,
+            editorRight: editorRect.right,
+            display: style.display,
+            visibility: style.visibility,
+            gap: shellRect.right - Math.max(editorRect.right, hidden ? 0 : panelRect.right),
+            contentChildren: panel.querySelector('.ai-panel__content, .ai-panel__messages, .ai-panel__composer, .agent-panel') !== null,
+          };
+        })()`,
+      );
+
+    const aiPanelLayoutAfterCtrlL = await measureAiPanelLayout();
+    // Toggle back to cover both states (shown and hidden).
+    await session.pressShortcut('l', 'KeyL', 76, ['ctrl']);
+    await waitFor(
+      session,
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel !== null && panel.classList.contains('ai-panel--hidden') === ${String(
+          !ctrlLEntry.panelHidden,
+        )};
+      })()`,
+      5000,
+    );
+    const aiPanelLayoutAfterSecondCtrlL = await measureAiPanelLayout();
+    const layouts = [aiPanelLayoutAfterCtrlL, aiPanelLayoutAfterSecondCtrlL].filter(Boolean);
+    check(
+      'AI panel shown/hidden states leave no empty right strip',
+      layouts.length === 2 &&
+        layouts.some((l) => l.hidden === true) &&
+        layouts.some((l) => l.hidden === false) &&
+        layouts.every(
+          (l) =>
+            (l.hidden === true && l.panelWidth <= 1 && l.gap <= 2) ||
+            (l.hidden === false && l.panelWidth > 100 && l.gap <= 2 && l.contentChildren === true),
+        ),
+      JSON.stringify({ aiPanelLayoutAfterCtrlL, aiPanelLayoutAfterSecondCtrlL }),
     );
 
     // A chord prefix shows a visible hint; Escape cancels it before it can

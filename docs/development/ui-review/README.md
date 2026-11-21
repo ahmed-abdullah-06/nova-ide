@@ -21,7 +21,7 @@ channels, provider/agent behaviour, and privacy enforcement were not changed.
 
 | Area | BEFORE | AFTER | Notes |
 | --- | --- | --- | --- |
-| Window chrome | Native title bar and native application menu | Custom `TitleBar` + in-app `MenuBar`; native window buttons drawn by `titleBarOverlay` | Same menu commands; only presentation moved |
+| Window chrome | Native title bar and native application menu | Custom `TitleBar` + in-app `MenuBar`; native window buttons drawn by `titleBarOverlay` | Same menu commands; only presentation moved; overlay colours follow the active theme and title-row actions reserve overlay space |
 | Activity bar | Explorer, Search, Source Control, duplicate AI Agent, dead Extensions, Settings | Explorer, Search, Source Control, Settings | Duplicate agent entry and dead Extensions entry removed; the real agent lives in the AI panel |
 | Sidebar Settings | Appearance theme button plus a note about settings arriving later | Same theme button; note points to the Settings editor tab | No theme behaviour change |
 | AI panel header | Mode tabs plus provider/model controls and badges competing for space | Mode tabs and gear only; provider/model selects and LOCAL/CLOUD/LOCAL ONLY chips in a compact controls row | Every real control kept |
@@ -37,8 +37,9 @@ channels, provider/agent behaviour, and privacy enforcement were not changed.
 
 Only the two presentation changes approved for U2 were made:
 
-- `titleBarStyle: 'hidden'` with a 32 px `titleBarOverlay` using `#171a21` and
-  `#e5e7eb` on Windows.
+- `titleBarStyle: 'hidden'` with a 32 px `titleBarOverlay`. The main process
+  seeds dark colours; the renderer updates overlay colours on theme changes so
+  the native caption buttons match the title row in both themes.
 - `Menu.setApplicationMenu(null)` and `mainWindow.setMenu(null)` to remove the
   native menu.
 

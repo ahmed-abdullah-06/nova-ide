@@ -50,6 +50,7 @@ export const IpcChannels = {
   appLocalOnly: 'app:local-only',
   appLocalOnlySet: 'app:local-only-set',
   windowState: 'window:get-state',
+  windowSetTitleBarOverlay: 'window:set-titlebar-overlay',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowToggleFullScreen: 'window:toggle-full-screen',
@@ -186,6 +187,12 @@ export type EditWebContentsAction = 'undo' | 'redo' | 'cut' | 'copy' | 'paste';
 export interface WindowStateSnapshot {
   maximized: boolean;
   fullScreen: boolean;
+}
+
+/** Colours for the native Windows caption buttons drawn over the title row. */
+export interface TitleBarOverlayColors {
+  color: string;
+  symbolColor: string;
 }
 
 /** Why the main process is asking the renderer to approve a close. */
@@ -497,6 +504,10 @@ export interface IpcInvokeMap {
 
   // --- Window / shell (renderer never supplies a path or a raw command) ---
   'window:get-state': { args: []; result: WindowStateSnapshot };
+  'window:set-titlebar-overlay': {
+    args: [colors: TitleBarOverlayColors];
+    result: void;
+  };
   'window:minimize': { args: []; result: void };
   /** Returns the resulting state so the renderer can update toggle marks. */
   'window:toggle-maximize': { args: []; result: WindowStateSnapshot };
@@ -1222,6 +1233,12 @@ export interface NovaApi {
  */
 export interface NovaWindowApi {
   state(): Promise<WindowStateSnapshot>;
+  /**
+   * Keeps the Windows caption-button overlay the same colour as the custom
+   * title row in the active theme. Other platforms have no overlay; this is
+   * ignored there.
+   */
+  setTitleBarOverlay(colors: TitleBarOverlayColors): Promise<void>;
   minimize(): Promise<void>;
   toggleMaximize(): Promise<WindowStateSnapshot>;
   toggleFullScreen(): Promise<WindowStateSnapshot>;

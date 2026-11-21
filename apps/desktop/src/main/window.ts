@@ -77,7 +77,8 @@ export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserW
     icon: resolveAppIcon(),
     // The renderer draws one title/menu row. Hide the native title bar and
     // let Windows draw the minimise/maximise/close overlay buttons on top of
-    // it. The colours match the default dark theme tokens.
+    // it. The colours match the title row token so the overlay never reads as
+    // a different strip. Theme changes update it through the renderer.
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#171a21',

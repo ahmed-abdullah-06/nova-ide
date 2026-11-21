@@ -59,7 +59,7 @@ packaged executable.
 | B.3 | IPC handlers (`ipc/workspace.ts`, `ipc/files.ts`) + preload bridge | Completed | Arg validation per channel; renderer sees only the narrow `NovaFsApi` |
 | C.1 | Renderer workspace state (`workspaceReducer`, store) | Completed | Root/expanded/selection/loading/error + `pendingInput` for inline create-rename |
 | C.2 | Explorer UI (`Explorer`, `FileTreeNode`, icons) | Completed | Auto-expands root, lazy per-level load, retry button, file-type icons, StrictMode-safe loading |
-| C.3 | Shell wiring (Sidebar, StatusBar, App, notifications) | Completed | `Ctrl+Shift+E` focus explorer, `Ctrl+Shift+O` open folder, notification host |
+| C.3 | Shell wiring (Sidebar, StatusBar, App, notifications) | Completed | `Ctrl+Shift+E` focus explorer, `Ctrl+K Ctrl+O` open folder, notification host |
 | D.1 | CRUD hook (`useFileOperations.ts`) | Completed | Create/rename/delete with `window.confirm` on delete; rename re-keys tab ids + Monaco models and reloads the parent directory |
 | D.2 | Save flow (tabsReducer `mark-saved`, App `Ctrl+S`, Monaco content sync) | Completed | Dirty tracking, per-tab save, conflict prompts |
 | D.3 | External-change bridge (`useExternalFileChanges.ts`) | Completed | Clean → reload + toast; dirty → confirm before adopting disk; missing → warning, tab kept |

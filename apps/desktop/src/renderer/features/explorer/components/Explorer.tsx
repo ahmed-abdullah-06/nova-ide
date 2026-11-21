@@ -1,12 +1,16 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
+import { COMMAND_IDS, createCommandDefinitions } from '../../../commands/catalog';
+import { describeKeybinding } from '../../../commands/keybindings';
+import type { Platform } from '../../../commands/types';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
 import { detectLanguage } from '../../../utils/language';
@@ -27,8 +31,18 @@ interface ExplorerProps {
   createFileSignal: number;
 }
 
-function isMacPlatform(): boolean {
-  return navigator.userAgent.toLowerCase().includes('mac');
+function detectPlatform(): Platform {
+  if (typeof navigator === 'undefined') {
+    return 'win32';
+  }
+  const agent = navigator.userAgent.toLowerCase();
+  if (agent.includes('mac')) {
+    return 'darwin';
+  }
+  if (agent.includes('linux')) {
+    return 'linux';
+  }
+  return 'win32';
 }
 
 /**
@@ -276,7 +290,12 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   }, [dispatch]);
 
   const workspace = state.workspace;
-  const shortcutHint = isMacPlatform() ? '⌘⇧O' : 'Ctrl+Shift+O';
+  const platform = useMemo(detectPlatform, []);
+  const shortcutHint = useMemo(() => {
+    const command = createCommandDefinitions().find((entry) => entry.id === COMMAND_IDS.openWorkspace);
+    const spec = command?.keybindings?.[platform] ?? command?.keybindings?.win32 ?? command?.keybindings?.linux;
+    return spec ? describeKeybinding(spec, platform) : '';
+  }, [platform]);
 
   return (
     <div className="explorer">
