@@ -2,12 +2,13 @@
  * Single title row for the application window.
  *
  * The native title bar and native menu are removed in the main process, so
- * this row owns the app mark, the command menu, the document title and the
- * panel controls. `titleBarOverlay` draws the Windows window buttons on the
- * far right; `title-bar__actions` reserves space for them in CSS.
+ * this row owns the app mark, the command menu, a centred command centre and
+ * the layout/panel controls. `titleBarOverlay` draws the Windows window
+ * buttons on the far right; `title-bar__actions` reserves space for them.
  */
 import { useEffect, type ReactNode } from 'react';
 import a6Mark from '../../../../icons/a6-32.png';
+import { COMMAND_IDS } from '../../commands/catalog';
 import type { MenuSection } from '../../commands/menuModel';
 import { Icon } from '../ui/icons';
 import { IconButton } from '../ui/IconButton';
@@ -19,11 +20,14 @@ export interface TitleBarProps {
   onExecute: (id: string) => void;
   onCaptureFocus: () => void;
   onOpenChange: (open: boolean) => void;
-  /** Workspace or active document name shown in the middle of the row. */
+  /** Workspace or active document name shown in the command centre. */
   title: string;
   aiPanelVisible: boolean;
+  sidebarVisible: boolean;
+  bottomPanelVisible: boolean;
   onToggleAiPanel: () => void;
-  onOpenSettings: () => void;
+  onToggleSidebar: () => void;
+  onToggleBottomPanel: () => void;
 }
 
 const DEFAULT_OVERLAY_WIDTH = 138;
@@ -58,8 +62,11 @@ export function TitleBar({
   onOpenChange,
   title,
   aiPanelVisible,
+  sidebarVisible,
+  bottomPanelVisible,
   onToggleAiPanel,
-  onOpenSettings,
+  onToggleSidebar,
+  onToggleBottomPanel,
 }: TitleBarProps): ReactNode {
   useEffect(() => {
     const apply = (): void => {
@@ -96,9 +103,10 @@ export function TitleBar({
         onCaptureFocus={onCaptureFocus}
         onOpenChange={onOpenChange}
       />
-      <span className="title-bar__title" title={title}>
-        {title}
-      </span>
+      <div className="command-center" title={title}>
+        <Icon name="commandCenter" size={13} className="command-center__icon" />
+        <span className="command-center__title">{title}</span>
+      </div>
       <span className="title-bar__spacer" />
       {chordHint === null ? null : (
         <span className="menu-bar__hint" role="status">
@@ -106,6 +114,18 @@ export function TitleBar({
         </span>
       )}
       <div className="title-bar__actions">
+        <IconButton
+          label="Toggle Sidebar"
+          icon={<Icon name="layoutSidebar" size={16} />}
+          active={sidebarVisible}
+          onClick={onToggleSidebar}
+        />
+        <IconButton
+          label="Toggle Panel"
+          icon={<Icon name="layoutPanel" size={16} />}
+          active={bottomPanelVisible}
+          onClick={onToggleBottomPanel}
+        />
         <IconButton
           label="Toggle AI Panel"
           icon={<Icon name="panelRight" size={16} />}
@@ -115,7 +135,7 @@ export function TitleBar({
         <IconButton
           label="Settings"
           icon={<Icon name="settings" size={16} />}
-          onClick={onOpenSettings}
+          onClick={() => onExecute(COMMAND_IDS.openSettings)}
         />
       </div>
     </header>

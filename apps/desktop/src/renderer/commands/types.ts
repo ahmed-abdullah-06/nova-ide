@@ -61,6 +61,14 @@ export interface CommandServices {
   saveAsActive(): void | Promise<void>;
   saveAll(): void | Promise<void>;
   closeActiveTab(): void | Promise<void>;
+  /** Closes the tab identified by `tabId` (or the active one). */
+  closeTabById(tabId?: string): void | Promise<void>;
+  /** Closes every tab except the one identified by `tabId` (or the active one). */
+  closeOtherTabs(tabId?: string): void | Promise<void>;
+  /** Closes all closable editor tabs. */
+  closeAllTabs(): void | Promise<void>;
+  /** Copies a file-backed tab's path to the clipboard. */
+  copyTabPath(tabId?: string): void | Promise<void>;
   /** Opens the Settings editor tab (Ctrl+,). Not exposed in the menu. */
   openSettings(): void | Promise<void>;
   exitApp(): void | Promise<void>;

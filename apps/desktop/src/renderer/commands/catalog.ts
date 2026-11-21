@@ -18,6 +18,11 @@ export const COMMAND_IDS = {
   saveAs: 'a6.file.saveAs',
   saveAll: 'a6.file.saveAll',
   closeTab: 'a6.file.closeTab',
+  /** Tab context-menu actions; also reachable from the future command palette. */
+  closeTabById: 'a6.tab.close',
+  closeOtherTabs: 'a6.tab.closeOthers',
+  closeAllTabs: 'a6.tab.closeAll',
+  copyTabPath: 'a6.tab.copyPath',
   exit: 'a6.app.exit',
   undo: 'a6.edit.undo',
   redo: 'a6.edit.redo',
@@ -183,6 +188,53 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'File',
       keybindings: all(primary('KeyW')),
       run: (context) => context.services.closeActiveTab(),
+      enabled: active,
+      disabledHint: hint(NO_TAB),
+    },
+    {
+      // Context-menu Close targets the right-clicked tab, not the active one.
+      // There is no separate keybinding: Ctrl+W already closes the active tab.
+      id: COMMAND_IDS.closeTabById,
+      title: 'Close Tab',
+      category: 'File',
+      run: (context, args) =>
+        context.services.closeTabById(
+          typeof args === 'string' ? args : undefined,
+        ),
+      enabled: active,
+      disabledHint: hint(NO_TAB),
+    },
+    {
+      id: COMMAND_IDS.closeOtherTabs,
+      title: 'Close Other Tabs',
+      category: 'File',
+      // Ctrl+K is an existing chord prefix; these second keys are unused.
+      keybindings: all(chord('KeyK', 'KeyX')),
+      run: (context, args) =>
+        context.services.closeOtherTabs(
+          typeof args === 'string' ? args : undefined,
+        ),
+      enabled: (context) => context.tabs.length > 1,
+      disabledHint: hint('Only one tab is open'),
+    },
+    {
+      id: COMMAND_IDS.closeAllTabs,
+      title: 'Close All Tabs',
+      category: 'File',
+      keybindings: all(chord('KeyK', 'KeyW')),
+      run: (context) => context.services.closeAllTabs(),
+      enabled: (context) => context.tabs.length > 0,
+      disabledHint: hint(NO_TAB),
+    },
+    {
+      id: COMMAND_IDS.copyTabPath,
+      title: 'Copy Path',
+      category: 'File',
+      keybindings: all(chord('KeyK', 'KeyC')),
+      run: (context, args) =>
+        context.services.copyTabPath(
+          typeof args === 'string' ? args : undefined,
+        ),
       enabled: active,
       disabledHint: hint(NO_TAB),
     },

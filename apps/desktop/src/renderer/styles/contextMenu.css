@@ -1,0 +1,45 @@
+/* A6 — shared context menu (LF2) */
+
+.context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 190px;
+  padding: 4px 0;
+  background: var(--surface-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+  outline: none;
+}
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  height: var(--row-height-lg);
+  padding: 0 10px;
+  color: var(--text);
+  text-align: left;
+  font-size: var(--font-size-base);
+}
+
+.context-menu__item--focused:not(:disabled) {
+  background: var(--list-active);
+}
+
+.context-menu__item:disabled {
+  color: var(--text-faint);
+}
+
+.context-menu__shortcut {
+  color: var(--text-faint);
+  font-size: var(--font-size-small);
+}
+
+.context-menu__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}

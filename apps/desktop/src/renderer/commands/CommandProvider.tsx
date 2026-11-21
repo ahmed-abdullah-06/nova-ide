@@ -23,6 +23,7 @@ import {
   isEditorReady,
   requestEditorAction,
 } from '../features/editor/editorCommands';
+import { disposeModel } from '../features/editor/modelRegistry';
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
@@ -80,7 +81,7 @@ function detectPlatform(): Platform {
 export interface CommandsContextValue {
   sections: readonly MenuSection[];
   chordHint: string | null;
-  executeFromMenu: (id: string) => void;
+  executeFromMenu: (id: string, args?: unknown) => void;
   captureMenuFocus: () => void;
   setMenuOpen: (open: boolean) => void;
 }
@@ -129,7 +130,9 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       saveAsActive: () => fileOps.saveAsActive(),
       saveAll: () => fileOps.saveAll(),
       closeActiveTab: () => {
-        const tab = tabsState.tabs.find((candidate) => candidate.id === tabsState.activeTabId);
+        const tab = tabsState.tabs.find(
+          (candidate) => candidate.id === tabsState.activeTabId,
+        );
         if (tab === undefined) {
           return;
         }
@@ -139,6 +142,74 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         ) {
           tabsDispatch({ type: 'close', id: tab.id });
         }
+      },
+      closeTabById: (tabId) => {
+        const tab = tabsState.tabs.find(
+          (candidate) => candidate.id === (tabId ?? tabsState.activeTabId),
+        );
+        if (tab === undefined) {
+          return;
+        }
+        if (
+          !tab.isDirty ||
+          window.confirm(`Close "${tab.name}"? Unsaved changes will be lost.`)
+        ) {
+          disposeModel(tab.id);
+          tabsDispatch({ type: 'close', id: tab.id });
+        }
+      },
+      closeOtherTabs: (tabId) => {
+        const keepId = tabId ?? tabsState.activeTabId;
+        const others = tabsState.tabs.filter((tab) => tab.id !== keepId);
+        if (others.length === 0) {
+          return;
+        }
+        const dirty = others.filter((tab) => tab.isDirty);
+        if (
+          dirty.length > 0 &&
+          !window.confirm(
+            `Close ${dirty.length} tab(s) with unsaved changes?`,
+          )
+        ) {
+          return;
+        }
+        for (const tab of others) {
+          disposeModel(tab.id);
+          tabsDispatch({ type: 'close', id: tab.id });
+        }
+      },
+      closeAllTabs: () => {
+        if (tabsState.tabs.length === 0) {
+          return;
+        }
+        const dirty = tabsState.tabs.filter((tab) => tab.isDirty);
+        if (
+          dirty.length > 0 &&
+          !window.confirm(
+            `Close ${dirty.length} tab(s) with unsaved changes?`,
+          )
+        ) {
+          return;
+        }
+        for (const tab of tabsState.tabs) {
+          disposeModel(tab.id);
+          tabsDispatch({ type: 'close', id: tab.id });
+        }
+      },
+      copyTabPath: (tabId) => {
+        const tab = tabsState.tabs.find(
+          (candidate) => candidate.id === (tabId ?? tabsState.activeTabId),
+        );
+        if (tab === undefined) {
+          return;
+        }
+        if (tab.filePath === null) {
+          notify('This buffer has no file path.');
+          return;
+        }
+        void navigator.clipboard.writeText(tab.filePath).catch(() => {
+          notify('Could not copy the path to the clipboard.');
+        });
       },
       openSettings: () => {
         ui.showActivity('settings');
@@ -254,10 +325,11 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       id: string,
       source: 'user-menu' | 'user-keyboard',
       focusOverride?: FocusTarget,
+      args?: unknown,
     ): Promise<void> => {
       const context = buildContextRef.current(focusOverride ?? getFocusTarget());
       try {
-        const outcome = await REGISTRY.execute(id, context, source);
+        const outcome = await REGISTRY.execute(id, context, source, args);
         if (outcome === 'blocked') {
           const definition = REGISTRY.get(id);
           const reason =
@@ -399,8 +471,13 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
     () => ({
       sections,
       chordHint,
-      executeFromMenu: (id: string) => {
-        void executeRef.current(id, 'user-menu', menuFocusRef.current ?? undefined);
+      executeFromMenu: (id: string, args?: unknown) => {
+        void executeRef.current(
+          id,
+          'user-menu',
+          menuFocusRef.current ?? undefined,
+          args,
+        );
       },
       captureMenuFocus,
       setMenuOpen,

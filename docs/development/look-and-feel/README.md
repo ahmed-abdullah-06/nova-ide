@@ -180,7 +180,7 @@ or documentation.
   delegated to the owner. DOM/CSS evidence and code inspection are the basis
   of this scorecard.
 
-**Status: LF0 complete — LF1 approved and completed (see below).**
+**Status: LF0 complete — LF1 approved and completed — LF2 completed (see below).**
 
 ## LF1 — Tokens and theme (completed)
 
@@ -209,4 +209,49 @@ dependency, no new command. Changed files:
   - explorer folder icon renders as inline `<svg>` with the new folder colour;
   - **0 console errors**.
 
-Status after LF1: items 8 (custom Monaco themes) and 16 (visual system) move from missing/partial toward present. Remaining scorecard items are addressed in LF2–LF5. **Awaiting approval before LF2.**
+Status after LF1: items 8 (custom Monaco themes) and 16 (visual system) move from missing/partial toward present. Remaining scorecard items are addressed in LF2–LF5.
+
+## LF2 — Chrome (completed)
+
+Scope: shell chrome and real backing data only. No new IPC channel, no
+main-process/security change, no new dependency, and no dead controls. Every
+new action is a registry command with a stable id, enabled state, and a
+conflict-checked keybinding. Changed files:
+
+| File | Change |
+| --- | --- |
+| `components/layout/TitleBar.tsx` | Added a centred, **display-only** command-centre pill (workspace / active document name). It deliberately has no click handler or button role: the palette is still disabled until LF4, so the pill does not pretend to open one. Added four real `IconButton` layout controls — Toggle Sidebar, Toggle Panel, Toggle AI Panel, Settings — the first two executing the existing `toggleExplorer` / `toggleTerminal` registry commands. Native-overlay space reservation and A6 mark are unchanged. |
+| `components/layout/ActivityBar.tsx` | Shortcut-bearing tooltips (`Explorer (Ctrl+Shift+E)`, `Search (Ctrl+Shift+F)`, `Source Control (Ctrl+Shift+G)`, `Settings (Ctrl+,)`) with matching `aria-keyshortcuts`; real SCM change badge fed by `useGit` status; Settings pinned to the bottom with a flex spacer. No Debug or Extensions entry (no backing feature). |
+| `app/App.tsx` | Wires `useGit` change count into the activity bar and the new title-bar props; layout toggles route through the command registry. |
+| `components/ui/ContextMenu.tsx` (new) | One reusable keyboard-accessible menu primitive (Up/Down, Enter/Space, Escape, focus return). Items are command ids, not inline callbacks. |
+| `features/editor/EditorTabs.tsx` | File-type icon on every tab, dirty dot that yields to the X on hover, middle-click close, and a right-click context menu (Close / Close Others / Close All / Copy Path) whose items execute registry commands with the clicked tab id as an argument. |
+| `features/editor/breadcrumbModel.ts`, `Breadcrumbs.tsx` (new) | Pure path-to-segments model plus the bar under the tab strip. Workspace files show workspace name → relative folders → file; external/untitled files fall back honestly. |
+| `commands/catalog.ts`, `commands/types.ts`, `CommandProvider.tsx` | Added `a6.tab.close`, `a6.tab.closeOthers`, `a6.tab.closeAll`, `a6.tab.copyPath` with stable ids and `enabled` states; the three group actions carry chord keybindings (`Ctrl+K X/W/C`). `a6.tab.close` takes the right-clicked tab id so the menu's Close item never targets the wrong tab (Ctrl+W already closes the active tab, so it has no separate binding). `executeFromMenu` now forwards an optional command argument; services close tabs through the existing tabs store and copy paths via the existing clipboard API. |
+| `features/explorer/components/Explorer.tsx` | Uppercase chevron header and a collapsible OPEN EDITORS section driven by the real tabs store, with a count and dirty markers. |
+| `styles/contextMenu.css` (new), `layout.css`, `editor.css`, `explorer.css`, `index.tsx` | Shared menu styling, command-centre pill, SCM badge, breadcrumb bar, tab close-wrap swap, open-editors rows; all using LF1 tokens. |
+
+### LF2 verification (actually executed)
+
+- `pnpm typecheck` — passed (after fixes; final re-run passed).
+- `pnpm test` — **59 files / 765 tests passed** (baseline after LF1 58 / 759; +6 new tests in `tests/unit/lookAndFeelChrome.test.ts` covering breadcrumb segments, tab-action ids and keybinding conflicts). The `node-pty` `AttachConsole` messages are pre-existing Windows harness noise.
+- `pnpm package` — passed.
+- Packaged app launched via CDP with an isolated profile and a temporary git fixture (one commit + one untracked file). Live probe at 1280×720 confirmed:
+  - command centre present, horizontally centred, display-only (no button/`role`), text `Untitled-1 — <workspace>`;
+  - four title-bar action buttons (`Toggle Sidebar`, `Toggle Panel`, `Toggle AI Panel`, `Settings`);
+  - activity-bar tooltips carry shortcuts; `Settings` is the last item; SCM badge shows `1` from real git status; active item keeps the accent indicator;
+  - OPEN EDITORS header `OPEN EDITORS`, `aria-expanded="true"`, count `1`, one row;
+  - active file tab renders an inline SVG file icon and a close button; breadcrumb labels are `<workspace> → src → App.tsx`;
+  - right-clicking the tab opens `role="menu"` with four items and the exact registry shortcuts;
+  - **0 console errors**.
+- `pnpm verify` — **165/165 checks passed, 0 console errors.** Three harness
+  issues surfaced during LF2 verification and were corrected in
+  `tools/verify/runtime.mjs` (no product behaviour changed): the title-row
+  geometry check compared action buttons against the left edge (`x`) of the
+  native-overlay rect instead of its right edge (`x + width`); the Explorer
+  empty-state check did not dispatch the `focus` event the renderer uses to
+  observe a bridge-driven `workspace.close()`; and the first terminal echo check
+  ran after a workspace close/reopen that leaves the auto-created xterm session
+  exited, so it now runs on the initially opened workspace and activates xterm
+  with a real click before typing.
+
+Scorecard movement: items 1, 2, 3, 5, 6 and 15 move from partial/missing toward present. Item 11 (palette) is intentionally still missing; it is an LF4 deliverable. Breadcrumb popup navigation (clicking a crumb) is not implemented — the bar is read-only, matching the "no fake UI" rule.

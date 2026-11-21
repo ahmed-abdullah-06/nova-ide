@@ -13,6 +13,7 @@ import { describeKeybinding } from '../../../commands/keybindings';
 import type { Platform } from '../../../commands/types';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
+import { Icon } from '../../../components/ui/icons';
 import { detectLanguage } from '../../../utils/language';
 import { isVisibleExpanded, pathParent } from '../../../utils/path';
 import { useWorkspaceActions } from '../../workspace/hooks/useWorkspaceActions';
@@ -23,6 +24,7 @@ import {
   type ExplorerMenuState,
 } from './ExplorerContextMenu';
 import { FileTreeNode } from './FileTreeNode';
+import { FileIcon } from '../fileIcons';
 
 interface ExplorerProps {
   /** Bumped by Ctrl+Shift+E; focuses the tree when greater than zero. */
@@ -61,6 +63,7 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   const treeRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef<Set<string>>(new Set());
   const [menu, setMenu] = useState<ExplorerMenuState | null>(null);
+  const [openEditorsExpanded, setOpenEditorsExpanded] = useState(true);
 
   // A stale menu must not survive a workspace switch.
   useEffect(() => {
@@ -300,7 +303,10 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   return (
     <div className="explorer">
       <div className="sidebar__section explorer__header">
-        <span className="explorer__title">EXPLORER</span>
+        <span className="explorer__title">
+          <Icon name="chevronUp" size={12} className="explorer__title-chevron" />
+          EXPLORER
+        </span>
         {workspace !== null ? (
           <div className="explorer__actions">
             <button
@@ -348,6 +354,60 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
           </div>
         ) : null}
       </div>
+
+      <section className="explorer-section open-editors">
+        <button
+          type="button"
+          className="explorer-section__header"
+          aria-expanded={openEditorsExpanded}
+          onClick={() => setOpenEditorsExpanded((value) => !value)}
+        >
+          <Icon
+            name="chevronUp"
+            size={12}
+            className={`explorer-section__chevron${
+              openEditorsExpanded ? '' : ' explorer-section__chevron--closed'
+            }`}
+          />
+          <span>OPEN EDITORS</span>
+          {tabs.state.tabs.length > 0 ? (
+            <span className="explorer-section__count">
+              {tabs.state.tabs.length}
+            </span>
+          ) : null}
+        </button>
+        {openEditorsExpanded ? (
+          <div className="explorer-section__body">
+            {tabs.state.tabs.length === 0 ? (
+              <div className="explorer-section__hint">No open editors</div>
+            ) : (
+              tabs.state.tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`open-editors__item${
+                    tab.id === tabs.state.activeTabId
+                      ? ' open-editors__item--active'
+                      : ''
+                  }`}
+                  title={tab.filePath ?? tab.name}
+                  onClick={() => tabs.dispatch({ type: 'activate', id: tab.id })}
+                >
+                  {tab.kind === 'settings' ? (
+                    <Icon name="settings" size={14} className="open-editors__icon" />
+                  ) : (
+                    <FileIcon name={tab.name} kind="file" expanded={false} />
+                  )}
+                  <span>{tab.name}</span>
+                  {tab.isDirty ? (
+                    <span className="open-editors__dirty" aria-label="Unsaved" />
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+      </section>
 
       {state.status === 'opening' ? (
         <div className="explorer__status" role="status">

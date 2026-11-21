@@ -62,16 +62,32 @@
   white-space: nowrap;
 }
 
-.editor-tab__dirty {
+.editor-tab__close-wrap {
+  position: relative;
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.editor-tab__dirty {
+  position: absolute;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--text-muted);
+  transition: opacity var(--transition);
+}
+
+/* The dirty dot gives way to the close button on hover. */
+.editor-tab:hover .editor-tab__dirty {
+  opacity: 0;
 }
 
 .editor-tab__close {
-  flex: none;
+  position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -105,6 +121,43 @@
 .editor-tabs__new:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+/* ---------- Breadcrumbs (LF2) ---------- */
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 22px;
+  padding: 0 10px;
+  background: var(--surface-app);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.breadcrumbs--empty {
+  height: 0;
+  border-bottom: none;
+}
+
+.breadcrumbs__segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.breadcrumbs__sep {
+  transform: rotate(180deg);
+  color: var(--text-faint);
+}
+
+.breadcrumbs__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .editor-content {

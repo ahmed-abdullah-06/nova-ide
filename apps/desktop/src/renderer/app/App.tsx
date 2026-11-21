@@ -22,7 +22,9 @@ import { ProblemsPanel } from '../features/problems/ProblemsPanel';
 import { TaskOutputPanel } from '../features/tasks/TaskOutputPanel';
 import { useTasks } from '../features/tasks/useTasks';
 import { useProblems } from '../features/problems/useProblems';
+import { useGit } from '../features/git/useGit';
 import { CommandProvider, useCommands } from '../commands/CommandProvider';
+import { COMMAND_IDS } from '../commands/catalog';
 import { requestEditorLayout } from '../features/editor/editorCommands';
 
 interface CursorPosition {
@@ -63,6 +65,13 @@ function Workspace(): ReactNode {
   // The badge of the problems tab shows how many diagnostics the language
   // services reported for the open files.
   const problems = useProblems();
+  // Drives the Source Control change-count badge in the activity bar.
+  const git = useGit(hasWorkspace);
+  const gitChangeCount = git.status?.isRepository === true
+    ? git.status.staged.length +
+      git.status.unstaged.length +
+      git.status.untracked.length
+    : 0;
 
   // The task runner offers the scripts of the workspace package.json.
   const tasks = useTasks(hasWorkspace);
@@ -150,11 +159,19 @@ function Workspace(): ReactNode {
             : (workspaceState.workspace?.name ?? 'A6')
         }
         aiPanelVisible={ui.aiPanelVisible}
+        sidebarVisible={ui.sidebarVisible}
+        bottomPanelVisible={ui.bottomPanelVisible}
         onToggleAiPanel={ui.toggleAiPanel}
-        onOpenSettings={handleOpenSettings}
+        onToggleSidebar={() =>
+          commands.executeFromMenu(COMMAND_IDS.toggleExplorer)
+        }
+        onToggleBottomPanel={() =>
+          commands.executeFromMenu(COMMAND_IDS.toggleTerminal)
+        }
       />
       <ActivityBar
         active={ui.activity}
+        changeCount={gitChangeCount}
         onSelect={(id) => {
           if (id === 'settings') {
             handleOpenSettings();

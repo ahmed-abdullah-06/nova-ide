@@ -26,6 +26,7 @@
 .title-bar {
   grid-row: 1;
   grid-column: 1 / -1;
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -65,6 +66,38 @@
   border-left: 1px solid var(--border);
   color: var(--text-muted);
   font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Centred command centre: a display pill until LF4 wires the palette. */
+.command-center {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(40%, 520px);
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  -webkit-app-region: no-drag;
+}
+
+.command-center__icon {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.command-center__title {
+  flex: 1;
+  overflow: hidden;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -131,6 +164,23 @@
   width: 2px;
   border-radius: 1px;
   background: var(--accent);
+}
+
+.activity-bar__badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .activity-bar__spacer {

@@ -6,6 +6,7 @@ import './styles/global.css';
 import './styles/ui.css';
 import './styles/layout.css';
 import './styles/menu.css';
+import './styles/contextMenu.css';
 import './styles/editor.css';
 import './styles/explorer.css';
 import './styles/panels.css';

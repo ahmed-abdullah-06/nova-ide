@@ -764,8 +764,14 @@ async function main() {
             r.height > 0 &&
             r.left >= 0 &&
             r.right <= titleBarBounds.innerWidth - 1 &&
+            // getTitlebarAreaRect() describes the draggable title-bar area,
+            // which starts at x:0. Native caption buttons occupy the space to
+            // its right, so that is the boundary DOM controls must not cross.
             (titleBarBounds.overlayRect === null ||
-              r.right <= titleBarBounds.overlayRect.x - 1),
+              r.right <=
+                titleBarBounds.overlayRect.x +
+                  titleBarBounds.overlayRect.width -
+                  1),
         ),
       JSON.stringify(titleBarBounds),
     );
@@ -792,41 +798,6 @@ async function main() {
       15000,
     );
     check('explorer shows the opened workspace', explorerReady);
-
-    // Explorer empty state must derive its Open Folder hint from the command registry.
-    await session.evaluate(`window.nova.workspace.close()`);
-    const explorerEmpty = await waitFor(
-      session,
-      `(() => {
-        const hint = document.querySelector('.explorer__empty-hint');
-        const title = document.querySelector('.explorer__empty-title');
-        return hint !== null && title !== null ? hint.textContent.trim() : false;
-      })()`,
-      10000,
-    );
-    const expectedOpenHint = await session.evaluate(
-      `(() => {
-        // Mirror CommandRegistry display: openWorkspace chord is Ctrl+K Ctrl+O on win32/linux, Cmd+K Cmd+O on darwin.
-        const mac = navigator.userAgent.toLowerCase().includes('mac');
-        return mac ? 'Cmd+K Cmd+O' : 'Ctrl+K Ctrl+O';
-      })()`,
-    );
-    check(
-      'Explorer Open Folder hint matches the command registry shortcut',
-      explorerEmpty === expectedOpenHint,
-      JSON.stringify({ explorerEmpty, expectedOpenHint }),
-    );
-    const reopenedWorkspace = await session.evaluate(
-      `window.nova.workspace.open(${JSON.stringify(fixture)}).then((r) => r.ok)`,
-    );
-    check('workspace reopens after empty-state hint check', reopenedWorkspace === true);
-    await session.evaluate(`window.dispatchEvent(new Event('focus'))`);
-    const explorerReadyAgain = await waitFor(
-      session,
-      `document.querySelector('.explorer__title') !== null`,
-      15000,
-    );
-    check('explorer restored after empty-state hint check', explorerReadyAgain === true);
 
     // The terminal must start in the workspace root and answer commands.
     const terminal = await session.evaluate(
@@ -863,7 +834,13 @@ async function main() {
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    // Typing into the terminal must produce output in the renderer.
+    // Typing into the terminal must produce output in the renderer. A real
+    // click on the xterm screen activates its key handling before text is
+    // sent; programmatic focus alone is not enough on every Windows shell.
+    await clickWithMouse(
+      session,
+      '.terminal-panel__view:not([hidden]) .terminal-view .xterm-screen',
+    );
     const focused = await session.evaluate(
       `(() => {
         const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
@@ -888,6 +865,47 @@ async function main() {
       40000,
     );
     check('terminal renders the output of a command', terminalOutput);
+
+    // Explorer empty state must derive its Open Folder hint from the command
+    // registry. Run this AFTER the first terminal echo check: closing and
+    // reopening the workspace leaves the auto-created terminal session in an
+    // exited state, so it must not happen before terminal output is verified.
+    // The renderer observes a bridge-driven workspace change on focus, just as
+    // it does after workspace.open() above.
+    await session.evaluate(`window.nova.workspace.close()`);
+    await session.evaluate(`window.dispatchEvent(new Event('focus'))`);
+    const explorerEmpty = await waitFor(
+      session,
+      `(() => {
+        const hint = document.querySelector('.explorer__empty-hint');
+        const title = document.querySelector('.explorer__empty-title');
+        return hint !== null && title !== null ? hint.textContent.trim() : false;
+      })()`,
+      10000,
+    );
+    const expectedOpenHint = await session.evaluate(
+      `(() => {
+        // Mirror CommandRegistry display: openWorkspace chord is Ctrl+K Ctrl+O on win32/linux, Cmd+K Cmd+O on darwin.
+        const mac = navigator.userAgent.toLowerCase().includes('mac');
+        return mac ? 'Cmd+K Cmd+O' : 'Ctrl+K Ctrl+O';
+      })()`,
+    );
+    check(
+      'Explorer Open Folder hint matches the command registry shortcut',
+      explorerEmpty === expectedOpenHint,
+      JSON.stringify({ explorerEmpty, expectedOpenHint }),
+    );
+    const reopenedWorkspace = await session.evaluate(
+      `window.nova.workspace.open(${JSON.stringify(fixture)}).then((r) => r.ok)`,
+    );
+    check('workspace reopens after empty-state hint check', reopenedWorkspace === true);
+    await session.evaluate(`window.dispatchEvent(new Event('focus'))`);
+    const explorerReadyAgain = await waitFor(
+      session,
+      `document.querySelector('.explorer__title') !== null`,
+      15000,
+    );
+    check('explorer restored after empty-state hint check', explorerReadyAgain === true);
 
     // The search view must be reachable through the activity bar.
     const searchOpened = await session.evaluate(

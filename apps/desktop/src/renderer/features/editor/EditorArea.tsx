@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import { useTabs } from '../../stores/tabs';
+import { useWorkspace } from '../../stores/workspace';
+import { useCommands } from '../../commands/CommandProvider';
 import type { Theme } from '../../hooks/useTheme';
 import { SettingsView } from '../settings/SettingsView';
+import { Breadcrumbs } from './Breadcrumbs';
 import { disposeModel } from './modelRegistry';
 import { EditorTabs } from './EditorTabs';
 import { MonacoEditor } from './MonacoEditor';
@@ -22,6 +25,8 @@ export function EditorArea({
   onSelectionChange,
 }: EditorAreaProps): ReactNode {
   const { state, dispatch } = useTabs();
+  const { state: workspaceState } = useWorkspace();
+  const { executeFromMenu } = useCommands();
   const activeTab =
     state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
   const settingsActive = activeTab?.kind === 'settings';
@@ -53,6 +58,12 @@ export function EditorArea({
         onActivate={handleActivate}
         onClose={handleClose}
         onNew={handleNew}
+        onContextAction={(id, tabId) => executeFromMenu(id, tabId)}
+      />
+      <Breadcrumbs
+        tab={activeTab}
+        workspaceRoot={workspaceState.workspace?.rootPath ?? null}
+        workspaceName={workspaceState.workspace?.name ?? null}
       />
       {settingsActive ? (
         <SettingsView />
