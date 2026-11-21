@@ -581,9 +581,21 @@ function createFixture() {
   git('branch', 'feature/verify');
   writeFileSync(path.join(root, 'untracked.txt'), 'untracked\n', 'utf8');
   // A file with a type error, so the problems panel has something to show.
+  // The braces and indentation also give the editor guide check real tokens
+  // to render; the type error keeps the diagnostics check meaningful.
   writeFileSync(
     path.join(root, 'broken.ts'),
-    'const value: number = "not a number";\n',
+    [
+      'const value: number = "not a number";',
+      'function describeValue() {',
+      '  if (value) {',
+      '    return value;',
+      '  }',
+      '  return 0;',
+      '}',
+      'describeValue();',
+      '',
+    ].join('\n'),
     'utf8',
   );
   return root;
@@ -834,6 +846,42 @@ async function main() {
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
 
+    // LF3 shell: the panel strip keeps its actions on the right and exposes
+    // exactly the three registry-backed controls.
+    const panelChrome = await session.evaluate(
+      `(() => {
+        const header = document.querySelector('.bottom-panel__header');
+        const tabs = document.querySelector('.bottom-panel__tabs');
+        const actions = document.querySelector('.bottom-panel__actions');
+        if (header === null || tabs === null || actions === null) return null;
+        const h = header.getBoundingClientRect();
+        const t = tabs.getBoundingClientRect();
+        const a = actions.getBoundingClientRect();
+        const buttons = [...actions.querySelectorAll('button')];
+        return {
+          labels: buttons.map((b) => b.getAttribute('aria-label')),
+          rightGap: h.right - a.right,
+          tabsBeforeActions: t.right <= a.left + 1,
+          insideHeader: a.left >= h.left - 1 && a.right <= h.right + 1,
+          heights: buttons.map((b) => b.getBoundingClientRect().height),
+        };
+      })()`,
+    );
+    check(
+      'bottom-panel actions are right-aligned and command-backed',
+      panelChrome !== null &&
+        panelChrome.labels.length === 3 &&
+        ['New Terminal', 'Maximize Panel', 'Close Panel'].every(
+          (label, index) => panelChrome.labels[index] === label,
+        ) &&
+        panelChrome.rightGap >= 0 &&
+        panelChrome.rightGap <= 12 &&
+        panelChrome.tabsBeforeActions === true &&
+        panelChrome.insideHeader === true &&
+        panelChrome.heights.every((height) => height > 0),
+      JSON.stringify(panelChrome),
+    );
+
     // Typing into the terminal must produce output in the renderer. A real
     // click on the xterm screen activates its key handling before text is
     // sent; programmatic focus alone is not enough on every Windows shell.
@@ -1022,6 +1070,79 @@ async function main() {
     );
     check('the file with the error can be opened', fileOpened === true);
 
+    // LF3 editor chrome: the built-in Monaco guides must render for a file
+    // that really contains brackets, indentation and an active line.
+    const editorChrome = await waitFor(
+      session,
+      `(() => {
+        const editor = document.querySelector('.monaco-editor');
+        const overlay = editor === null ? null : editor.querySelector('.view-overlays');
+        if (editor === null || overlay === null) return false;
+        const currentLine = overlay.querySelector('.current-line');
+        // Monaco renders indentation guides as .bracket-indent-guide and
+        // sticky-scroll rows as .sticky-widget*; both are real DOM output of
+        // the built-in options enabled in LF3.
+        const indentGuides = overlay.querySelectorAll('.bracket-indent-guide');
+        const bracketTokens = editor.querySelectorAll('[class*="bracket-highlighting-"]');
+        const stickyRows = editor.querySelectorAll('[class*="sticky-widget"]');
+        return currentLine !== null &&
+          indentGuides.length > 0 &&
+          bracketTokens.length > 0 &&
+          stickyRows.length > 0
+          ? {
+              currentLine: true,
+              indentGuides: indentGuides.length,
+              bracketTokens: bracketTokens.length,
+              stickyRows: stickyRows.length,
+            }
+          : false;
+      })()`,
+      10000,
+    );
+    check(
+      'Monaco renders the LF3 editor guides and current line',
+      editorChrome !== false,
+      JSON.stringify(editorChrome),
+    );
+
+    const statusContext = await waitFor(
+      session,
+      `(() => {
+        const bar = document.querySelector('.status-bar');
+        if (bar === null) return false;
+        const text = bar.textContent ?? '';
+        const items = [...bar.querySelectorAll('.status-bar__item')];
+        const cursor = items.find((node) => (node.textContent ?? '').includes('Ln '));
+        const language = bar.querySelector('select[aria-label="Language of the active buffer"]');
+        const privacy = bar.querySelector('.status-bar__privacy');
+        const eolItem = items.find((node) => node.getAttribute('title') === 'Line ending');
+        return {
+          cursor: /Ln\\s+\\d+,\\s+Col\\s+\\d+/.test(text),
+          indentation: text.includes('Spaces: 2'),
+          encoding: text.includes('UTF-8'),
+          eol: eolItem === undefined ? '' : eolItem.textContent.trim(),
+          language: language === null ? '' : language.value,
+          privacy: privacy === null ? '' : privacy.textContent.trim(),
+          bell: bar.querySelector('.status-bar__bell-button') !== null,
+          readOnlyCursor: cursor === undefined ? null : getComputedStyle(cursor).cursor,
+        };
+      })()`,
+      10000,
+    );
+    check(
+      'status bar shows real buffer context with non-interactive values',
+      statusContext !== false &&
+        statusContext.cursor === true &&
+        statusContext.indentation === true &&
+        statusContext.encoding === true &&
+        (statusContext.eol === 'LF' || statusContext.eol === 'CRLF') &&
+        statusContext.language.length > 0 &&
+        statusContext.privacy.includes('Local-only:') &&
+        statusContext.bell === true &&
+        statusContext.readOnlyCursor === 'default',
+      JSON.stringify(statusContext),
+    );
+
     const problemsTab = await session.evaluate(
       `(() => {
         const tabs = [...document.querySelectorAll('.bottom-panel__tab')];
@@ -1047,6 +1168,25 @@ async function main() {
       'problems panel lists the diagnostics of the editor',
       typeof diagnostics === 'string' && diagnostics.includes('Error'),
       String(diagnostics).slice(0, 160),
+    );
+
+    const problemBadge = await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Problems'));
+        const badge = tab === undefined ? null : tab.querySelector('.bottom-panel__badge');
+        return {
+          badge: badge === null ? null : badge.textContent,
+          items: document.querySelectorAll('.problems-panel__item').length,
+        };
+      })()`,
+    );
+    check(
+      'problems tab count reflects live diagnostics',
+      problemBadge !== null &&
+        Number(problemBadge.badge) > 0 &&
+        problemBadge.items >= Number(problemBadge.badge),
+      JSON.stringify(problemBadge),
     );
 
     // The task runner must list the scripts of the workspace.
@@ -1215,6 +1355,18 @@ async function main() {
       'source control shows the current branch',
       branch === 'main',
       String(branch),
+    );
+
+    const statusBranch = await session.evaluate(
+      `(() => {
+        const bar = document.querySelector('.status-bar');
+        return bar === null ? false : bar.textContent.includes('main');
+      })()`,
+    );
+    check(
+      'status bar shows the same real git branch',
+      statusBranch === true,
+      String(statusBranch),
     );
 
     // The branch selector must offer the other branch of the fixture.
@@ -3653,6 +3805,106 @@ async function main() {
     check(
       'command trace accessor cannot execute commands',
       beforeAccessorCall === afterAccessorCall,
+    );
+
+    // LF3 panel behaviour is checked at the very end: maximizing or hiding
+    // the panel changes focus/geometry and must not perturb terminal, editor
+    // or AI assertions above.
+    await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Terminal'));
+        if (tab !== undefined) tab.click();
+      })()`,
+    );
+    const maximizeClicked = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.bottom-panel__action[aria-label="Maximize Panel"]');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const panelMaximized = await waitFor(
+      session,
+      `(() => {
+        const main = document.querySelector('.main-column');
+        const editor = document.querySelector('.editor-area');
+        if (main === null || editor === null) return false;
+        return main.classList.contains('main-column--panel-maximized') &&
+          getComputedStyle(editor).visibility === 'hidden' &&
+          editor.getBoundingClientRect().height < 20;
+      })()`,
+      5000,
+    );
+    check(
+      'panel maximize command hides the editor row',
+      maximizeClicked === true && panelMaximized !== false,
+      JSON.stringify(panelMaximized),
+    );
+
+    const restoreClicked = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.bottom-panel__action[aria-label="Restore Panel"]');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const panelRestored = await waitFor(
+      session,
+      `(() => {
+        const main = document.querySelector('.main-column');
+        const editor = document.querySelector('.editor-area');
+        if (main === null || editor === null) return false;
+        return !main.classList.contains('main-column--panel-maximized') &&
+          getComputedStyle(editor).visibility === 'visible' &&
+          editor.getBoundingClientRect().height > 20;
+      })()`,
+      5000,
+    );
+    check(
+      'panel restore command brings the editor back',
+      restoreClicked === true && panelRestored !== false,
+      JSON.stringify(panelRestored),
+    );
+
+    const closeClicked = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.bottom-panel__action[aria-label="Close Panel"]');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const panelHidden = await waitFor(
+      session,
+      `document.querySelector('.bottom-panel--hidden') !== null &&
+       document.querySelector('.bottom-panel') !== null`,
+      5000,
+    );
+    check(
+      'panel close command hides without unmounting the views',
+      closeClicked === true && panelHidden !== false,
+    );
+    const panelReopened = await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Terminal'));
+        if (tab === undefined) return false;
+        tab.click();
+        return true;
+      })()`,
+    );
+    const terminalStillMounted = await waitFor(
+      session,
+      `document.querySelector('.bottom-panel--hidden') === null &&
+       document.querySelector('.terminal-view .xterm-rows > div') !== null`,
+      5000,
+    );
+    check(
+      'panel reopens with the terminal session intact',
+      panelReopened === true && terminalStillMounted !== false,
     );
 
     mockOllama.stop();

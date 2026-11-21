@@ -235,6 +235,9 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       toggleSourceControl: () => ui.toggleActivity('scm'),
       toggleAiPanel: () => ui.toggleAiPanel(),
       toggleTerminal: () => ui.toggleBottomPanel('terminal'),
+      newTerminal: () => ui.requestNewTerminal(),
+      maximizeBottomPanel: () => ui.toggleBottomPanelMaximized(),
+      closeBottomPanel: () => ui.hideBottomPanel(),
       zoomIn: async () => {
         await nova?.window.zoomIn();
       },
@@ -309,6 +312,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         sidebarVisible: ui.sidebarVisible,
         bottomPanelVisible: ui.bottomPanelVisible,
         bottomPanelTab: ui.bottomPanelTab,
+        bottomPanelMaximized: ui.bottomPanelMaximized,
         aiPanelVisible: ui.aiPanelVisible,
         windowState: ui.windowState,
         services,

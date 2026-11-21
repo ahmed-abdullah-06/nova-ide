@@ -26,6 +26,11 @@ import { useGit } from '../features/git/useGit';
 import { CommandProvider, useCommands } from '../commands/CommandProvider';
 import { COMMAND_IDS } from '../commands/catalog';
 import { requestEditorLayout } from '../features/editor/editorCommands';
+import {
+  detectEol,
+  formatIndentation,
+  summarizeGitStatus,
+} from '../features/status/statusBarModel';
 
 interface CursorPosition {
   line: number;
@@ -72,6 +77,7 @@ function Workspace(): ReactNode {
       git.status.unstaged.length +
       git.status.untracked.length
     : 0;
+  const gitSummary = summarizeGitStatus(git.status);
 
   // The task runner offers the scripts of the workspace package.json.
   const tasks = useTasks(hasWorkspace);
@@ -192,7 +198,13 @@ function Workspace(): ReactNode {
         visible={ui.sidebarVisible}
       />
       <div
-        className={`main-column${ui.bottomPanelVisible ? '' : ' main-column--no-bottom-panel'}`}
+        className={[
+          'main-column',
+          ui.bottomPanelVisible ? '' : 'main-column--no-bottom-panel',
+          ui.bottomPanelMaximized ? 'main-column--panel-maximized' : '',
+        ]
+          .filter((value) => value !== '')
+          .join(' ')}
       >
         <EditorArea
           theme={theme}
@@ -200,7 +212,22 @@ function Workspace(): ReactNode {
           onSelectionChange={setSelection}
         />
         <BottomPanel
-          renderTerminal={() => <TerminalPanel hasWorkspace={hasWorkspace} />}
+          maximized={ui.bottomPanelMaximized}
+          onNewTerminal={() =>
+            commands.executeFromMenu(COMMAND_IDS.newTerminal)
+          }
+          onToggleMaximize={() =>
+            commands.executeFromMenu(COMMAND_IDS.maximizeBottomPanel)
+          }
+          onClose={() =>
+            commands.executeFromMenu(COMMAND_IDS.closeBottomPanel)
+          }
+          renderTerminal={() => (
+            <TerminalPanel
+              hasWorkspace={hasWorkspace}
+              createSignal={ui.terminalCreateSignal}
+            />
+          )}
           problemCount={problems.errorCount}
           renderOutput={() => (
             <TaskOutputPanel
@@ -265,6 +292,13 @@ function Workspace(): ReactNode {
         workspaceName={workspaceState.workspace?.name ?? null}
         workspaceRoot={workspaceState.workspace?.rootPath ?? null}
         localOnly={ai.localOnly}
+        gitSummary={gitSummary}
+        errorCount={problems.errorCount}
+        warningCount={problems.warningCount}
+        indentation={formatIndentation(2)}
+        eol={detectEol(fileTab?.content ?? '')}
+        hasBuffer={fileTab !== null}
+        notifications={workspaceState.notificationHistory}
       />
       <NotificationHost />
     </div>

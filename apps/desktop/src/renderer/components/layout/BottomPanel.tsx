@@ -3,10 +3,12 @@
  *
  * Hosts the terminal, problems list and task output. All three stay mounted
  * and are hidden with CSS: hiding a tab must not kill a live shell session or
- * discard its output.
+ * discard its output. The header actions execute registry commands supplied
+ * by the shell, so the buttons cannot drift from the menu/keyboard model.
  */
 import type { ReactNode } from 'react';
 import type { BottomPanelTab } from '../../commands/types';
+import { Icon } from '../ui/icons';
 
 interface TabDefinition {
   id: BottomPanelTab;
@@ -34,6 +36,14 @@ export interface BottomPanelProps {
   onSelectTab: (tab: BottomPanelTab) => void;
   /** CSS-only visibility so the terminal session survives a toggle. */
   visible: boolean;
+  /** True while the panel fills the editor column. */
+  maximized: boolean;
+  /** Executes `a6.terminal.new`. */
+  onNewTerminal: () => void;
+  /** Executes `a6.view.maximizeBottomPanel`. */
+  onToggleMaximize: () => void;
+  /** Executes `a6.view.closeBottomPanel`. */
+  onClose: () => void;
 }
 
 export function BottomPanel({
@@ -44,6 +54,10 @@ export function BottomPanel({
   active,
   onSelectTab,
   visible,
+  maximized,
+  onNewTerminal,
+  onToggleMaximize,
+  onClose,
 }: BottomPanelProps): ReactNode {
   return (
     <section
@@ -51,24 +65,56 @@ export function BottomPanel({
       aria-label="Bottom panel"
       aria-hidden={!visible}
     >
-      <div className="bottom-panel__header" role="tablist">
-        {TABS.map((tab) => (
+      <div className="bottom-panel__header">
+        <div className="bottom-panel__tabs" role="tablist" aria-label="Panel views">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active === tab.id}
+              className={`bottom-panel__tab${
+                active === tab.id ? ' bottom-panel__tab--active' : ''
+              }`}
+              onClick={() => onSelectTab(tab.id)}
+            >
+              {tab.label}
+              {tab.id === 'problems' && problemCount > 0 ? (
+                <span className="bottom-panel__badge">{problemCount}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <div className="bottom-panel__actions">
           <button
-            key={tab.id}
             type="button"
-            role="tab"
-            aria-selected={active === tab.id}
-            className={`bottom-panel__tab${
-              active === tab.id ? ' bottom-panel__tab--active' : ''
-            }`}
-            onClick={() => onSelectTab(tab.id)}
+            className="bottom-panel__action"
+            onClick={onNewTerminal}
+            title="New Terminal"
+            aria-label="New Terminal"
           >
-            {tab.label}
-            {tab.id === 'problems' && problemCount > 0 ? (
-              <span className="bottom-panel__badge">{problemCount}</span>
-            ) : null}
+            <Icon name="newTerminal" size={14} />
           </button>
-        ))}
+          <button
+            type="button"
+            className="bottom-panel__action"
+            onClick={onToggleMaximize}
+            title={maximized ? 'Restore Panel' : 'Maximize Panel'}
+            aria-label={maximized ? 'Restore Panel' : 'Maximize Panel'}
+            aria-pressed={maximized}
+          >
+            <Icon name={maximized ? 'restore' : 'maximize'} size={14} />
+          </button>
+          <button
+            type="button"
+            className="bottom-panel__action"
+            onClick={onClose}
+            title="Close Panel"
+            aria-label="Close Panel"
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       </div>
       <div className="bottom-panel__body" role="tabpanel">
         <div className={`bottom-panel__content${active === 'terminal' ? '' : ' bottom-panel__content--hidden'}`}>

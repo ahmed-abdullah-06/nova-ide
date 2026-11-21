@@ -180,7 +180,7 @@ or documentation.
   delegated to the owner. DOM/CSS evidence and code inspection are the basis
   of this scorecard.
 
-**Status: LF0 complete — LF1 approved and completed — LF2 completed (see below).**
+**Status: LF0 complete — LF1 approved and completed — LF2 completed — LF3 completed (see below).**
 
 ## LF1 — Tokens and theme (completed)
 
@@ -255,3 +255,37 @@ conflict-checked keybinding. Changed files:
   with a real click before typing.
 
 Scorecard movement: items 1, 2, 3, 5, 6 and 15 move from partial/missing toward present. Item 11 (palette) is intentionally still missing; it is an LF4 deliverable. Breadcrumb popup navigation (clicking a crumb) is not implemented — the bar is read-only, matching the "no fake UI" rule.
+
+## LF3 — Editor, bottom panel, status bar (completed)
+
+Scope: appearance of the editor/panel/status shell backed by existing state.
+No new IPC channel, no main-process/security change, no new dependency, and no
+dead controls. The three new panel actions are registry commands with stable
+ids and `enabled`/`checked` predicates; they intentionally have **no**
+keybindings because LF4 owns `Ctrl+J` and the other layout shortcuts. Changed
+files:
+
+| File | Change |
+| --- | --- |
+| `features/editor/MonacoEditor.tsx` | Enabled built-in bracket-pair colorization, bracket/indent guides, sticky scroll, smooth caret animation and whitespace rendering on selection, on top of the LF1 font, line height, current-line highlight and styled scrollbars. |
+| `components/layout/BottomPanel.tsx` | Kept the TERMINAL / PROBLEMS / OUTPUT strip with its real diagnostics badge, wrapped the tabs in a dedicated `role="tablist"`, and added right-aligned New Terminal / Maximize-Restore / Close actions. All three views stay mounted; only CSS hides them, so shells and output survive toggles. |
+| `commands/catalog.ts`, `commands/types.ts`, `CommandProvider.tsx`, `stores/ui.tsx`, `features/terminal/TerminalPanel.tsx` | Added `a6.terminal.new`, `a6.view.maximizeBottomPanel` and `a6.view.closeBottomPanel`. `UiProvider` tracks maximize state and a terminal-create signal; the mounted terminal panel turns that signal into a real session. Hiding a maximized panel also clears the maximized state so the editor cannot be left collapsed. |
+| `features/status/statusBarModel.ts` (new), `components/layout/StatusBar.tsx`, `app/App.tsx` | Pure, unit-tested status models plus the rendered bar: real git branch and staged/unstaged/untracked count from `useGit`, live error/warning count from diagnostics, Ln/Col from Monaco, `Spaces: 2` from the editor tab size, UTF-8 (the app's file encoding), LF/CRLF detected from the active buffer, real language picker, real local-only state, and a notification bell backed by retained toast history. Read-only values are plain spans with `cursor:default`; only the picker, bell and theme switch are controls. The branch is deliberately not a fake click target. |
+| `stores/workspaceReducer.ts` | Added a bounded 20-entry `notificationHistory` so the bell can show dismissed toasts; the on-screen toast limit of 4 is unchanged. |
+| `styles/layout.css` | Panel action strip and right alignment, maximize layout (`editor-area` collapses to zero height while the session stays mounted), change-count pill, bell popover, and non-interactive status-item cursor styling. |
+| `tests/unit/lookAndFeelChrome.test.ts`, `tests/unit/workspaceReducer.test.ts`, `tests/unit/commandRegistry.test.ts`, `tests/unit/keybindings.test.ts`, `tests/unit/menuModel.test.ts` | Added LF3 status-model, notification-history and command-state coverage; updated command-context fixtures for the new `bottomPanelMaximized` field and service names. |
+| `tools/verify/runtime.mjs` | Added DOM/CSS checks for right-aligned command-backed panel actions, maximize/restore/close/reopen behaviour, Monaco guide/current-line/sticky-scroll output, status-bar values and non-interactive styling, problems count, and the real git branch in the status bar. The fixture `broken.ts` now contains braces/indentation so the editor-guide check has real tokens. Behavioural panel checks run at the very end because they change focus and geometry. |
+
+### LF3 verification (actually executed)
+
+- `pnpm typecheck` — passed.
+- `pnpm test` — **59 files / 773 tests passed** (after LF2 59 / 765; +8 new tests covering status formatting, git summary, notification history and panel-command states). The `node-pty` `AttachConsole` messages are pre-existing Windows harness noise.
+- `pnpm package` — passed.
+- `pnpm verify` — **174/174 checks passed, 0 console errors.** New evidence includes: panel actions `[New Terminal, Maximize Panel, Close Panel]` with an 8px right gap; maximize hides the editor row and restore brings it back; close hides without unmounting and reopen preserves the terminal session; Monaco renders 1 current line, 5 indent guides, 10 bracket-highlighted tokens and sticky-scroll rows; status bar reports `Ln 1, Col 1`, `Spaces: 2`, `UTF-8`, `LF`, `typescript`, `Local-only: off`, the bell, and a `default` cursor on read-only values; problems tab badge `1` matches the live diagnostic; the status branch matches Source Control's `main`.
+
+Scorecard movement: item 7 (Monaco options) moves from partial toward present,
+item 9 (bottom panel actions) moves from partial toward present, and item 10
+(status bar) moves from partial toward present. Item 14's toast history is now
+backed by the bell, but in-app confirmations remain LF4 work. The palette,
+Quick Open, Welcome tab, layout keybindings, sashes and final AFTER screenshots
+remain LF4/LF5 deliverables.

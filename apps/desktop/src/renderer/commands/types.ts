@@ -86,6 +86,12 @@ export interface CommandServices {
   toggleSourceControl(): void | Promise<void>;
   toggleAiPanel(): void | Promise<void>;
   toggleTerminal(): void | Promise<void>;
+  /** Creates a real terminal session in the mounted terminal panel. */
+  newTerminal(): void | Promise<void>;
+  /** Maximises/restores the bottom panel without hiding the editor model. */
+  maximizeBottomPanel(): void | Promise<void>;
+  /** Hides the bottom panel (the session stays mounted). */
+  closeBottomPanel(): void | Promise<void>;
   zoomIn(): void | Promise<void>;
   zoomOut(): void | Promise<void>;
   resetZoom(): void | Promise<void>;
@@ -126,6 +132,7 @@ export interface CommandContext {
   sidebarVisible: boolean;
   bottomPanelVisible: boolean;
   bottomPanelTab: BottomPanelTab;
+  bottomPanelMaximized: boolean;
   aiPanelVisible: boolean;
   windowState: WindowStateSnapshot;
   services: CommandServices;

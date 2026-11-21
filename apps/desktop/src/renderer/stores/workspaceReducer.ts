@@ -48,6 +48,8 @@ export interface WorkspaceState {
   selectedPath: string | null;
   recent: RecentWorkspace[];
   notifications: Notification[];
+  /** Bounded history retained after toasts auto-dismiss (status-bar bell). */
+  notificationHistory: Notification[];
   nextNotificationId: number;
   /** Active inline create/rename input, if any. */
   pendingInput: PendingInput | null;
@@ -61,12 +63,15 @@ export const initialWorkspaceState: WorkspaceState = {
   selectedPath: null,
   recent: [],
   notifications: [],
+  notificationHistory: [],
   nextNotificationId: 1,
   pendingInput: null,
 };
 
 /** Only the newest notifications stay on screen. */
 const MAX_VISIBLE_NOTIFICATIONS = 4;
+/** The bell keeps a longer, bounded history of dismissed toasts. */
+const MAX_NOTIFICATION_HISTORY = 20;
 
 /**
  * True when `candidate` is the workspace root or lives inside it.
@@ -123,13 +128,17 @@ function notify(
   kind: NotificationKind,
   message: string,
 ): WorkspaceState {
-  const notifications = [
-    ...state.notifications,
-    { id: state.nextNotificationId, kind, message },
-  ].slice(-MAX_VISIBLE_NOTIFICATIONS);
+  const entry = { id: state.nextNotificationId, kind, message };
+  const notifications = [...state.notifications, entry].slice(
+    -MAX_VISIBLE_NOTIFICATIONS,
+  );
+  const notificationHistory = [...state.notificationHistory, entry].slice(
+    -MAX_NOTIFICATION_HISTORY,
+  );
   return {
     ...state,
     notifications,
+    notificationHistory,
     nextNotificationId: state.nextNotificationId + 1,
   };
 }

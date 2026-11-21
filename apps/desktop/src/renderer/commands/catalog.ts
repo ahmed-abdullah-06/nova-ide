@@ -40,6 +40,10 @@ export const COMMAND_IDS = {
   /** Registered for Ctrl+, only; deliberately absent from the menu. */
   openSettings: 'a6.view.openSettings',
   toggleTerminal: 'a6.view.toggleTerminal',
+  /** Bottom-panel actions; no keybindings so LF4 layout shortcuts stay free. */
+  newTerminal: 'a6.terminal.new',
+  maximizeBottomPanel: 'a6.view.maximizeBottomPanel',
+  closeBottomPanel: 'a6.view.closeBottomPanel',
   zoomIn: 'a6.view.zoomIn',
   zoomOut: 'a6.view.zoomOut',
   resetZoom: 'a6.view.resetZoom',
@@ -426,6 +430,31 @@ export function createCommandDefinitions(): CommandDefinition[] {
       keybindings: all(primary('Backquote')),
       run: (context) => context.services.toggleTerminal(),
       checked: (context) => context.bottomPanelVisible && context.bottomPanelTab === 'terminal',
+    },
+    {
+      id: COMMAND_IDS.newTerminal,
+      title: 'New Terminal',
+      category: 'View',
+      run: (context) => context.services.newTerminal(),
+      enabled: (context) => context.hasWorkspace && context.bridgeAvailable,
+      disabledHint: (context) => (context.hasWorkspace ? NO_BRIDGE : NO_WORKSPACE),
+    },
+    {
+      id: COMMAND_IDS.maximizeBottomPanel,
+      title: 'Maximize Panel',
+      category: 'View',
+      run: (context) => context.services.maximizeBottomPanel(),
+      enabled: (context) => context.bottomPanelVisible,
+      disabledHint: hint('Open the bottom panel first'),
+      checked: (context) => context.bottomPanelMaximized,
+    },
+    {
+      id: COMMAND_IDS.closeBottomPanel,
+      title: 'Close Panel',
+      category: 'View',
+      run: (context) => context.services.closeBottomPanel(),
+      enabled: (context) => context.bottomPanelVisible,
+      disabledHint: hint('The bottom panel is already closed'),
     },
     {
       id: COMMAND_IDS.zoomIn,

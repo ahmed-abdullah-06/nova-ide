@@ -20,19 +20,27 @@ interface UiContextValue {
   sidebarVisible: boolean;
   bottomPanelVisible: boolean;
   bottomPanelTab: BottomPanelTab;
+  /** True while the bottom panel occupies the whole editor column. */
+  bottomPanelMaximized: boolean;
   aiPanelVisible: boolean;
   layoutSignal: number;
   explorerFocusSignal: number;
   searchFocusSignal: number;
   createFileSignal: number;
+  /** Incremented to ask the mounted terminal panel to create a session. */
+  terminalCreateSignal: number;
   windowState: WindowState;
   setWindowState: (state: WindowState) => void;
   toggleActivity: (activity: ActivityId) => void;
   showActivity: (activity: ActivityId, focus?: boolean) => void;
   toggleBottomPanel: (tab?: BottomPanelTab) => void;
   selectBottomPanelTab: (tab: BottomPanelTab) => void;
+  hideBottomPanel: () => void;
+  toggleBottomPanelMaximized: () => void;
   toggleAiPanel: () => void;
   requestNewFile: () => void;
+  /** Shows the terminal tab and asks its panel to create a new session. */
+  requestNewTerminal: () => void;
 }
 
 const UiContext = createContext<UiContextValue | null>(null);
@@ -46,11 +54,13 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [bottomPanelVisible, setBottomPanelVisible] = useState(false);
   const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal');
+  const [bottomPanelMaximized, setBottomPanelMaximized] = useState(false);
   const [aiPanelVisible, setAiPanelVisible] = useState(false);
   const [layoutSignal, setLayoutSignal] = useState(0);
   const [explorerFocusSignal, setExplorerFocusSignal] = useState(0);
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
   const [createFileSignal, setCreateFileSignal] = useState(0);
+  const [terminalCreateSignal, setTerminalCreateSignal] = useState(0);
   const [windowState, setWindowState] = useState<WindowState>({
     maximized: false,
     fullScreen: false,
@@ -94,15 +104,17 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
 
   const toggleBottomPanel = useCallback(
     (tab: BottomPanelTab = 'terminal') => {
-      setBottomPanelVisible((visible) => {
-        if (!visible) {
-          setBottomPanelTab(tab);
-        }
-        return !visible;
-      });
+      if (bottomPanelVisible) {
+        // Never leave the editor collapsed when the maximized panel is hidden.
+        setBottomPanelVisible(false);
+        setBottomPanelMaximized(false);
+      } else {
+        setBottomPanelTab(tab);
+        setBottomPanelVisible(true);
+      }
       bumpLayout();
     },
-    [bumpLayout],
+    [bottomPanelVisible, bumpLayout],
   );
 
   const selectBottomPanelTab = useCallback(
@@ -113,6 +125,24 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
     },
     [bumpLayout],
   );
+
+  const hideBottomPanel = useCallback((): void => {
+    setBottomPanelVisible(false);
+    setBottomPanelMaximized(false);
+    bumpLayout();
+  }, [bumpLayout]);
+
+  const toggleBottomPanelMaximized = useCallback((): void => {
+    setBottomPanelMaximized((maximized) => !maximized);
+    bumpLayout();
+  }, [bumpLayout]);
+
+  const requestNewTerminal = useCallback((): void => {
+    setBottomPanelTab('terminal');
+    setBottomPanelVisible(true);
+    setTerminalCreateSignal((signal) => signal + 1);
+    bumpLayout();
+  }, [bumpLayout]);
 
   const toggleAiPanel = useCallback(() => {
     setAiPanelVisible((visible) => !visible);
@@ -133,37 +163,47 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       sidebarVisible,
       bottomPanelVisible,
       bottomPanelTab,
+      bottomPanelMaximized,
       aiPanelVisible,
       layoutSignal,
       explorerFocusSignal,
       searchFocusSignal,
       createFileSignal,
+      terminalCreateSignal,
       windowState,
       setWindowState,
       toggleActivity,
       showActivity,
       toggleBottomPanel,
       selectBottomPanelTab,
+      hideBottomPanel,
+      toggleBottomPanelMaximized,
       toggleAiPanel,
       requestNewFile,
+      requestNewTerminal,
     }),
     [
       activity,
       aiPanelVisible,
+      bottomPanelMaximized,
       bottomPanelTab,
       bottomPanelVisible,
       createFileSignal,
       explorerFocusSignal,
+      hideBottomPanel,
       layoutSignal,
       requestNewFile,
+      requestNewTerminal,
       searchFocusSignal,
       setActivity,
       selectBottomPanelTab,
       showActivity,
       sidebarVisible,
+      terminalCreateSignal,
       toggleActivity,
       toggleAiPanel,
       toggleBottomPanel,
+      toggleBottomPanelMaximized,
       windowState,
     ],
   );

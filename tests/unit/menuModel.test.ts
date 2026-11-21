@@ -31,6 +31,7 @@ function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
     sidebarVisible: true,
     bottomPanelVisible: false,
     bottomPanelTab: 'terminal',
+    bottomPanelMaximized: false,
     aiPanelVisible: false,
     windowState: { maximized: false, fullScreen: false },
     services: {} as CommandServices,

@@ -182,6 +182,24 @@ describe('workspaceReducer', () => {
     }
     expect(state.notifications).toHaveLength(4);
     expect(state.notifications[3]?.message).toBe('err-5');
+    // The bell retains the full bounded history after toasts auto-dismiss.
+    expect(state.notificationHistory.map((entry) => entry.message)).toEqual([
+      'err-0', 'err-1', 'err-2', 'err-3', 'err-4', 'err-5',
+    ]);
+  });
+
+  it('keeps dismissed notifications in the bell history', () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: 'notify',
+      kind: 'warning',
+      message: 'kept for the bell',
+    });
+    state = workspaceReducer(state, {
+      type: 'dismiss-notification',
+      id: 1,
+    });
+    expect(state.notifications).toHaveLength(0);
+    expect(state.notificationHistory[0]?.message).toBe('kept for the bell');
   });
 
   it('never mutates the previous state', () => {

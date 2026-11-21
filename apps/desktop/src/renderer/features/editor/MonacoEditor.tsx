@@ -71,6 +71,13 @@ export function MonacoEditor({
         wordWrap: 'off',
         fixedOverflowWidgets: true,
         renderLineHighlight: 'all',
+        // LF3: contemporary editor guides. All options are built into
+        // Monaco — no new dependency, theme or IPC channel.
+        bracketPairColorization: { enabled: true },
+        guides: { bracketPairs: true, indentation: true },
+        stickyScroll: { enabled: true },
+        cursorSmoothCaretAnimation: 'on',
+        renderWhitespace: 'selection',
         scrollBeyondLastLine: false,
         scrollbar: {
           verticalScrollbarSize: 8,

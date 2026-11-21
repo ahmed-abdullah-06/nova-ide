@@ -4,21 +4,25 @@
  * Shows every terminal session as a tab, hosts one xterm.js view per
  * session and offers the session actions (new, close, copy, paste).
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { TerminalView } from './TerminalView';
 import { useTerminalSessions } from './useTerminalSessions';
 
 export interface TerminalPanelProps {
   /** True when a workspace is open (a terminal needs one). */
   hasWorkspace: boolean;
+  /** Incremented by the shell's `a6.terminal.new` command. */
+  createSignal: number;
 }
 
 export function TerminalPanel({
   hasWorkspace,
+  createSignal,
 }: TerminalPanelProps): React.JSX.Element {
   const controller = useTerminalSessions(hasWorkspace);
   const [error, setError] = useState<string | null>(null);
   const viewHostRef = useRef<HTMLDivElement | null>(null);
+  const handledSignal = useRef(createSignal);
 
   const handleCreate = useCallback(async (): Promise<void> => {
     const id = await controller.createSession();
@@ -26,6 +30,17 @@ export function TerminalPanel({
       setError('The terminal could not be started.');
     }
   }, [controller]);
+
+  // The bottom-panel header's New Terminal action routes through the command
+  // registry and arrives here as a signal. The initial value is already
+  // handled; only later increments create a session.
+  useEffect(() => {
+    if (createSignal === handledSignal.current) {
+      return;
+    }
+    handledSignal.current = createSignal;
+    void handleCreate();
+  }, [createSignal, handleCreate]);
 
   /**
    * Interrupts the command that is running in the active session.
