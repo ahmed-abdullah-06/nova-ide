@@ -7,6 +7,7 @@ import type {
   CommandContext,
   CommandDefinition,
   KeybindingSpec,
+  KeybindingsForPlatform,
   Platform,
 } from './types';
 
@@ -32,14 +33,23 @@ export const COMMAND_IDS = {
   findInFile: 'a6.edit.findInFile',
   replaceInFile: 'a6.edit.replaceInFile',
   findInWorkspace: 'a6.edit.findInWorkspace',
+  quickOpen: 'a6.file.quickOpen',
+  /** Internal action used by Quick Open results; not a palette row. */
+  openFileByPath: 'a6.file.openFileByPath',
+  openRecentWorkspace: 'a6.workspace.openRecent',
   commandPalette: 'a6.view.commandPalette',
   toggleExplorer: 'a6.view.toggleExplorer',
+  toggleSidebar: 'a6.view.toggleSidebar',
   toggleSearch: 'a6.view.toggleSearch',
   toggleSourceControl: 'a6.view.toggleSourceControl',
   toggleAiPanel: 'a6.view.toggleAiPanel',
   /** Registered for Ctrl+, only; deliberately absent from the menu. */
   openSettings: 'a6.view.openSettings',
   toggleTerminal: 'a6.view.toggleTerminal',
+  toggleBottomPanel: 'a6.view.toggleBottomPanel',
+  showWelcome: 'a6.view.showWelcome',
+  nextTab: 'a6.view.nextTab',
+  previousTab: 'a6.view.previousTab',
   /** Bottom-panel actions; no keybindings so LF4 layout shortcuts stay free. */
   newTerminal: 'a6.terminal.new',
   maximizeBottomPanel: 'a6.view.maximizeBottomPanel',
@@ -73,8 +83,10 @@ function plain(key: string): KeybindingSpec {
   return { first: { key, modifiers: {} } };
 }
 
-function all(spec: KeybindingSpec): Record<Platform, KeybindingSpec> {
-  return { win32: spec, darwin: spec, linux: spec };
+function all(
+  value: KeybindingsForPlatform,
+): Record<Platform, KeybindingsForPlatform> {
+  return { win32: value, darwin: value, linux: value };
 }
 
 /** Keyboard binding that must never steal a key from the integrated terminal. */
@@ -83,10 +95,17 @@ function outsideTerminal(spec: KeybindingSpec): KeybindingSpec {
 }
 
 function active(context: CommandContext): boolean {
+  const kind = activeTab(context)?.kind;
   return (
     context.activeTabId !== null &&
-    activeTab(context)?.kind !== 'settings'
+    kind !== 'settings' &&
+    kind !== 'welcome'
   );
+}
+
+/** Tab management works for every tab kind, including Settings and Welcome. */
+function hasTabs(context: CommandContext): boolean {
+  return context.tabs.length > 0;
 }
 
 function activeTab(context: CommandContext) {
@@ -116,7 +135,6 @@ const NO_WORKSPACE = 'Open a folder or workspace first';
 const NO_BRIDGE = 'Requires the A6 desktop bridge';
 const NO_EDITOR = 'No editor is available';
 const NOT_EDITABLE = 'Focus a text field or the editor first';
-const PLANNED_PALETTES = 'The Command Palette is planned for a later milestone';
 const PLANNED_WINDOWS = 'Multiple windows are planned for a later milestone';
 
 /** Builds all command definitions around the actions supplied by the shell. */
@@ -146,6 +164,68 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'File',
       keybindings: all(chord('KeyK', 'KeyO')),
       run: (context) => context.services.openWorkspace(),
+      enabled: (context) => context.bridgeAvailable,
+      disabledHint: hint(NO_BRIDGE),
+    },
+    {
+      id: COMMAND_IDS.quickOpen,
+      title: 'Quick Open...',
+      category: 'File',
+      keybindings: all(outsideTerminal(primary('KeyP'))),
+      run: (context) => context.services.quickOpen(),
+      enabled: (context) => context.hasWorkspace && context.bridgeAvailable,
+      disabledHint: (context) => (context.hasWorkspace ? NO_BRIDGE : NO_WORKSPACE),
+    },
+    {
+      id: COMMAND_IDS.openFileByPath,
+      title: 'Open File at Path',
+      category: 'File',
+      // Quick Open passes a trusted search result; no menu or palette row.
+      paletteHidden: true,
+      run: (context, args) => {
+        if (typeof args !== 'object' || args === null) {
+          return;
+        }
+        const request = args as {
+          path?: unknown;
+          line?: unknown;
+          column?: unknown;
+        };
+        if (typeof request.path !== 'string' || request.path.length === 0) {
+          return;
+        }
+        const position: { line?: number; column?: number } = {};
+        if (
+          typeof request.line === 'number' &&
+          Number.isFinite(request.line) &&
+          request.line > 0
+        ) {
+          position.line = request.line;
+        }
+        if (
+          typeof request.column === 'number' &&
+          Number.isFinite(request.column) &&
+          request.column > 0
+        ) {
+          position.column = request.column;
+        }
+        return context.services.openFileByPath(request.path, position);
+      },
+      enabled: (context) => context.hasWorkspace && context.bridgeAvailable,
+      disabledHint: (context) => (context.hasWorkspace ? NO_BRIDGE : NO_WORKSPACE),
+    },
+    {
+      id: COMMAND_IDS.openRecentWorkspace,
+      title: 'Open Recent Workspace',
+      category: 'File',
+      // Called with a rootPath argument by Welcome only.
+      paletteHidden: true,
+      run: (context, args) => {
+        if (typeof args !== 'string' || args.length === 0) {
+          return;
+        }
+        return context.services.openRecentWorkspace(args);
+      },
       enabled: (context) => context.bridgeAvailable,
       disabledHint: hint(NO_BRIDGE),
     },
@@ -192,7 +272,7 @@ export function createCommandDefinitions(): CommandDefinition[] {
       category: 'File',
       keybindings: all(primary('KeyW')),
       run: (context) => context.services.closeActiveTab(),
-      enabled: active,
+      enabled: hasTabs,
       disabledHint: hint(NO_TAB),
     },
     {
@@ -201,11 +281,13 @@ export function createCommandDefinitions(): CommandDefinition[] {
       id: COMMAND_IDS.closeTabById,
       title: 'Close Tab',
       category: 'File',
+      // The tab context menu passes the right-clicked tab id.
+      paletteHidden: true,
       run: (context, args) =>
         context.services.closeTabById(
           typeof args === 'string' ? args : undefined,
         ),
-      enabled: active,
+      enabled: hasTabs,
       disabledHint: hint(NO_TAB),
     },
     {
@@ -378,10 +460,13 @@ export function createCommandDefinitions(): CommandDefinition[] {
       id: COMMAND_IDS.commandPalette,
       title: 'Command Palette...',
       category: 'View',
-      keybindings: all(primary('KeyP', true)),
+      // F1 is a true alias of the same action, never a second command id.
+      keybindings: all([
+        outsideTerminal(primary('KeyP', true)),
+        outsideTerminal(plain('F1')),
+      ]),
       run: (context) => context.services.commandPalette(),
-      enabled: () => false,
-      plannedHint: PLANNED_PALETTES,
+      enabled: () => true,
     },
     {
       id: COMMAND_IDS.toggleExplorer,
@@ -390,6 +475,51 @@ export function createCommandDefinitions(): CommandDefinition[] {
       keybindings: all(primary('KeyE', true)),
       run: (context) => context.services.toggleExplorer(),
       checked: (context) => context.sidebarVisible && context.activity === 'explorer',
+    },
+    {
+      id: COMMAND_IDS.toggleSidebar,
+      title: 'Toggle Side Bar',
+      category: 'View',
+      keybindings: all(outsideTerminal(primary('KeyB'))),
+      run: (context) => context.services.toggleSidebar(),
+      checked: (context) => context.sidebarVisible,
+    },
+    {
+      id: COMMAND_IDS.toggleBottomPanel,
+      title: 'Toggle Bottom Panel',
+      category: 'View',
+      keybindings: all(outsideTerminal(primary('KeyJ'))),
+      run: (context) => context.services.toggleBottomPanel(),
+      checked: (context) => context.bottomPanelVisible,
+    },
+    {
+      id: COMMAND_IDS.showWelcome,
+      title: 'Welcome',
+      category: 'View',
+      run: (context) => context.services.showWelcome(),
+      checked: (context) =>
+        context.tabs.find((tab) => tab.id === context.activeTabId)?.kind === 'welcome',
+    },
+    {
+      id: COMMAND_IDS.nextTab,
+      title: 'Next Editor Tab',
+      category: 'View',
+      keybindings: all([
+        outsideTerminal(primary('Tab')),
+        outsideTerminal(primary('PageUp')),
+      ]),
+      run: (context) => context.services.nextTab(),
+      enabled: (context) => context.tabs.length > 1,
+      disabledHint: hint('Only one tab is open'),
+    },
+    {
+      id: COMMAND_IDS.previousTab,
+      title: 'Previous Editor Tab',
+      category: 'View',
+      keybindings: all(outsideTerminal(primary('PageDown'))),
+      run: (context) => context.services.previousTab(),
+      enabled: (context) => context.tabs.length > 1,
+      disabledHint: hint('Only one tab is open'),
     },
     {
       id: COMMAND_IDS.toggleSearch,

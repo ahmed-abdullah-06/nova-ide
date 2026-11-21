@@ -8,6 +8,7 @@ import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceAct
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
+import { ConfirmProvider } from '../components/ui/ConfirmProvider';
 import { ActivityBar } from '../components/layout/ActivityBar';
 import { AiPanel } from '../features/ai/AiPanel';
 import { AiProvider, useAiContext } from '../features/ai/AiContext';
@@ -156,6 +157,7 @@ function Workspace(): ReactNode {
       <TitleBar
         sections={commands.sections}
         chordHint={commands.chordHint}
+        paletteShortcut={commands.paletteShortcut}
         onExecute={commands.executeFromMenu}
         onCaptureFocus={commands.captureMenuFocus}
         onOpenChange={commands.setMenuOpen}
@@ -312,9 +314,11 @@ export function App(): ReactNode {
         <UiProvider>
           <AiProvider>
             <VoiceSettingsProvider>
-              <CommandProvider>
-                <Workspace />
-              </CommandProvider>
+              <ConfirmProvider>
+                <CommandProvider>
+                  <Workspace />
+                </CommandProvider>
+              </ConfirmProvider>
             </VoiceSettingsProvider>
           </AiProvider>
         </UiProvider>

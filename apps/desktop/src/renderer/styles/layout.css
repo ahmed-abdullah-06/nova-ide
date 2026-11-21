@@ -70,7 +70,7 @@
   white-space: nowrap;
 }
 
-/* Centred command centre: a display pill until LF4 wires the palette. */
+/* Centred command centre: opens the real registry-backed palette. */
 .command-center {
   display: flex;
   align-items: center;
@@ -87,6 +87,12 @@
   color: var(--text-muted);
   font-size: var(--font-size-small);
   -webkit-app-region: no-drag;
+}
+
+.command-center:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .command-center__icon {

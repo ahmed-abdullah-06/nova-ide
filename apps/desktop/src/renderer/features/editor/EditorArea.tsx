@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { useTabs } from '../../stores/tabs';
 import { useWorkspace } from '../../stores/workspace';
+import { COMMAND_IDS } from '../../commands/catalog';
 import { useCommands } from '../../commands/CommandProvider';
 import type { Theme } from '../../hooks/useTheme';
 import { SettingsView } from '../settings/SettingsView';
 import { Breadcrumbs } from './Breadcrumbs';
-import { disposeModel } from './modelRegistry';
 import { EditorTabs } from './EditorTabs';
 import { MonacoEditor } from './MonacoEditor';
+import { WelcomeView } from '../welcome/WelcomeView';
 
 interface EditorAreaProps {
   theme: Theme;
@@ -30,14 +31,15 @@ export function EditorArea({
   const activeTab =
     state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
   const settingsActive = activeTab?.kind === 'settings';
+  const welcomeActive = activeTab?.kind === 'welcome';
 
   const handleActivate = (id: string): void => {
     dispatch({ type: 'activate', id });
   };
 
   const handleClose = (id: string): void => {
-    disposeModel(id);
-    dispatch({ type: 'close', id });
+    // The registry service owns dirty confirmation and model disposal.
+    executeFromMenu(COMMAND_IDS.closeTabById, id);
   };
 
   const handleNew = (): void => {
@@ -65,7 +67,9 @@ export function EditorArea({
         workspaceRoot={workspaceState.workspace?.rootPath ?? null}
         workspaceName={workspaceState.workspace?.name ?? null}
       />
-      {settingsActive ? (
+      {welcomeActive ? (
+        <WelcomeView recent={workspaceState.recent} />
+      ) : settingsActive ? (
         <SettingsView />
       ) : (
         <MonacoEditor

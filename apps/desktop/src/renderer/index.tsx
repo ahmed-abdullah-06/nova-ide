@@ -7,12 +7,14 @@ import './styles/ui.css';
 import './styles/layout.css';
 import './styles/menu.css';
 import './styles/contextMenu.css';
+import './styles/palette.css';
 import './styles/editor.css';
 import './styles/explorer.css';
 import './styles/panels.css';
 import './styles/ai.css';
 import './styles/agent.css';
 import './styles/settings.css';
+import './styles/welcome.css';
 
 const container = document.getElementById('root');
 if (!container) {

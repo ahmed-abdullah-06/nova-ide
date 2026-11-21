@@ -31,7 +31,11 @@ export interface SearchController {
   cancel: () => void;
 }
 
-export function useSearch(): SearchController {
+/**
+ * `requestPrefix` keeps simultaneous consumers (the Search view and Quick
+ * Open) from colliding in the main process's duplicate-request guard.
+ */
+export function useSearch(requestPrefix = 'search'): SearchController {
   const [input, setInputState] = useState('');
   const [pattern, setPattern] = useState('');
   const [mode, setModeState] = useState<SearchMode>('files');
@@ -83,7 +87,7 @@ export function useSearch(): SearchController {
         void api.search.cancel(previous);
       }
       counterRef.current += 1;
-      const requestId = `search-${counterRef.current}`;
+      const requestId = `${requestPrefix}-${counterRef.current}`;
       requestIdRef.current = requestId;
 
       // The previous results are dropped; the new ones arrive in batches.
@@ -97,7 +101,7 @@ export function useSearch(): SearchController {
       setSearching(true);
       void api.search.query(requestId, nextMode, nextPattern);
     },
-    [],
+    [requestPrefix],
   );
 
   // Debounce the input.

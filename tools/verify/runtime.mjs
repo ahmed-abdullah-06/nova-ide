@@ -512,6 +512,29 @@ async function traceSequence(session) {
     : 0;
 }
 
+/** Reads the renderer-local in-app confirmation, if one is open. */
+async function waitForConfirm(session, timeoutMs = 5000) {
+  return waitFor(
+    session,
+    `(() => {
+      const dialog = document.querySelector('.confirm-dialog[role="alertdialog"]');
+      if (dialog === null) return false;
+      return {
+        modal: dialog.getAttribute('aria-modal'),
+        title: dialog.querySelector('.dialog__title')?.textContent.trim() ?? null,
+        message: dialog.querySelector('.confirm-dialog__message')?.textContent.trim() ?? null,
+        buttons: [...dialog.querySelectorAll('button')].map((node) => node.textContent.trim()),
+      };
+    })()`,
+    timeoutMs,
+  );
+}
+
+/** Clicks one labelled action of the in-app confirmation. */
+async function chooseConfirm(session, label) {
+  return clickText(session, '.confirm-dialog button', label, true);
+}
+
 /**
  * Waits for the plan of the active run and approves it unchanged.
  *
@@ -792,6 +815,38 @@ async function main() {
       `typeof window.nova === 'object' && window.nova !== null`,
     );
     check('preload bridge is exposed', bridge === true);
+
+    // LF4: the editor starts on an honest Welcome tab, not a scratch buffer.
+    const welcomeStart = await waitFor(
+      session,
+      `(() => {
+        const tab = document.querySelector('.editor-tab--active .editor-tab__name');
+        const view = document.querySelector('.welcome-view');
+        if (tab === null || view === null) return false;
+        const labels = [...view.querySelectorAll('.welcome-view__action')]
+          .map((node) => node.textContent.trim());
+        return {
+          tab: tab.textContent.trim(),
+          heading: view.querySelector('h1')?.textContent.trim() ?? null,
+          sections: [...view.querySelectorAll('.welcome-view__section h2')]
+            .map((node) => node.textContent.trim()),
+          labels,
+        };
+      })()`,
+      10000,
+    );
+    check(
+      'editor starts on the honest Welcome empty state',
+      welcomeStart !== false &&
+        welcomeStart.tab === 'Welcome' &&
+        welcomeStart.heading === 'Welcome to A6 IDE' &&
+        ['Start', 'Recent Workspaces', 'Help'].every(
+          (section, index) => welcomeStart.sections[index] === section,
+        ) &&
+        ['New File', 'Open File...', 'Quick Open...', 'Keyboard Shortcuts', 'About A6 IDE']
+          .every((label) => welcomeStart.labels.includes(label)),
+      JSON.stringify(welcomeStart),
+    );
 
     // Open the fixture workspace through the typed bridge and let the
     // renderer pick the change up (it re-reads the active workspace when
@@ -3252,10 +3307,14 @@ async function main() {
         const ai = items.find((node) => node.textContent.includes('Toggle AI Panel'));
         const shortcut = ai === undefined ? null : ai.querySelector('.menu-bar__shortcut');
         const label = ai === undefined ? null : ai.querySelector('.menu-bar__label');
+        const paletteShortcut = palette === undefined
+          ? null
+          : palette.querySelector('.menu-bar__shortcut');
         return {
-          paletteDisabled: palette !== undefined && palette.disabled === true &&
-            palette.classList.contains('menu-bar__item--disabled') &&
-            (palette.getAttribute('title') ?? '').includes('planned'),
+          paletteEnabled: palette !== undefined && palette.disabled === false &&
+            !palette.classList.contains('menu-bar__item--disabled') &&
+            paletteShortcut !== null &&
+            paletteShortcut.textContent.trim() === 'Ctrl+Shift+P / F1',
           panelVisible: (() => {
             const panel = document.querySelector('.ai-panel');
             return panel !== null && !panel.classList.contains('ai-panel--hidden');
@@ -3277,13 +3336,366 @@ async function main() {
     );
     await session.pressKey('Escape', 27);
     check(
-      'view menu marks toggles, disabled items and shortcuts honestly',
-      viewMenu.paletteDisabled === true &&
+      'view menu marks toggles, the enabled palette and shortcuts honestly',
+      viewMenu.paletteEnabled === true &&
         viewMenu.aiCheckbox === true &&
         typeof viewMenu.panelVisible === 'boolean' &&
         viewMenu.shortcut === 'Ctrl+L' &&
         viewMenu.aligned === true,
       JSON.stringify(viewMenu),
+    );
+
+    // LF4 command surface: every entry point below goes through the same
+    // registry, and the overlays expose real commands/files only.
+    const lastTrace = () =>
+      session.evaluate(
+        `(() => { const trace = window.__a6CommandTrace(); return trace[trace.length - 1] ?? null; })()`,
+      );
+    const readQuickPick = (label) =>
+      waitFor(
+        session,
+        `(() => {
+          const panel = document.querySelector('.quick-pick[aria-label=${JSON.stringify(label)}]');
+          if (panel === null) return false;
+          const input = panel.querySelector('.quick-pick__input');
+          const rows = [...panel.querySelectorAll('[role="option"]')];
+          return {
+            focused: document.activeElement === input,
+            modal: panel.getAttribute('aria-modal'),
+            rows: rows.length,
+            labels: rows.map((row) => row.querySelector('.quick-pick__name')?.textContent.trim() ?? ''),
+            shortcuts: rows.map((row) => row.querySelector('.quick-pick__shortcut')?.textContent.trim() ?? null),
+            firstSelected: rows[0]?.getAttribute('aria-selected') === 'true',
+            status: panel.querySelector('.quick-pick__status')?.textContent.trim() ?? null,
+          };
+        })()`,
+        10000,
+      );
+    const quickPickClosed = () =>
+      waitFor(session, `document.querySelector('.quick-pick') === null`, 5000);
+
+    await focusText(session, '.menu-bar__top', 'File');
+    const beforePalette = await traceSequence(session);
+    await session.pressShortcut('P', 'KeyP', 80, ['ctrl', 'shift']);
+    const paletteOpened = await readQuickPick('Command Palette');
+    const paletteTrace = await lastTrace();
+    check(
+      'Ctrl+Shift+P opens the enabled command palette',
+      paletteOpened !== false &&
+        paletteOpened.focused === true &&
+        paletteOpened.modal === 'true' &&
+        paletteOpened.rows > 0 &&
+        paletteOpened.firstSelected === true &&
+        paletteTrace !== null &&
+        paletteTrace.sequence > beforePalette &&
+        paletteTrace.id === 'a6.view.commandPalette' &&
+        paletteTrace.source === 'user-keyboard' &&
+        paletteTrace.outcome === 'ran',
+      JSON.stringify({ paletteOpened, paletteTrace }),
+    );
+
+    await session.insertText('toggle side bar');
+    const paletteMatch = await waitFor(
+      session,
+      `(() => {
+        const rows = [...document.querySelectorAll('.quick-pick[aria-label="Command Palette"] [role="option"]')];
+        const first = rows[0];
+        return first === undefined ? false : {
+          label: first.querySelector('.quick-pick__name')?.textContent.trim() ?? null,
+          shortcut: first.querySelector('.quick-pick__shortcut')?.textContent.trim() ?? null,
+          count: rows.length,
+        };
+      })()`,
+      10000,
+    );
+    check(
+      'command palette filters to enabled commands with real shortcut labels',
+      paletteMatch !== false &&
+        paletteMatch.label === 'Toggle Side Bar' &&
+        paletteMatch.shortcut === 'Ctrl+B' &&
+        paletteMatch.count >= 1,
+      JSON.stringify(paletteMatch),
+    );
+
+    const beforePaletteExecute = await traceSequence(session);
+    const sidebarHiddenBeforePalette = await session.evaluate(
+      `document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === true`,
+    );
+    await session.pressKey('Enter', 13);
+    const paletteExecuted = await waitFor(
+      session,
+      `(() => {
+        const hidden = document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === true;
+        const trace = window.__a6CommandTrace();
+        const last = trace[trace.length - 1] ?? null;
+        return document.querySelector('.quick-pick') === null && hidden !== ${String(
+          sidebarHiddenBeforePalette,
+        )} && last !== null && last.id === 'a6.view.toggleSidebar'
+          ? { hidden, last }
+          : false;
+      })()`,
+      5000,
+    );
+    const paletteFocusRestored = await waitFor(
+      session,
+      `document.activeElement?.classList.contains('menu-bar__top') === true &&
+       document.activeElement?.textContent.trim() === 'File'`,
+      5000,
+    );
+    check(
+      'palette selection runs the command and restores the prior focus',
+      paletteExecuted !== false &&
+        paletteExecuted.last.sequence > beforePaletteExecute &&
+        paletteExecuted.last.source === 'user-menu' &&
+        paletteExecuted.last.outcome === 'ran' &&
+        paletteFocusRestored === true,
+      JSON.stringify({ paletteExecuted, paletteFocusRestored }),
+    );
+    await session.pressShortcut('B', 'KeyB', 66, ['ctrl']);
+    await waitFor(
+      session,
+      `document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === ${String(
+        sidebarHiddenBeforePalette,
+      )}`,
+      5000,
+    );
+
+    const beforeF1 = await traceSequence(session);
+    await session.pressKey('F1', 112);
+    const f1Palette = await readQuickPick('Command Palette');
+    const f1Trace = await lastTrace();
+    check(
+      'F1 is a true alias of the same palette command',
+      f1Palette !== false &&
+        f1Palette.focused === true &&
+        f1Trace !== null &&
+        f1Trace.sequence > beforeF1 &&
+        f1Trace.id === 'a6.view.commandPalette' &&
+        f1Trace.source === 'user-keyboard',
+      JSON.stringify({ f1Palette, f1Trace }),
+    );
+    await session.pressKey('Escape', 27);
+    const f1Closed = await quickPickClosed();
+    check('Escape closes the command palette', f1Closed === true);
+
+    const beforeCommandCentre = await traceSequence(session);
+    const commandCentreClicked = await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.command-center');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const centrePalette = await readQuickPick('Command Palette');
+    const centreTrace = await lastTrace();
+    check(
+      'the title command centre opens the palette through the registry',
+      commandCentreClicked === true &&
+        centrePalette !== false &&
+        centreTrace !== null &&
+        centreTrace.sequence > beforeCommandCentre &&
+        centreTrace.id === 'a6.view.commandPalette' &&
+        centreTrace.source === 'user-menu',
+      JSON.stringify({ centrePalette, centreTrace }),
+    );
+    await session.pressKey('Escape', 27);
+    await quickPickClosed();
+
+    await focusText(session, '.menu-bar__top', 'File');
+    const beforeQuickOpen = await traceSequence(session);
+    await session.pressShortcut('P', 'KeyP', 80, ['ctrl']);
+    const quickOpened = await readQuickPick('Quick Open');
+    const quickTrace = await lastTrace();
+    check(
+      'Ctrl+P opens Quick Open over the existing search bridge',
+      quickOpened !== false &&
+        quickOpened.focused === true &&
+        quickOpened.modal === 'true' &&
+        quickOpened.status === 'Type part of a file name' &&
+        quickTrace !== null &&
+        quickTrace.sequence > beforeQuickOpen &&
+        quickTrace.id === 'a6.file.quickOpen' &&
+        quickTrace.source === 'user-keyboard',
+      JSON.stringify({ quickOpened, quickTrace }),
+    );
+
+    await session.insertText('index.js');
+    const quickMatch = await waitFor(
+      session,
+      `(() => {
+        const rows = [...document.querySelectorAll('.quick-pick[aria-label="Quick Open"] [role="option"]')];
+        const first = rows[0];
+        return first === undefined ? false : {
+          label: first.querySelector('.quick-pick__name')?.textContent.trim() ?? null,
+          description: first.querySelector('.quick-pick__description')?.textContent.trim() ?? null,
+          count: rows.length,
+        };
+      })()`,
+      10000,
+    );
+    check(
+      'Quick Open lists real workspace file results',
+      quickMatch !== false &&
+        quickMatch.label === 'index.js' &&
+        (quickMatch.description ?? '').includes('index.js'),
+      JSON.stringify(quickMatch),
+    );
+
+    const beforeQuickExecute = await traceSequence(session);
+    await session.pressKey('Enter', 13);
+    const quickExecuted = await waitFor(
+      session,
+      `(() => {
+        const active = document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() ?? null;
+        const trace = window.__a6CommandTrace();
+        const last = trace[trace.length - 1] ?? null;
+        return document.querySelector('.quick-pick') === null && active === 'index.js'
+          ? { active, last }
+          : false;
+      })()`,
+      10000,
+    );
+    check(
+      'a Quick Open result opens the file through a registry command',
+      quickExecuted !== false &&
+        quickExecuted.last !== null &&
+        quickExecuted.last.sequence > beforeQuickExecute &&
+        quickExecuted.last.id === 'a6.file.openFileByPath' &&
+        quickExecuted.last.source === 'user-menu' &&
+        quickExecuted.last.outcome === 'ran',
+      JSON.stringify(quickExecuted),
+    );
+
+    const sidebarHiddenBeforeKey = await session.evaluate(
+      `document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === true`,
+    );
+    await session.pressShortcut('B', 'KeyB', 66, ['ctrl']);
+    const sidebarToggled = await waitFor(
+      session,
+      `document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === ${String(
+        !sidebarHiddenBeforeKey,
+      )}`,
+      5000,
+    );
+    await session.pressShortcut('B', 'KeyB', 66, ['ctrl']);
+    const sidebarRestored = await waitFor(
+      session,
+      `document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === ${String(
+        sidebarHiddenBeforeKey,
+      )}`,
+      5000,
+    );
+    check(
+      'Ctrl+B toggles the sidebar and restores it',
+      sidebarToggled === true && sidebarRestored === true,
+      JSON.stringify({ sidebarHiddenBeforeKey, sidebarToggled, sidebarRestored }),
+    );
+
+    const bottomHiddenBeforeKey = await session.evaluate(
+      `document.querySelector('.bottom-panel')?.classList.contains('bottom-panel--hidden') === true`,
+    );
+    await session.pressShortcut('J', 'KeyJ', 74, ['ctrl']);
+    const bottomToggled = await waitFor(
+      session,
+      `document.querySelector('.bottom-panel')?.classList.contains('bottom-panel--hidden') === ${String(
+        !bottomHiddenBeforeKey,
+      )}`,
+      5000,
+    );
+    await session.pressShortcut('J', 'KeyJ', 74, ['ctrl']);
+    const bottomRestored = await waitFor(
+      session,
+      `document.querySelector('.bottom-panel')?.classList.contains('bottom-panel--hidden') === ${String(
+        bottomHiddenBeforeKey,
+      )}`,
+      5000,
+    );
+    check(
+      'Ctrl+J toggles the bottom panel and restores it',
+      bottomToggled === true && bottomRestored === true,
+      JSON.stringify({ bottomHiddenBeforeKey, bottomToggled, bottomRestored }),
+    );
+
+    const activeTabName = () =>
+      session.evaluate(
+        `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() ?? null`,
+      );
+    const tabBeforeCycle = await activeTabName();
+    const beforeNextTab = await traceSequence(session);
+    await session.pressShortcut('PageUp', 'PageUp', 33, ['ctrl']);
+    const tabAfterNext = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() !== ${JSON.stringify(
+        tabBeforeCycle,
+      )}`,
+      5000,
+    );
+    const nextTabTrace = await lastTrace();
+    await session.pressShortcut('PageDown', 'PageDown', 34, ['ctrl']);
+    const tabAfterPrevious = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() === ${JSON.stringify(
+        tabBeforeCycle,
+      )}`,
+      5000,
+    );
+    const previousTabTrace = await lastTrace();
+    check(
+      'tab aliases cycle through open editors without a duplicate command id',
+      tabAfterNext === true &&
+        tabAfterPrevious === true &&
+        nextTabTrace !== null &&
+        nextTabTrace.id === 'a6.view.nextTab' &&
+        nextTabTrace.sequence > beforeNextTab &&
+        previousTabTrace !== null &&
+        previousTabTrace.id === 'a6.view.previousTab' &&
+        previousTabTrace.sequence > nextTabTrace.sequence,
+      JSON.stringify({ tabBeforeCycle, nextTabTrace, previousTabTrace }),
+    );
+
+    const tabBeforeWelcome = await activeTabName();
+    const beforeWelcome = await traceSequence(session);
+    await session.pressShortcut('P', 'KeyP', 80, ['ctrl', 'shift']);
+    await waitFor(
+      session,
+      `document.querySelector('.quick-pick[aria-label="Command Palette"]') !== null`,
+      5000,
+    );
+    await session.insertText('Welcome');
+    const welcomeRow = await waitFor(
+      session,
+      `(() => {
+        const row = document.querySelector('.quick-pick[aria-label="Command Palette"] [aria-selected="true"]');
+        return row?.querySelector('.quick-pick__name')?.textContent.trim() === 'Welcome';
+      })()`,
+      5000,
+    );
+    await session.pressKey('Enter', 13);
+    const welcomeRestored = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() === 'Welcome' &&
+       document.querySelector('.welcome-view') !== null`,
+      5000,
+    );
+    const welcomeTrace = await lastTrace();
+    await clickText(session, '.editor-tab__name', tabBeforeWelcome, true);
+    const welcomeReversed = await waitFor(
+      session,
+      `document.querySelector('.editor-tab--active .editor-tab__name')?.textContent.trim() === ${JSON.stringify(
+        tabBeforeWelcome,
+      )}`,
+      5000,
+    );
+    check(
+      'the Welcome command restores the real Welcome tab',
+      welcomeRow === true &&
+        welcomeRestored === true &&
+        welcomeReversed === true &&
+        welcomeTrace !== null &&
+        welcomeTrace.sequence > beforeWelcome &&
+        welcomeTrace.id === 'a6.view.showWelcome',
+      JSON.stringify({ tabBeforeWelcome, welcomeRow, welcomeTrace }),
     );
 
     // Hiding a panel must keep the live terminal mounted.
@@ -3321,6 +3733,61 @@ async function main() {
     );
     await session.pressKey('Escape', 27);
     check('Ctrl+N starts inline creation in the explorer', inlineCreate === true);
+
+    // Terminal-owned Ctrl+B/J/P must reach xterm instead of firing the shell
+    // commands that own those bindings when focus is elsewhere.
+    const terminalPassthroughFocused = await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.bottom-panel__tab')]
+          .find((node) => node.textContent.includes('Terminal'));
+        if (tab !== undefined) tab.click();
+        const area = document.querySelector('.terminal-panel__view:not([hidden]) .terminal-view textarea');
+        if (area === null) return false;
+        area.focus();
+        return document.activeElement === area;
+      })()`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const passthroughState = () =>
+      session.evaluate(
+        `(() => ({
+          sidebarHidden: document.querySelector('.sidebar')?.classList.contains('sidebar--hidden') === true,
+          bottomHidden: document.querySelector('.bottom-panel')?.classList.contains('bottom-panel--hidden') === true,
+          quickPick: document.querySelector('.quick-pick') !== null,
+          terminalFocused: document.activeElement?.closest('.xterm') !== null,
+        }))()`,
+      );
+    const beforePassthroughState = await passthroughState();
+    const beforePassthroughTrace = await traceSequence(session);
+    for (const [key, code, keyCode] of [
+      ['B', 'KeyB', 66],
+      ['J', 'KeyJ', 74],
+      ['P', 'KeyP', 80],
+    ]) {
+      await session.pressShortcut(key, code, keyCode, ['ctrl']);
+    }
+    const afterPassthroughState = await passthroughState();
+    const afterPassthroughTrace = await traceSequence(session);
+    if (afterPassthroughState.quickPick === true) {
+      await session.pressKey('Escape', 27);
+    }
+    check(
+      'Ctrl+B, Ctrl+J and Ctrl+P reach the focused terminal without firing commands',
+      terminalPassthroughFocused === true &&
+        beforePassthroughState.terminalFocused === true &&
+        afterPassthroughState.terminalFocused === true &&
+        afterPassthroughState.sidebarHidden === beforePassthroughState.sidebarHidden &&
+        afterPassthroughState.bottomHidden === beforePassthroughState.bottomHidden &&
+        afterPassthroughState.quickPick === false &&
+        afterPassthroughTrace === beforePassthroughTrace,
+      JSON.stringify({
+        terminalPassthroughFocused,
+        beforePassthroughState,
+        afterPassthroughState,
+        beforePassthroughTrace,
+        afterPassthroughTrace,
+      }),
+    );
 
     // The Edit menu must use the focus target captured before the menu opened.
     // Close any dropdown left by the previous checks and let React settle
@@ -3628,24 +4095,18 @@ async function main() {
       `(() => ({
         name: document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? null,
         lines: document.querySelector('.editor-content .view-lines')?.textContent ?? null,
+        focus: document.activeElement?.className ?? null,
+        modal: document.querySelector('[aria-modal="true"]')?.getAttribute('aria-label') ?? null,
       }))()`,
     );
     check(
       'editing a buffer marks its tab dirty',
       newEditorFocused === true && dirtyTabVisible === true,
-      JSON.stringify(dirtyState),
+      JSON.stringify({ newEditorFocused, dirtyTabVisible, dirtyState }),
     );
     const dirtyTabName = dirtyState.name;
 
-    await session.evaluate(
-      `window.__a6ConfirmMessages = [];
-       window.__a6OriginalConfirm = window.confirm;
-       window.confirm = (message) => {
-         window.__a6ConfirmMessages.push(String(message));
-         return false;
-       };`,
-    );
-    await session.evaluate(
+    const tabCloseClicked = await session.evaluate(
       `(() => {
         const button = document.querySelector('.editor-tab--active .editor-tab__close');
         if (button === null) return false;
@@ -3653,41 +4114,52 @@ async function main() {
         return true;
       })()`,
     );
-    const tabCloseCancelled = await session.evaluate(
-      `(() => ({
-        messages: window.__a6ConfirmMessages.slice(),
-        stillOpen: [...document.querySelectorAll('.editor-tab__name')]
-          .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')}),
-      }))()`,
-    );
+    const tabCloseDialog = await waitForConfirm(session);
     check(
-      'closing a dirty tab can be declined',
-      tabCloseCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
-        tabCloseCancelled.stillOpen === true,
-      JSON.stringify(tabCloseCancelled),
+      'closing a dirty tab opens an in-app confirmation',
+      tabCloseClicked === true &&
+        tabCloseDialog !== false &&
+        tabCloseDialog.modal === 'true' &&
+        tabCloseDialog.title === 'Unsaved changes' &&
+        (tabCloseDialog.message ?? '').includes('Unsaved changes') &&
+        tabCloseDialog.buttons.includes('Cancel') &&
+        tabCloseDialog.buttons.includes('Discard and close'),
+      JSON.stringify(tabCloseDialog),
     );
-
-    await session.evaluate(
-      `window.__a6ConfirmMessages = []; window.confirm = () => {
-        window.__a6ConfirmMessages.push('accepted');
-        return true;
-      };`,
-    );
-    await session.evaluate(
-      `(() => {
-        const button = document.querySelector('.editor-tab--active .editor-tab__close');
-        if (button === null) return false;
-        button.click();
-        return true;
-      })()`,
-    );
-    const tabCloseAccepted = await waitFor(
+    await chooseConfirm(session, 'Cancel');
+    const tabCloseCancelled = await waitFor(
       session,
-      `(() => ![...document.querySelectorAll('.editor-tab__name')]
-        .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')}))()`,
+      `document.querySelector('.confirm-dialog') === null &&
+       [...document.querySelectorAll('.editor-tab__name')]
+         .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')})`,
       5000,
     );
-    check('an accepted dirty-tab close removes the tab', tabCloseAccepted === true);
+    check('closing a dirty tab can be declined', tabCloseCancelled === true);
+
+    await session.evaluate(
+      `(() => {
+        const button = document.querySelector('.editor-tab--active .editor-tab__close');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const acceptedDialog = await waitForConfirm(session);
+    const tabCloseChoice = acceptedDialog !== false
+      ? await chooseConfirm(session, 'Discard and close')
+      : false;
+    const tabCloseAccepted = await waitFor(
+      session,
+      `(() => document.querySelector('.confirm-dialog') === null &&
+         ![...document.querySelectorAll('.editor-tab__name')]
+           .some((node) => node.textContent.trim() === ${JSON.stringify(dirtyTabName ?? '')}))()`,
+      5000,
+    );
+    check(
+      'an accepted dirty-tab close removes the tab',
+      tabCloseChoice === true && tabCloseAccepted === true,
+      JSON.stringify({ acceptedDialog, tabCloseChoice }),
+    );
 
     // Recreate a dirty buffer for the window-level close checks.
     console.log('  step: recreate dirty buffer');
@@ -3720,59 +4192,52 @@ async function main() {
       check('declining a dirty window close leaves the app alive', false, 'no dirty buffer');
       check('declining Exit with unsaved changes leaves the app alive', false, 'no dirty buffer');
     } else {
-    await session.evaluate(
-      `window.__a6ConfirmMessages = [];
-       window.confirm = (message) => {
-         window.__a6ConfirmMessages.push(String(message));
-         return false;
-       };`,
-    );
-    // `void` prevents Runtime.evaluate from awaiting the close handshake; the
-    // renderer's mocked confirm answers it without ever closing the app.
+    // `void` prevents Runtime.evaluate from awaiting the tokenized close
+    // handshake while the in-app confirmation waits for a user choice.
     console.log('  step: request window close');
     await session.evaluate(`void window.nova.window.close()`);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const closeWindowCancelled = await session.evaluate(
-      `(() => ({
-        messages: window.__a6ConfirmMessages.slice(),
-        alive: document.readyState === 'complete',
-      }))()`,
-    );
+    const closeDialog = await waitForConfirm(session);
     check(
-      'declining a dirty window close leaves the app alive',
-      closeWindowCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
-        closeWindowCancelled.alive === true,
-      JSON.stringify(closeWindowCancelled),
+      'dirty window close opens an in-app confirmation',
+      closeDialog !== false &&
+        closeDialog.modal === 'true' &&
+        closeDialog.title === 'Unsaved changes' &&
+        (closeDialog.message ?? '').includes('Unsaved changes') &&
+        closeDialog.buttons.includes('Cancel') &&
+        closeDialog.buttons.includes('Discard and quit'),
+      JSON.stringify(closeDialog),
     );
+    await chooseConfirm(session, 'Cancel');
+    const closeWindowCancelled = await waitFor(
+      session,
+      `document.querySelector('.confirm-dialog') === null &&
+       document.readyState === 'complete'`,
+      5000,
+    );
+    check('declining a dirty window close leaves the app alive', closeWindowCancelled === true);
 
-    await session.evaluate(
-      `window.__a6ConfirmMessages = [];
-       window.confirm = (message) => {
-         window.__a6ConfirmMessages.push(String(message));
-         return false;
-       };`,
-    );
     await clickText(session, '.menu-bar__top', 'File');
     await clickText(session, '.menu-bar__item', 'Exit', false);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const exitCancelled = await session.evaluate(
-      `(() => ({
-        messages: window.__a6ConfirmMessages.slice(),
-        alive: document.readyState === 'complete',
-      }))()`,
-    );
+    const exitDialog = await waitForConfirm(session);
     check(
-      'declining Exit with unsaved changes leaves the app alive',
-      exitCancelled.messages.some((message) => message.includes('Unsaved changes')) &&
-        exitCancelled.alive === true,
-      JSON.stringify(exitCancelled),
+      'dirty Exit opens the in-app confirmation',
+      exitDialog !== false &&
+        exitDialog.modal === 'true' &&
+        exitDialog.title === 'Unsaved changes' &&
+        (exitDialog.message ?? '').includes('Unsaved changes') &&
+        exitDialog.buttons.includes('Cancel') &&
+        exitDialog.buttons.includes('Discard and quit'),
+      JSON.stringify(exitDialog),
     );
+    await chooseConfirm(session, 'Cancel');
+    const exitCancelled = await waitFor(
+      session,
+      `document.querySelector('.confirm-dialog') === null &&
+       document.readyState === 'complete'`,
+      5000,
+    );
+    check('declining Exit with unsaved changes leaves the app alive', exitCancelled === true);
     }
-    await session.evaluate(
-      `window.confirm = window.__a6OriginalConfirm ?? window.confirm;
-       delete window.__a6OriginalConfirm;
-       delete window.__a6ConfirmMessages;`,
-    );
 
     // The trace must stay bounded, frozen and free of arguments or content.
     console.log('  step: verify trace integrity');

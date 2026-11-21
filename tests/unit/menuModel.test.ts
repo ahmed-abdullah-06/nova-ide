@@ -54,6 +54,7 @@ describe('menu model', () => {
       'New File',
       'Open File...',
       'Open Folder / Workspace...',
+      'Quick Open...',
       null,
       'Save',
       'Save As...',
@@ -112,6 +113,10 @@ describe('menu model', () => {
     expect(find(COMMAND_IDS.openWorkspace, 0)).toMatchObject({
       shortcut: 'Ctrl+K Ctrl+O',
     });
+    expect(find(COMMAND_IDS.quickOpen, 0)).toMatchObject({ shortcut: 'Ctrl+P' });
+    expect(find(COMMAND_IDS.commandPalette, 2)).toMatchObject({
+      shortcut: 'Ctrl+Shift+P / F1',
+    });
     expect(find(COMMAND_IDS.toggleTerminal, 2)).toMatchObject({
       shortcut: 'Ctrl+`',
     });
@@ -137,9 +142,8 @@ describe('menu model', () => {
     expect(byId(COMMAND_IDS.toggleAiPanel)).toMatchObject({ checked: false });
     expect(byId(COMMAND_IDS.save)).toMatchObject({ checked: null });
     expect(byId(COMMAND_IDS.commandPalette)).toMatchObject({
-      enabled: false,
-      disabledReason: expect.stringContaining('planned') as string,
-      plannedHint: expect.any(String) as string,
+      enabled: true,
+      shortcut: 'Ctrl+Shift+P / F1',
     });
     expect(byId(COMMAND_IDS.newWindow)).toMatchObject({ enabled: false });
   });

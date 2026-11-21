@@ -120,6 +120,46 @@ describe('keybinding resolver', () => {
     mac.dispose();
   });
 
+  it('resolves every alias of one command without treating it as a conflict', () => {
+    const aliases = [
+      primary('KeyP', true),
+      { first: { key: 'F1', modifiers: {} } },
+    ] as const;
+    const definitions = [command('a6.view.commandPalette', { win32: aliases })];
+    expect(() => assertNoKeybindingConflicts(definitions)).not.toThrow();
+    const resolver = new KeybindingResolver(definitions, 'win32');
+    expect(
+      resolver.handleKey(
+        event('KeyP', { ctrlKey: true, shiftKey: true }),
+        context(),
+      ),
+    ).toEqual({ kind: 'command', commandId: 'a6.view.commandPalette' });
+    expect(resolver.handleKey(event('F1'), context())).toEqual({
+      kind: 'command',
+      commandId: 'a6.view.commandPalette',
+    });
+    resolver.dispose();
+  });
+
+  it('resolves the LF4 layout and tab shortcuts from the real catalog', () => {
+    const resolver = new KeybindingResolver(createCommandDefinitions(), 'win32');
+    const cases = [
+      ['KeyP', { ctrlKey: true }, COMMAND_IDS.quickOpen],
+      ['KeyB', { ctrlKey: true }, COMMAND_IDS.toggleSidebar],
+      ['KeyJ', { ctrlKey: true }, COMMAND_IDS.toggleBottomPanel],
+      ['Tab', { ctrlKey: true }, COMMAND_IDS.nextTab],
+      ['PageUp', { ctrlKey: true }, COMMAND_IDS.nextTab],
+      ['PageDown', { ctrlKey: true }, COMMAND_IDS.previousTab],
+    ] as const;
+    for (const [code, modifiers, id] of cases) {
+      expect(resolver.handleKey(event(code, modifiers), context())).toEqual({
+        kind: 'command',
+        commandId: id,
+      });
+    }
+    resolver.dispose();
+  });
+
   it('resolves chords and exposes a visible hint', () => {
     const resolver = new KeybindingResolver(
       [command('a6.file.openWorkspace', { win32: {
@@ -201,7 +241,9 @@ describe('keybinding resolver', () => {
     ];
     const resolver = new KeybindingResolver(definitions, 'win32');
     const terminal = context({ focus: { kind: 'terminal', element: null, label: 'terminal' } });
-    for (const code of ['KeyL', 'KeyW', 'KeyK', 'KeyZ', 'KeyC', 'KeyV']) {
+    for (const code of [
+      'KeyB', 'KeyJ', 'KeyL', 'KeyP', 'KeyW', 'KeyK', 'KeyZ', 'KeyC', 'KeyV',
+    ]) {
       expect(resolver.handleKey(event(code, { ctrlKey: true }), terminal)).toEqual({
         kind: 'passthrough',
       });

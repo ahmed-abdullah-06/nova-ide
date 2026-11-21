@@ -33,6 +33,8 @@ interface UiContextValue {
   setWindowState: (state: WindowState) => void;
   toggleActivity: (activity: ActivityId) => void;
   showActivity: (activity: ActivityId, focus?: boolean) => void;
+  /** Hides/shows the side bar without changing the active activity. */
+  toggleSidebar: () => void;
   toggleBottomPanel: (tab?: BottomPanelTab) => void;
   selectBottomPanelTab: (tab: BottomPanelTab) => void;
   hideBottomPanel: () => void;
@@ -101,6 +103,11 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
     },
     [activity, bumpLayout, showActivity, sidebarVisible],
   );
+
+  const toggleSidebar = useCallback((): void => {
+    setSidebarVisible((visible) => !visible);
+    bumpLayout();
+  }, [bumpLayout]);
 
   const toggleBottomPanel = useCallback(
     (tab: BottomPanelTab = 'terminal') => {
@@ -174,6 +181,7 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       setWindowState,
       toggleActivity,
       showActivity,
+      toggleSidebar,
       toggleBottomPanel,
       selectBottomPanelTab,
       hideBottomPanel,
@@ -202,6 +210,7 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       terminalCreateSignal,
       toggleActivity,
       toggleAiPanel,
+      toggleSidebar,
       toggleBottomPanel,
       toggleBottomPanelMaximized,
       windowState,

@@ -24,11 +24,14 @@ export interface EditorTab {
    * behaviour; the Settings tab is a real, closable editor tab that shows
    * the settings view instead of a Monaco buffer.
    */
-  kind?: 'file' | 'settings';
+  kind?: 'file' | 'settings' | 'welcome';
 }
 
 /** Stable id of the single Settings editor tab. */
 export const SETTINGS_TAB_ID = 'settings';
+
+/** Stable id of the single Welcome editor tab (honest no-file empty state). */
+export const WELCOME_TAB_ID = 'welcome';
 
 export interface TabsState {
   tabs: EditorTab[];
@@ -52,6 +55,8 @@ export type TabsAction =
   | { type: 'new-untitled'; language: string }
   /** Opens (or focuses) the one Settings editor tab. */
   | { type: 'open-settings' }
+  /** Opens (or focuses) the one Welcome editor tab. */
+  | { type: 'open-welcome' }
   | { type: 'close'; id: string }
   | { type: 'activate'; id: string }
   | { type: 'update-content'; id: string; content: string }
@@ -158,6 +163,29 @@ export function tabsReducer(state: TabsState, action: TabsAction): TabsState {
         ...state,
         tabs: [...state.tabs, settingsTab],
         activeTabId: SETTINGS_TAB_ID,
+      };
+    }
+
+    case 'open-welcome': {
+      const existing = state.tabs.find((tab) => tab.id === WELCOME_TAB_ID);
+      if (existing !== undefined) {
+        return { ...state, activeTabId: WELCOME_TAB_ID };
+      }
+      const welcomeTab: EditorTab = {
+        id: WELCOME_TAB_ID,
+        name: 'Welcome',
+        language: '',
+        content: '',
+        isDirty: false,
+        filePath: null,
+        origin: 'workspace',
+        mtimeMs: null,
+        kind: 'welcome',
+      };
+      return {
+        ...state,
+        tabs: [...state.tabs, welcomeTab],
+        activeTabId: WELCOME_TAB_ID,
       };
     }
 

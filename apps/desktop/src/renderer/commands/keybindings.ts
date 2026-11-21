@@ -7,6 +7,7 @@ import type {
   CommandDefinition,
   KeyPart,
   KeybindingSpec,
+  KeybindingsForPlatform,
   ModifierSet,
   Platform,
 } from './types';
@@ -51,13 +52,26 @@ const PLATFORMS: readonly Platform[] = ['win32', 'darwin', 'linux'];
  * including the first half of the Ctrl+K chord.
  */
 const TERMINAL_KEY_NAMES: ReadonlySet<string> = new Set([
+  'b',
+  'j',
   'l',
+  'p',
   'w',
   'k',
   'z',
   'c',
   'v',
 ]);
+
+/** Normalizes the single-spec and alias-array forms to a stable list. */
+function specsForPlatform(
+  value: KeybindingsForPlatform | undefined,
+): readonly KeybindingSpec[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  return 'first' in value ? [value] : value;
+}
 
 function canonicalModifiers(
   modifiers: ModifierSet,
@@ -189,6 +203,18 @@ export function describeKeybinding(spec: KeybindingSpec, platform: Platform): st
     : `${first} ${describeKeyPart(spec.second, platform)}`;
 }
 
+/** Menu/palette label for a single spec or a set of true command aliases. */
+export function describeKeybindings(
+  value: KeybindingsForPlatform | undefined,
+  platform: Platform,
+): string | null {
+  const specs = specsForPlatform(value);
+  if (specs.length === 0) {
+    return null;
+  }
+  return specs.map((spec) => describeKeybinding(spec, platform)).join(' / ');
+}
+
 function partLabel(part: CanonicalKeyPart): string {
   const { ctrl, meta, shift, alt } = part.modifiers;
   const pieces: string[] = [];
@@ -220,15 +246,13 @@ export function collectBindings(
 ): ResolvedBinding[] {
   const result: ResolvedBinding[] = [];
   for (const definition of definitions) {
-    const spec = definition.keybindings?.[platform];
-    if (spec === undefined || spec === null) {
-      continue;
+    for (const spec of specsForPlatform(definition.keybindings?.[platform])) {
+      result.push({
+        commandId: definition.id,
+        spec,
+        editorOwned: definition.editorOwned === true,
+      });
     }
-    result.push({
-      commandId: definition.id,
-      spec,
-      editorOwned: definition.editorOwned === true,
-    });
   }
   return result;
 }
@@ -239,28 +263,53 @@ function conflictKey(binding: ResolvedBinding, platform: Platform): string {
     binding.spec.second === undefined
       ? undefined
       : canonicalizeKeyPart(binding.spec.second, platform);
-  return [binding.spec.when ?? 'always', partId(first), second === undefined ? '' : partId(second)].join('|');
+  return [partId(first), second === undefined ? '' : partId(second)].join('|');
 }
 
 /**
- * Fails fast when two active commands claim the same key in the same context.
- * Different `when` contexts are allowed (Monaco-owned keys, terminal passes,
- * and single-key bindings in different focus scopes).
+ * Two contexts conflict unless they are provably disjoint. `always` overlaps
+ * every scope, and `notTerminalFocused` overlaps both Monaco and non-Monaco
+ * focus; only `monacoFocused` and `notMonacoFocused` are mutually exclusive.
+ */
+function contextsOverlap(a: KeybindingSpec['when'], b: KeybindingSpec['when']): boolean {
+  const first = a ?? 'always';
+  const second = b ?? 'always';
+  if (first === second) {
+    return true;
+  }
+  if (first === 'always' || second === 'always') {
+    return true;
+  }
+  const monaco = 'monacoFocused';
+  const notMonaco = 'notMonacoFocused';
+  return !((first === monaco && second === notMonaco) || (first === notMonaco && second === monaco));
+}
+
+/**
+ * Fails fast when two different commands claim the same key in overlapping
+ * contexts. Aliases of one command are allowed; genuine focus-scope pairs
+ * (`monacoFocused` / `notMonacoFocused`) stay legal.
  */
 export function assertNoKeybindingConflicts(
   definitions: readonly CommandDefinition[],
 ): void {
   for (const platform of PLATFORMS) {
-    const seen = new Map<string, ResolvedBinding>();
+    const seen = new Map<string, ResolvedBinding[]>();
     for (const binding of collectBindings(definitions, platform)) {
       const key = conflictKey(binding, platform);
-      const existing = seen.get(key);
-      if (existing !== undefined) {
+      const existing = seen.get(key) ?? [];
+      const clash = existing.find(
+        (candidate) =>
+          candidate.commandId !== binding.commandId &&
+          contextsOverlap(candidate.spec.when, binding.spec.when),
+      );
+      if (clash !== undefined) {
         throw new Error(
-          `Duplicate keybinding "${describeKeybinding(binding.spec, platform)}" on ${platform} in context "${binding.spec.when ?? 'always'}" for "${existing.commandId}" and "${binding.commandId}"`,
+          `Duplicate keybinding "${describeKeybinding(binding.spec, platform)}" on ${platform} in overlapping contexts "${clash.spec.when ?? 'always'}" and "${binding.spec.when ?? 'always'}" for "${clash.commandId}" and "${binding.commandId}"`,
         );
       }
-      seen.set(key, binding);
+      existing.push(binding);
+      seen.set(key, existing);
     }
   }
 }

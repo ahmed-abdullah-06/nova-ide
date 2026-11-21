@@ -130,6 +130,24 @@
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
+.confirm-dialog {
+  width: min(460px, 90vw);
+}
+
+.confirm-dialog__message {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: 20px;
+}
+
 .dialog__header {
   display: flex;
   align-items: center;

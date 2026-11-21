@@ -16,7 +16,7 @@ export function Breadcrumbs({
   workspaceRoot,
   workspaceName,
 }: BreadcrumbsProps): ReactNode {
-  if (tab === null || tab.kind === 'settings') {
+  if (tab === null || tab.kind === 'settings' || tab.kind === 'welcome') {
     return <div className="breadcrumbs breadcrumbs--empty" aria-hidden="true" />;
   }
   const segments = breadcrumbSegments(

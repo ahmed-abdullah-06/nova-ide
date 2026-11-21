@@ -10,30 +10,33 @@ import {
 import {
   initialTabsState,
   tabsReducer,
+  WELCOME_TAB_ID,
   type EditorTab,
   type TabsAction,
   type TabsState,
 } from './tabsReducer';
 
 /**
- * Editor starts with one empty scratch buffer (an honest in-memory
- * "Untitled-1" — no fake files are shown before a workspace can be opened).
+ * Editor starts with the Welcome tab: an honest empty state with real Start,
+ * Recent and Help actions, instead of an empty scratch buffer pretending to
+ * be a document.
  */
 function createInitialTabsState(): TabsState {
-  const firstTab: EditorTab = {
-    id: 'untitled-1',
-    name: 'Untitled-1',
-    language: 'plaintext',
+  const welcomeTab: EditorTab = {
+    id: WELCOME_TAB_ID,
+    name: 'Welcome',
+    language: '',
     content: '',
     isDirty: false,
     filePath: null,
     origin: 'workspace',
     mtimeMs: null,
+    kind: 'welcome',
   };
   return {
-    tabs: [firstTab],
-    activeTabId: firstTab.id,
-    untitledCounter: 1,
+    tabs: [welcomeTab],
+    activeTabId: welcomeTab.id,
+    untitledCounter: 0,
   };
 }
 
@@ -42,6 +45,8 @@ interface TabsContextValue {
   dispatch: Dispatch<TabsAction>;
   /** Opens (or focuses) the one Settings editor tab. */
   openSettings: () => void;
+  /** Opens (or focuses) the one Welcome editor tab. */
+  openWelcome: () => void;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -55,9 +60,12 @@ export function TabsProvider({ children }: { children: ReactNode }): ReactNode {
   const openSettings = useCallback(() => {
     dispatch({ type: 'open-settings' });
   }, []);
+  const openWelcome = useCallback(() => {
+    dispatch({ type: 'open-welcome' });
+  }, []);
   const value = useMemo(
-    () => ({ state, dispatch, openSettings }),
-    [state, openSettings],
+    () => ({ state, dispatch, openSettings, openWelcome }),
+    [state, openSettings, openWelcome],
   );
   return <TabsContext.Provider value={value}>{children}</TabsContext.Provider>;
 }

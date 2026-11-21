@@ -1,7 +1,11 @@
 /** LF2/LF3 pure-logic checks for the shell chrome and status models. */
 import { describe, expect, it } from 'vitest';
 import { COMMAND_IDS, createCommandDefinitions } from '../../apps/desktop/src/renderer/commands/catalog';
-import { assertNoKeybindingConflicts } from '../../apps/desktop/src/renderer/commands/keybindings';
+import {
+  assertNoKeybindingConflicts,
+  collectBindings,
+  describeKeybindings,
+} from '../../apps/desktop/src/renderer/commands/keybindings';
 import type { CommandContext } from '../../apps/desktop/src/renderer/commands/types';
 import { breadcrumbSegments } from '../../apps/desktop/src/renderer/features/editor/breadcrumbModel';
 import {
@@ -65,13 +69,19 @@ describe('look and feel: chrome commands (LF2)', () => {
   });
 
   it('gives each new tab action a complete keybinding', () => {
+    const bindings = collectBindings(definitions, 'win32');
     for (const id of [
       COMMAND_IDS.closeOtherTabs,
       COMMAND_IDS.closeAllTabs,
       COMMAND_IDS.copyTabPath,
     ]) {
-      const definition = definitions.find((candidate) => candidate.id === id);
-      expect(definition?.keybindings?.win32?.second, id).toBeDefined();
+      expect(
+        bindings.some(
+          (binding) =>
+            binding.commandId === id && binding.spec.second !== undefined,
+        ),
+        id,
+      ).toBe(true);
     }
   });
 });
@@ -88,7 +98,7 @@ describe('look and feel: bottom-panel commands (LF3)', () => {
       ...overrides,
     }) as unknown as CommandContext;
 
-  it('registers stable ids without consuming LF4 layout shortcuts', () => {
+  it('registers stable ids without duplicating keyboard-only actions', () => {
     for (const id of [
       COMMAND_IDS.newTerminal,
       COMMAND_IDS.maximizeBottomPanel,
@@ -117,6 +127,70 @@ describe('look and feel: bottom-panel commands (LF3)', () => {
         context({ bottomPanelVisible: false }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('look and feel: command surface (LF4)', () => {
+  const definitions = createCommandDefinitions();
+  const byId = (id: string) =>
+    definitions.find((definition) => definition.id === id);
+  const winBindings = (id: string) =>
+    collectBindings(definitions, 'win32').filter(
+      (binding) => binding.commandId === id,
+    );
+
+  it('enables the palette and registers all LF4 layout/tab actions', () => {
+    for (const id of [
+      COMMAND_IDS.commandPalette,
+      COMMAND_IDS.quickOpen,
+      COMMAND_IDS.toggleSidebar,
+      COMMAND_IDS.toggleBottomPanel,
+      COMMAND_IDS.showWelcome,
+      COMMAND_IDS.nextTab,
+      COMMAND_IDS.previousTab,
+      COMMAND_IDS.openFileByPath,
+      COMMAND_IDS.openRecentWorkspace,
+    ]) {
+      expect(byId(id), id).toBeDefined();
+    }
+    expect(byId(COMMAND_IDS.commandPalette)?.enabled?.({
+      bridgeAvailable: false,
+    } as CommandContext)).toBe(true);
+    expect(byId(COMMAND_IDS.openFileByPath)?.paletteHidden).toBe(true);
+    expect(byId(COMMAND_IDS.openRecentWorkspace)?.paletteHidden).toBe(true);
+  });
+
+  it('uses true aliases for F1 and keeps Quick Open out of the terminal', () => {
+    const labels = describeKeybindings(
+      byId(COMMAND_IDS.commandPalette)?.keybindings?.win32,
+      'win32',
+    );
+    expect(labels).toBe('Ctrl+Shift+P / F1');
+    expect(
+      winBindings(COMMAND_IDS.commandPalette).map(
+        (binding) => binding.spec.when,
+      ),
+    ).toEqual(['notTerminalFocused', 'notTerminalFocused']);
+    expect(
+      winBindings(COMMAND_IDS.quickOpen).map(
+        (binding) => binding.spec.when,
+      ),
+    ).toEqual(['notTerminalFocused']);
+    expect(
+      winBindings(COMMAND_IDS.toggleBottomPanel).map(
+        (binding) => binding.spec.when,
+      ),
+    ).toEqual(['notTerminalFocused']);
+  });
+
+  it('keeps LF3 panel actions without keybindings', () => {
+    for (const id of [
+      COMMAND_IDS.newTerminal,
+      COMMAND_IDS.maximizeBottomPanel,
+      COMMAND_IDS.closeBottomPanel,
+    ]) {
+      expect(byId(id)?.keybindings, id).toBeUndefined();
+    }
   });
 });
 

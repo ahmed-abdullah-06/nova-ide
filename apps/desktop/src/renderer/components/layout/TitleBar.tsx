@@ -17,6 +17,8 @@ import { MenuBar } from './MenuBar';
 export interface TitleBarProps {
   sections: readonly MenuSection[];
   chordHint: string | null;
+  /** Platform-aware shortcut label from the command registry. */
+  paletteShortcut: string;
   onExecute: (id: string) => void;
   onCaptureFocus: () => void;
   onOpenChange: (open: boolean) => void;
@@ -57,6 +59,7 @@ function overlayWidth(): number {
 export function TitleBar({
   sections,
   chordHint,
+  paletteShortcut,
   onExecute,
   onCaptureFocus,
   onOpenChange,
@@ -103,10 +106,18 @@ export function TitleBar({
         onCaptureFocus={onCaptureFocus}
         onOpenChange={onOpenChange}
       />
-      <div className="command-center" title={title}>
+      <button
+        type="button"
+        className="command-center"
+        title={`${title} — Open Command Palette${
+          paletteShortcut === '' ? '' : ` (${paletteShortcut})`
+        }`}
+        aria-label="Open Command Palette"
+        onClick={() => onExecute(COMMAND_IDS.commandPalette)}
+      >
         <Icon name="commandCenter" size={13} className="command-center__icon" />
         <span className="command-center__title">{title}</span>
-      </div>
+      </button>
       <span className="title-bar__spacer" />
       {chordHint === null ? null : (
         <span className="menu-bar__hint" role="status">

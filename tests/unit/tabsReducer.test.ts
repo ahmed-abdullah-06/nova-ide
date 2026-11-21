@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   initialTabsState,
   tabsReducer,
+  WELCOME_TAB_ID,
   type TabsState,
 } from '../../apps/desktop/src/renderer/stores/tabsReducer';
 
@@ -93,6 +94,22 @@ describe('tabsReducer', () => {
     });
     expect(twice.tabs).toHaveLength(2);
     expect(twice.activeTabId).toBe('file-1');
+  });
+
+  it('opens one stable Welcome tab without a file path or dirty state', () => {
+    const opened = tabsReducer(stateWithTabs(1), { type: 'open-welcome' });
+    const welcome = opened.tabs.find((tab) => tab.id === WELCOME_TAB_ID);
+    expect(welcome).toMatchObject({
+      name: 'Welcome',
+      kind: 'welcome',
+      filePath: null,
+      isDirty: false,
+    });
+    expect(opened.activeTabId).toBe(WELCOME_TAB_ID);
+
+    const again = tabsReducer(opened, { type: 'open-welcome' });
+    expect(again.tabs).toHaveLength(opened.tabs.length);
+    expect(again.activeTabId).toBe(WELCOME_TAB_ID);
   });
 
   it('activates an existing tab', () => {

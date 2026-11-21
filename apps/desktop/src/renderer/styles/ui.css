@@ -50,6 +50,15 @@
   background: var(--accent-pressed);
 }
 
+.ui-button--danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.ui-button--danger:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
 .ui-button--secondary {
   background: var(--surface-raised);
   border-color: var(--border-strong);

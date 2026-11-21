@@ -44,12 +44,8 @@ export function EditorTabs({
   const [menu, setMenu] = useState<MenuState | null>(null);
 
   const closeTab = (tab: EditorTab): void => {
-    if (
-      !tab.isDirty ||
-      window.confirm(`Close "${tab.name}"? Unsaved changes will be lost.`)
-    ) {
-      onClose(tab.id);
-    }
+    // OnClose executes the registry command, which owns dirty confirmation.
+    onClose(tab.id);
   };
 
   const openMenu = (event: MouseEvent, tabId: string): void => {
@@ -62,6 +58,7 @@ export function EditorTabs({
       {tabs.map((tab) => {
         const active = tab.id === activeTabId;
         const settings = tab.kind === 'settings';
+        const welcome = tab.kind === 'welcome';
         return (
           <div
             key={tab.id}
@@ -70,7 +67,7 @@ export function EditorTabs({
             tabIndex={active ? 0 : -1}
             className={`editor-tab${active ? ' editor-tab--active' : ''}${
               settings ? ' editor-tab--settings' : ''
-            }`}
+            }${welcome ? ' editor-tab--welcome' : ''}`}
             onClick={() => onActivate(tab.id)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -89,6 +86,8 @@ export function EditorTabs({
           >
             {settings ? (
               <Icon name="settings" size={14} className="editor-tab__icon" />
+            ) : welcome ? (
+              <Icon name="app" size={14} className="editor-tab__icon" />
             ) : (
               <FileIcon name={tab.name} kind="file" expanded={false} />
             )}

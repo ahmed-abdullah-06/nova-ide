@@ -2,9 +2,9 @@
 
 This record tracks the appearance-and-shell milestone on top of `27de244`
 (`dev`). It is separate from product versions V1/V2. The target is roughly
-50% closer to contemporary IDE shells (VS Code / Kiro / Cursor) in layout,
-density and feel. **This document currently contains LF0 only: inspection,
-BEFORE scorecard and plan. No source files were changed in LF0.**
+50% closer to contemporary IDE shells (Kiro / Cursor) in layout,
+density and feel. **This document records the completed LF0–LF4 phases;
+LF5 has not been started.**
 
 ## LF0 method and evidence
 
@@ -116,14 +116,16 @@ registry command with a stable id, keybinding, `enabled`/`checked` state.
 ### LF4 — Palette, Quick Open, Welcome, notifications
 - `commands/catalog.ts`: enable `a6.view.commandPalette`; add
   `a6.file.quickOpen` (Ctrl+P), `a6.view.toggleBottomPanel` (Ctrl+J),
-  `a6.view.toggleSidebar` (Ctrl+B), `a6.view.nextTab` / `previousTab`,
-  `a6.view.commandPaletteViaF1` or F1 alias — all with conflict checks.
+  `a6.view.toggleSidebar` (Ctrl+B), `a6.view.nextTab` / `previousTab`
+  — all with conflict checks. F1 is a second keybinding on the same palette
+  command, not a duplicate id.
 - New `features/palette/` overlays: fuzzy ranking over `createCommandDefinitions()`
   and `window.nova.search` file results; recent-first, keyboard-only.
 - New `features/welcome/WelcomeView.tsx` tab (Start / Recent / Help) using
   existing New File / Open Folder / Help commands.
-- `NotificationHost.tsx` + `StatusBar.tsx`: toast history behind a bell;
-  replace `window.confirm` alert-style calls with in-app confirmations.
+- `components/ui/ConfirmProvider.tsx`: replace renderer `window.confirm` calls
+  with in-app `role="alertdialog"` confirmations; the native close/quit path
+  still answers `nova.window.confirmClose(token, confirmed)`.
 
 ### LF5 — Polish and verification
 - Sash components with per-session (or existing settings) persistence; focus
@@ -154,8 +156,8 @@ New UI names: `commandCenter`, `layoutSidebar`, `layoutPanel`, `panelLeft`,
 `folderOpen`, `folderClosed`. File-type set: ts/tsx/js/jsx/json/html/css/scss/
 md/py/java/c/cpp/h/go/rs/sh/sql/yaml/toml/vue/xml/svg/txt/lock/ignore + default
 document. No icons, fonts or branding are copied from the target products, and
-the words "VS Code"/"Visual Studio Code" will not appear in any user-facing UI
-or documentation.
+no prohibited competitor product names appear in any user-facing UI or
+documentation.
 
 ## Tests / verification plan
 
@@ -180,7 +182,7 @@ or documentation.
   delegated to the owner. DOM/CSS evidence and code inspection are the basis
   of this scorecard.
 
-**Status: LF0 complete — LF1 approved and completed — LF2 completed — LF3 completed (see below).**
+**Status: LF0 complete — LF1 approved and completed — LF2 completed — LF3 completed — LF4 completed (see below).**
 
 ## LF1 — Tokens and theme (completed)
 
@@ -289,3 +291,53 @@ item 9 (bottom panel actions) moves from partial toward present, and item 10
 backed by the bell, but in-app confirmations remain LF4 work. The palette,
 Quick Open, Welcome tab, layout keybindings, sashes and final AFTER screenshots
 remain LF4/LF5 deliverables.
+
+## LF4 — Command centre, palette, Quick Open, Welcome, confirmations (completed)
+
+Scope: renderer UI shell only. Every new action is a registry command with a
+stable id, honest `enabled`/`checked` state and a conflict-checked keybinding.
+No new IPC channel, no provider/agent/privacy/permission/IPC/security/fuse/CSP
+change, no new dependency, and no copied artwork or branding. The palette and
+Quick Open are thin UI over the existing command registry and `nova.search`
+bridge; they do not read the filesystem directly. Changed files:
+
+| File | Change |
+| --- | --- |
+| `commands/catalog.ts`, `commands/types.ts` | Enabled `a6.view.commandPalette`; added `a6.file.quickOpen` (Ctrl+P), `a6.file.openFileByPath` (internal, `paletteHidden`), `a6.view.toggleBottomPanel` (Ctrl+J), `a6.view.toggleSidebar` (Ctrl+B), `a6.view.nextTab` / `previousTab` (Ctrl+Tab / Ctrl+PageUp / Ctrl+PageDown aliases), `a6.view.showWelcome`. One `a6.view.commandPalette` id serves Ctrl+Shift+P and F1; Monaco's standalone quick-command binding was removed to resolve the conflict. Tab-close commands are enabled for every tab kind, including Settings and Welcome. |
+| `commands/keybindings.ts` | Alias collection and terminal-key passthrough; added `b`, `j`, `p` to the terminal-owned set. New single-key commands use `when: 'notTerminalFocused'`. |
+| `commands/CommandProvider.tsx` | Shared overlay state and a single `aria-modal` keyboard gate. Focus captured before an overlay is restored only if no newer overlay/modal owns the keyboard; pending restoration timers are cancelled when a new overlay opens. `executeFromOverlay` runs through the same trusted registry path with the pre-overlay focus context. |
+| `features/palette/` (new) | `paletteModel.ts` (pure fuzzy ranking over enabled commands and trusted search results), `QuickPick.tsx` (keyboard-only input + listbox), `PaletteOverlays.tsx` (command palette and Quick Open). Quick Open uses `useSearch('quickopen')`, a distinct request prefix from the Search view. |
+| `components/layout/TitleBar.tsx` | The LF2 display-only command-centre pill is now a real button that opens the palette through the registry; its title and active-document name are unchanged. |
+| `features/welcome/WelcomeView.tsx` (new), `stores/tabsReducer.ts`, `stores/tabs.tsx`, `features/editor/EditorArea.tsx` | Welcome is a real, closable editor tab (`WELCOME_TAB_ID = 'welcome'`) and is the initial tab instead of an empty scratch buffer. Start / Recent Workspaces / Help actions call existing registry commands; recent workspaces reuse `nova.workspace.recent()`. |
+| `components/ui/ConfirmProvider.tsx` (new), `app/App.tsx`, `features/editor/EditorArea.tsx`, `features/editor/EditorTabs.tsx` | Renderer confirmations use an in-app `role="alertdialog"` instead of native `window.confirm`. Tab close goes through `a6.tab.close`; model disposal stays in the registry service. Native close/quit still calls `nova.window.confirmClose(token, confirmed)`. |
+| `styles/palette.css`, `styles/welcome.css`, `styles/tokens.css`, `index.tsx` | Modal/quick-pick surface and Welcome styling using LF1 tokens, plus the new stylesheet imports. |
+| `tests/unit/` | Updated command-registry, keybinding, menu, tab-reducer and chrome contracts; added `tests/unit/palette.test.ts` for fuzzy ranking and command/file row models. |
+| `tools/verify/runtime.mjs` | Replaced the stale "palette planned" and native-`window.confirm` assertions; added packaged-app checks for the Welcome empty state, palette entry points (Ctrl+Shift+P, F1, command centre), filtering and execution with focus restore, Quick Open file execution, layout/tab shortcuts, terminal passthrough and in-app confirmation dialogs. |
+
+### LF4 verification (actually executed)
+
+- `pnpm typecheck` — passed.
+- `pnpm test` — **60 files / 785 tests passed** (after LF3 59 / 773). The
+  `node-pty` `AttachConsole failed` stderr is pre-existing Windows harness
+  noise. One full run hit an environmental `killAll()` hook timeout in
+  `taskService.test.ts`; the targeted file passed 11/11 and a clean full rerun
+  passed 785/785.
+- `pnpm package` — passed.
+- `pnpm verify` — **192/192 checks passed, 0 console errors.** New DOM/CSS and
+  trace evidence includes: the initial Welcome tab with Start / Recent
+  Workspaces / Help sections and honest action labels; `Ctrl+Shift+P`, `F1`
+  and the title command centre all executing `a6.view.commandPalette` from one
+  id; a filtered palette row showing the real `Ctrl+B` shortcut; palette
+  selection running `a6.view.toggleSidebar` and restoring prior focus;
+  `Ctrl+P` executing `a6.file.quickOpen`, listing a real workspace file and
+  opening it through `a6.file.openFileByPath`; `Ctrl+B` / `Ctrl+J` toggles and
+  tab aliases; `Ctrl+B` / `Ctrl+J` / `Ctrl+P` reaching the focused terminal
+  without firing their shell commands; in-app `role="alertdialog"` confirmations for dirty-tab close,
+  dirty window close and Exit. Quick Open's first verification run exposed a
+  focus-restoration race between successive overlays; the pending timer is now
+  cancelled and guarded, and later runs passed consistently.
+
+All LF4 claims above are DOM/CSS and command-trace evidence from the packaged
+app under CDP. Native Windows caption controls are OS-drawn and absent from
+CDP screenshots. Visual review of the BEFORE/AFTER images remains delegated to
+the owner; no visual-quality claim is made here. LF5 has **not** been started.

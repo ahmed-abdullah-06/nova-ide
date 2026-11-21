@@ -6,7 +6,7 @@
  * registry, so the menu, keyboard shortcuts and future palette cannot drift.
  */
 import { COMMAND_IDS } from './catalog';
-import { describeKeybinding } from './keybindings';
+import { describeKeybindings } from './keybindings';
 import type {
   CommandCategory,
   CommandContext,
@@ -30,6 +30,7 @@ const MENU_LAYOUT: Record<CommandCategory, readonly string[]> = {
     COMMAND_IDS.newFile,
     COMMAND_IDS.openFile,
     COMMAND_IDS.openWorkspace,
+    COMMAND_IDS.quickOpen,
     SEPARATOR,
     COMMAND_IDS.save,
     COMMAND_IDS.saveAs,
@@ -131,14 +132,13 @@ export function buildMenuModel(
         throw new Error(`Command "${id}" is in the wrong menu category`);
       }
       const enabled = definition.enabled?.(context) ?? true;
-      const spec = definition.keybindings?.[platform];
       entries.push({
         kind: 'item',
         id,
         label: definition.title,
         shortcut:
           definition.shortcutLabel ??
-          (spec == null ? null : describeKeybinding(spec, platform)),
+          describeKeybindings(definition.keybindings?.[platform], platform),
         enabled,
         checked: definition.checked?.(context) ?? null,
         disabledReason: enabled

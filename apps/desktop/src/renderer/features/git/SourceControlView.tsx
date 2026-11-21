@@ -8,6 +8,7 @@
  */
 import { useCallback, useState } from 'react';
 import type { GitFileChange } from '../../../shared/ipc-types';
+import { useConfirm } from '../../components/ui/ConfirmProvider';
 import { useGit } from './useGit';
 
 export interface SourceControlViewProps {
@@ -22,6 +23,7 @@ export function SourceControlView({
   onOpenFile,
 }: SourceControlViewProps): React.JSX.Element {
   const git = useGit(hasWorkspace);
+  const { confirm } = useConfirm();
   const [message, setMessage] = useState('');
   const [diff, setDiff] = useState<string | null>(null);
   const [diffPath, setDiffPath] = useState<string | null>(null);
@@ -29,18 +31,23 @@ export function SourceControlView({
   const status = git.status;
 
   const handleDiscard = useCallback(
-    (change: GitFileChange): void => {
-      const confirmed = window.confirm(
+    async (change: GitFileChange): Promise<void> => {
+      const confirmed = await confirm(
         `Discard the changes of "${change.relativePath}"?\n\n` +
           'The file will be restored to its last committed state.\n\n' +
           'This cannot be undone.',
+        {
+          title: 'Discard changes',
+          confirmLabel: 'Discard changes',
+          destructive: true,
+        },
       );
       if (!confirmed) {
         return;
       }
-      git.discard(change.path);
+      await git.discard(change.path);
     },
-    [git],
+    [confirm, git],
   );
 
   const handleCommit = useCallback((): void => {

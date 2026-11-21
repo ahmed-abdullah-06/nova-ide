@@ -35,6 +35,13 @@ export function loadMonaco(): Promise<MonacoModule> {
         command: '-expandLineSelection',
       });
 
+      // F1 opens A6's palette. Remove Monaco's standalone quick-command
+      // binding so the two widgets can never open for one keypress.
+      monaco.editor.addKeybindingRule({
+        keybinding: monaco.KeyCode.F1,
+        command: '-editor.action.quickCommand',
+      });
+
       self.MonacoEnvironment = {
         getWorker: (_workerId: string, label: string): Worker => {
           switch (label) {

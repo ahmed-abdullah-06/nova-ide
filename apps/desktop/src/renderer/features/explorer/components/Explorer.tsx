@@ -9,8 +9,9 @@ import {
 } from 'react';
 import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
 import { COMMAND_IDS, createCommandDefinitions } from '../../../commands/catalog';
-import { describeKeybinding } from '../../../commands/keybindings';
+import { describeKeybindings } from '../../../commands/keybindings';
 import type { Platform } from '../../../commands/types';
+import { useConfirm } from '../../../components/ui/ConfirmProvider';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
 import { Icon } from '../../../components/ui/icons';
@@ -59,6 +60,7 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   const { state, dispatch } = useWorkspace();
   const actions = useWorkspaceActions();
   const fileOps = useFileOperations();
+  const { confirm } = useConfirm();
   const tabs = useTabs();
   const treeRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef<Set<string>>(new Set());
@@ -212,10 +214,15 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
         .map((tab) => tab.name)
         .join(', ');
       const more = dirty.length > 5 ? ` and ${dirty.length - 5} more` : '';
-      const confirmed = window.confirm(
+      const confirmed = await confirm(
         `Close the workspace?\n\n` +
           `You have unsaved changes in ${dirty.length} file(s) that will be lost:\n` +
           `${shown}${more}`,
+        {
+          title: 'Unsaved changes',
+          confirmLabel: 'Discard and close',
+          destructive: true,
+        },
       );
       if (!confirmed) {
         return;
@@ -231,7 +238,7 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
       }
     }
     await actions.closeWorkspace();
-  }, [actions, tabs]);
+  }, [actions, confirm, tabs]);
 
   /** Right-click: select the entry and open the actions menu next to it. */
   const handleContextMenu = useCallback(
@@ -297,7 +304,7 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   const shortcutHint = useMemo(() => {
     const command = createCommandDefinitions().find((entry) => entry.id === COMMAND_IDS.openWorkspace);
     const spec = command?.keybindings?.[platform] ?? command?.keybindings?.win32 ?? command?.keybindings?.linux;
-    return spec ? describeKeybinding(spec, platform) : '';
+    return describeKeybindings(spec, platform) ?? '';
   }, [platform]);
 
   return (

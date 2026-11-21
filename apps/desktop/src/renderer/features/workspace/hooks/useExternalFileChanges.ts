@@ -14,6 +14,7 @@
  * suppresses them, and the renderer double-checks the mtime.
  */
 import { useEffect, useRef } from 'react';
+import { useConfirm } from '../../../components/ui/ConfirmProvider';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
 import type { EditorTab } from '../../../stores/tabsReducer';
@@ -26,6 +27,7 @@ function samePath(a: string, b: string): boolean {
 export function useExternalFileChanges(): void {
   const { state: tabsState, dispatch: tabsDispatch } = useTabs();
   const { dispatch } = useWorkspace();
+  const { confirm } = useConfirm();
 
   // Latest state inside the long-lived subscription without re-subscribing.
   const tabsRef = useRef(tabsState);
@@ -55,7 +57,7 @@ export function useExternalFileChanges(): void {
     if (!window.nova) {
       return;
     }
-    const unsubscribe = window.nova.workspace.onExternalChange((change) => {
+    const unsubscribe = window.nova.workspace.onExternalChange(async (change) => {
       const tabs = tabsRef.current.tabs;
       const tab: EditorTab | undefined = tabs.find(
         (candidate) =>
@@ -114,9 +116,14 @@ export function useExternalFileChanges(): void {
       }
 
       // Dirty buffer: never lose unsaved work without asking (spec §7.1).
-      const discard = window.confirm(
+      const discard = await confirm(
         `"${tab.name}" changed on disk while you have unsaved changes here.\n\n` +
           `Load the version from disk and discard your changes?`,
+        {
+          title: 'File changed on disk',
+          confirmLabel: 'Discard local changes',
+          destructive: true,
+        },
       );
       if (discard) {
         adoptFromDisk();
@@ -129,5 +136,5 @@ export function useExternalFileChanges(): void {
       }
     });
     return unsubscribe;
-  }, [dispatch, tabsDispatch]);
+  }, [confirm, dispatch, tabsDispatch]);
 }

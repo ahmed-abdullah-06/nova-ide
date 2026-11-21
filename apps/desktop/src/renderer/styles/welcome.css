@@ -1,0 +1,122 @@
+/** Welcome editor tab: real empty state with honest actions. */
+
+.welcome-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 42px 48px;
+  background: var(--surface-app);
+  color: var(--text);
+}
+
+.welcome-view__hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: 880px;
+  margin: 0 auto 34px;
+}
+
+.welcome-view__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  color: var(--accent);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-raised);
+}
+
+.welcome-view__hero h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.welcome-view__hero p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+}
+
+.welcome-view__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 20px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.welcome-view__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-panel);
+}
+
+.welcome-view__section h2 {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.welcome-view__action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.welcome-view__action:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.welcome-view__action:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+.welcome-view__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.welcome-view__recent-name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-view__recent-path {
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-view__empty {
+  margin: 4px 0;
+  color: var(--text-faint);
+  font-size: var(--font-size-small);
+}

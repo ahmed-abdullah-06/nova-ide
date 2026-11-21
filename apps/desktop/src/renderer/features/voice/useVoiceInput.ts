@@ -22,6 +22,7 @@ import {
   parsePushToTalkKey,
 } from '../../../shared/pushToTalk';
 import type { VoiceSettings } from '../../../shared/voice-types';
+import { useConfirm } from '../../components/ui/ConfirmProvider';
 import { useVoiceCapture } from './useVoiceCapture';
 
 /** What the hook reports to the panel. */
@@ -59,19 +60,6 @@ export interface UseVoiceInputOptions {
   settings: VoiceSettings | null;
 }
 
-/**
- * The question of a cloud service, asked for every recording.
- *
- * The main process asks again (and refuses without the approval), so this
- * is the visible half of the gate, not the rule itself.
- */
-function confirmCloudRecording(): boolean {
-  return globalThis.confirm(
-    'A cloud speech service would send this recording to an external service.\n\n' +
-      'The audio would leave this machine. Send this recording?',
-  );
-}
-
 /** True when the target of a key event is a field the user types in. */
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -92,6 +80,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function useVoiceInput(options: UseVoiceInputOptions): VoiceInput {
   const [processing, setProcessing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { confirm } = useConfirm();
   const callback = useRef(options.onTranscript);
   callback.current = options.onTranscript;
   // True only for the recording that the user approved for a cloud service.
@@ -173,8 +162,19 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInput {
         return;
       }
       if (settings.engine === 'cloud') {
-        // The approval belongs to this recording only.
-        if (!confirmCloudRecording()) {
+        // The approval belongs to this recording only. The main process asks
+        // again and remains the authority for any external transfer.
+        const approved = await confirm(
+          'A cloud speech service would send this recording to an external service.\n\n' +
+            'The audio would leave this machine. Send this recording?',
+          {
+            title: 'Cloud speech service',
+            confirmLabel: 'Send recording',
+            cancelLabel: 'Do not send',
+            destructive: true,
+          },
+        );
+        if (!approved) {
           setNotice(
             'The recording was not started: you did not approve the cloud speech service.',
           );
@@ -187,7 +187,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): VoiceInput {
       cloudApproved.current = false;
       setNotice('The voice settings could not be read.');
     }
-  }, [capture, processing]);
+  }, [capture, confirm, processing]);
 
   const cancel = useCallback((): void => {
     cloudApproved.current = false;

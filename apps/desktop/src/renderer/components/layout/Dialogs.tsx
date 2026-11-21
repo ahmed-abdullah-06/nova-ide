@@ -1,7 +1,7 @@
 /** Help dialogs: searchable shortcut reference and real build metadata. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppInfo } from '../../../shared/ipc-types';
-import { describeKeybinding } from '../../commands/keybindings';
+import { describeKeybindings } from '../../commands/keybindings';
 import { MENU_CATEGORIES } from '../../commands/menuModel';
 import type { CommandDefinition, Platform } from '../../commands/types';
 
@@ -76,8 +76,7 @@ export function ShortcutsDialog({
       return definitions;
     }
     return definitions.filter((definition) => {
-      const spec = definition.keybindings?.[platform];
-      const label = spec == null ? '' : describeKeybinding(spec, platform);
+      const label = describeKeybindings(definition.keybindings?.[platform], platform) ?? '';
       return (
         definition.title.toLowerCase().includes(needle) ||
         definition.category.toLowerCase().includes(needle) ||
@@ -106,17 +105,14 @@ export function ShortcutsDialog({
           return (
             <section key={category} className="dialog__group">
               <h3 className="dialog__group-title">{category}</h3>
-              {rows.map((definition) => {
-                const spec = definition.keybindings?.[platform];
-                return (
-                  <div key={definition.id} className="dialog__row">
-                    <span className="dialog__row-label">{definition.title}</span>
-                    <span className="dialog__row-shortcut">
-                      {spec == null ? '—' : describeKeybinding(spec, platform)}
-                    </span>
-                  </div>
-                );
-              })}
+              {rows.map((definition) => (
+                <div key={definition.id} className="dialog__row">
+                  <span className="dialog__row-label">{definition.title}</span>
+                  <span className="dialog__row-shortcut">
+                    {describeKeybindings(definition.keybindings?.[platform], platform) ?? '—'}
+                  </span>
+                </div>
+              ))}
             </section>
           );
         })}

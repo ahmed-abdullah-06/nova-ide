@@ -33,8 +33,11 @@ export interface CommandTab {
   isDirty: boolean;
   origin: 'workspace' | 'external';
   externalGrantId?: string;
-  /** The Settings tab is a real editor tab but has no file buffer. */
-  kind?: 'file' | 'settings';
+  /**
+   * Settings and Welcome are real editor tabs without a Monaco file buffer.
+   * The Welcome tab is the honest empty state when no file is open.
+   */
+  kind?: 'file' | 'settings' | 'welcome';
 }
 
 export type BottomPanelTab = 'terminal' | 'problems' | 'output';
@@ -81,7 +84,21 @@ export interface CommandServices {
   replaceInFile(): void | Promise<void>;
   findInWorkspace(): void | Promise<void>;
   commandPalette(): void | Promise<void>;
+  quickOpen(): void | Promise<void>;
+  /** Opens a search result through the existing read-file bridge. */
+  openFileByPath(path: string, options?: { line?: number; column?: number }): void | Promise<void>;
+  /** Opens a workspace from the existing Recent list (bridge-validated). */
+  openRecentWorkspace(rootPath: string): void | Promise<void>;
+  /** Opens or focuses the Welcome editor tab. */
+  showWelcome(): void | Promise<void>;
+  /** Cycles editor tabs in visual order. */
+  nextTab(): void | Promise<void>;
+  previousTab(): void | Promise<void>;
   toggleExplorer(): void | Promise<void>;
+  /** Toggles the side bar without changing the active activity. */
+  toggleSidebar(): void | Promise<void>;
+  /** Toggles the bottom panel, preserving the selected tab. */
+  toggleBottomPanel(): void | Promise<void>;
   toggleSearch(): void | Promise<void>;
   toggleSourceControl(): void | Promise<void>;
   toggleAiPanel(): void | Promise<void>;
@@ -161,6 +178,13 @@ export interface KeybindingSpec {
   when?: KeybindingWhen;
 }
 
+/**
+ * One command may own several aliases (for example Ctrl+Shift+P and F1).
+ * A single spec is kept as the normal case; arrays are only for true aliases
+ * of the same action, never for two different commands.
+ */
+export type KeybindingsForPlatform = KeybindingSpec | readonly KeybindingSpec[] | null;
+
 export interface CommandDefinition {
   id: string;
   title: string;
@@ -168,13 +192,15 @@ export interface CommandDefinition {
   run(context: CommandContext, args?: unknown): void | Promise<void>;
   enabled?(context: CommandContext): boolean;
   checked?(context: CommandContext): boolean;
-  keybindings?: Partial<Record<Platform, KeybindingSpec | null>>;
+  keybindings?: Partial<Record<Platform, KeybindingsForPlatform>>;
   /** Display-only accelerator label; it never installs a keybinding. */
   shortcutLabel?: string;
   /** Monaco handles these keys itself while it has focus. */
   editorOwned?: boolean;
   /** Disabled item with an honest explanation. */
   plannedHint?: string;
+  /** Internal command that requires call-site arguments; not a palette row. */
+  paletteHidden?: boolean;
   /** Reason shown when `enabled(context)` is false. */
   disabledHint?(context: CommandContext): string;
 }

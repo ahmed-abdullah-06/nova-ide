@@ -18,21 +18,26 @@ import {
 } from 'react';
 import type { AppInfo } from '../../shared/ipc-types';
 import { AboutDialog, ShortcutsDialog } from '../components/layout/Dialogs';
+import { useConfirm } from '../components/ui/ConfirmProvider';
 import {
   editorHistoryState,
   isEditorReady,
   requestEditorAction,
 } from '../features/editor/editorCommands';
 import { disposeModel } from '../features/editor/modelRegistry';
+import {
+  CommandPaletteOverlay,
+  QuickOpenOverlay,
+} from '../features/palette/PaletteOverlays';
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { useFileOperations } from '../features/workspace/hooks/useFileOperations';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
 import { useTabs } from '../stores/tabs';
 import { useUi } from '../stores/ui';
 import { useWorkspace } from '../stores/workspace';
-import { createCommandDefinitions } from './catalog';
+import { COMMAND_IDS, createCommandDefinitions } from './catalog';
 import { EMPTY_FOCUS, getFocusTarget } from './focus';
-import { KeybindingResolver } from './keybindings';
+import { describeKeybindings, KeybindingResolver } from './keybindings';
 import { buildMenuModel, type MenuSection } from './menuModel';
 import { CommandRegistry, exposeCommandTrace } from './registry';
 import type {
@@ -78,10 +83,26 @@ function detectPlatform(): Platform {
   return 'win32';
 }
 
+/**
+ * True while any renderer modal owns the keyboard. The quick pick, dialogs
+ * and confirmations all mark themselves `aria-modal`, so the global command
+ * listener never runs behind them.
+ */
+function modalSurfaceOpen(): boolean {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+  return document.querySelector('[aria-modal="true"]') !== null;
+}
+
 export interface CommandsContextValue {
   sections: readonly MenuSection[];
   chordHint: string | null;
+  /** Platform-aware shortcut for the command centre tooltip. */
+  paletteShortcut: string;
   executeFromMenu: (id: string, args?: unknown) => void;
+  /** Current enabled state for honest, non-clickable Welcome actions. */
+  isCommandEnabled: (id: string) => boolean;
   captureMenuFocus: () => void;
   setMenuOpen: (open: boolean) => void;
 }
@@ -89,30 +110,110 @@ export interface CommandsContextValue {
 const CommandsContext = createContext<CommandsContextValue | null>(null);
 
 export function CommandProvider({ children }: { children: ReactNode }): ReactNode {
-  const { state: tabsState, dispatch: tabsDispatch, openSettings } = useTabs();
+  const {
+    state: tabsState,
+    dispatch: tabsDispatch,
+    openSettings,
+    openWelcome,
+  } = useTabs();
   const { state: workspaceState, dispatch: workspaceDispatch } = useWorkspace();
   const ui = useUi();
+  const { confirm } = useConfirm();
   const fileOps = useFileOperations();
-  const { openFromDialog } = useFileOpener();
-  const { openFolder } = useWorkspaceActions();
+  const { openFile, openFromDialog } = useFileOpener();
+  const { openFolder, openRecent } = useWorkspaceActions();
 
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null);
   const [chordHint, setChordHint] = useState<string | null>(null);
   const [menuOpen, setMenuOpenState] = useState(false);
   const [menuFocus, setMenuFocus] = useState<FocusTarget | null>(null);
+  const [overlay, setOverlay] = useState<'palette' | 'quickOpen' | null>(null);
+  const [recentCommandIds, setRecentCommandIds] = useState<string[]>([]);
   const platform = useMemo(detectPlatform, []);
   const resolverRef = useRef<KeybindingResolver | null>(null);
   const nova = typeof window === 'undefined' ? undefined : window.nova;
   const { setWindowState } = ui;
   const tabsRef = useRef(tabsState);
   tabsRef.current = tabsState;
+  const overlayRef = useRef<'palette' | 'quickOpen' | null>(null);
+  const focusBeforeOverlayRef = useRef<FocusTarget | null>(null);
+  const elementBeforeOverlayRef = useRef<HTMLElement | null>(null);
+  const focusTimerRef = useRef<number | null>(null);
 
   const notify = useCallback(
     (message: string): void => {
       workspaceDispatch({ type: 'notify', kind: 'info', message });
     },
     [workspaceDispatch],
+  );
+
+  const cancelFocusRestore = useCallback(() => {
+    if (focusTimerRef.current !== null) {
+      clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = null;
+    }
+  }, []);
+
+  const openOverlay = useCallback(
+    (kind: 'palette' | 'quickOpen'): void => {
+      if (overlayRef.current !== null) {
+        return;
+      }
+      // A pending restoration from the previous overlay must never steal
+      // focus from the input that just took over the keyboard.
+      cancelFocusRestore();
+      const focus = getFocusTarget();
+      focusBeforeOverlayRef.current = focus;
+      elementBeforeOverlayRef.current = focus.element;
+      overlayRef.current = kind;
+      setOverlay(kind);
+    },
+    [cancelFocusRestore],
+  );
+
+  const closeOverlay = useCallback((): void => {
+    if (overlayRef.current === null) {
+      return;
+    }
+    cancelFocusRestore();
+    overlayRef.current = null;
+    setOverlay(null);
+    const element = elementBeforeOverlayRef.current;
+    elementBeforeOverlayRef.current = null;
+    if (element !== null && element.isConnected) {
+      // Return focus after React has removed the modal surface, but only if
+      // no newer overlay or confirmation owns the keyboard in the meantime.
+      focusTimerRef.current = window.setTimeout(() => {
+        focusTimerRef.current = null;
+        if (overlayRef.current !== null || modalSurfaceOpen()) {
+          return;
+        }
+        if (element.isConnected) {
+          element.focus({ preventScroll: true });
+        }
+      }, 0);
+    }
+  }, [cancelFocusRestore]);
+
+  useEffect(() => cancelFocusRestore, [cancelFocusRestore]);
+
+  const cycleTab = useCallback(
+    (direction: 1 | -1): void => {
+      const tabs = tabsState.tabs;
+      if (tabs.length < 2) {
+        return;
+      }
+      const current = tabs.findIndex((tab) => tab.id === tabsState.activeTabId);
+      const next = current === -1
+        ? 0
+        : (current + direction + tabs.length) % tabs.length;
+      const target = tabs[next];
+      if (target !== undefined) {
+        tabsDispatch({ type: 'activate', id: target.id });
+      }
+    },
+    [tabsDispatch, tabsState.activeTabId, tabsState.tabs],
   );
 
   const services = useMemo<CommandServices>(
@@ -129,7 +230,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       saveActive: () => fileOps.saveActive(),
       saveAsActive: () => fileOps.saveAsActive(),
       saveAll: () => fileOps.saveAll(),
-      closeActiveTab: () => {
+      closeActiveTab: async () => {
         const tab = tabsState.tabs.find(
           (candidate) => candidate.id === tabsState.activeTabId,
         );
@@ -138,12 +239,16 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         }
         if (
           !tab.isDirty ||
-          window.confirm(`Close "${tab.name}"? Unsaved changes will be lost.`)
+          (await confirm(`Close "${tab.name}"? Unsaved changes will be lost.`, {
+            title: 'Unsaved changes',
+            confirmLabel: 'Discard and close',
+            destructive: true,
+          }))
         ) {
           tabsDispatch({ type: 'close', id: tab.id });
         }
       },
-      closeTabById: (tabId) => {
+      closeTabById: async (tabId) => {
         const tab = tabsState.tabs.find(
           (candidate) => candidate.id === (tabId ?? tabsState.activeTabId),
         );
@@ -152,13 +257,17 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         }
         if (
           !tab.isDirty ||
-          window.confirm(`Close "${tab.name}"? Unsaved changes will be lost.`)
+          (await confirm(`Close "${tab.name}"? Unsaved changes will be lost.`, {
+            title: 'Unsaved changes',
+            confirmLabel: 'Discard and close',
+            destructive: true,
+          }))
         ) {
           disposeModel(tab.id);
           tabsDispatch({ type: 'close', id: tab.id });
         }
       },
-      closeOtherTabs: (tabId) => {
+      closeOtherTabs: async (tabId) => {
         const keepId = tabId ?? tabsState.activeTabId;
         const others = tabsState.tabs.filter((tab) => tab.id !== keepId);
         if (others.length === 0) {
@@ -167,9 +276,14 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
         const dirty = others.filter((tab) => tab.isDirty);
         if (
           dirty.length > 0 &&
-          !window.confirm(
+          !(await confirm(
             `Close ${dirty.length} tab(s) with unsaved changes?`,
-          )
+            {
+              title: 'Unsaved changes',
+              confirmLabel: 'Discard and close',
+              destructive: true,
+            },
+          ))
         ) {
           return;
         }
@@ -178,16 +292,21 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
           tabsDispatch({ type: 'close', id: tab.id });
         }
       },
-      closeAllTabs: () => {
+      closeAllTabs: async () => {
         if (tabsState.tabs.length === 0) {
           return;
         }
         const dirty = tabsState.tabs.filter((tab) => tab.isDirty);
         if (
           dirty.length > 0 &&
-          !window.confirm(
+          !(await confirm(
             `Close ${dirty.length} tab(s) with unsaved changes?`,
-          )
+            {
+              title: 'Unsaved changes',
+              confirmLabel: 'Discard and close',
+              destructive: true,
+            },
+          ))
         ) {
           return;
         }
@@ -229,12 +348,20 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       findInFile: () => requestEditorAction('actions.find'),
       replaceInFile: () => requestEditorAction('editor.action.startFindReplaceAction'),
       findInWorkspace: () => ui.showActivity('search', true),
-      commandPalette: () => undefined,
+      commandPalette: () => openOverlay('palette'),
+      quickOpen: () => openOverlay('quickOpen'),
+      openFileByPath: (path, options) => openFile(path, options),
+      openRecentWorkspace: (rootPath) => openRecent(rootPath),
+      showWelcome: () => openWelcome(),
+      nextTab: () => cycleTab(1),
+      previousTab: () => cycleTab(-1),
       toggleExplorer: () => ui.toggleActivity('explorer'),
+      toggleSidebar: () => ui.toggleSidebar(),
       toggleSearch: () => ui.toggleActivity('search'),
       toggleSourceControl: () => ui.toggleActivity('scm'),
       toggleAiPanel: () => ui.toggleAiPanel(),
       toggleTerminal: () => ui.toggleBottomPanel('terminal'),
+      toggleBottomPanel: () => ui.toggleBottomPanel(ui.bottomPanelTab),
       newTerminal: () => ui.requestNewTerminal(),
       maximizeBottomPanel: () => ui.toggleBottomPanelMaximized(),
       closeBottomPanel: () => ui.hideBottomPanel(),
@@ -284,7 +411,24 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       },
       showAbout: () => setDialog('about'),
     }),
-    [fileOps, nova, notify, openFolder, openFromDialog, openSettings, setWindowState, tabsDispatch, tabsState, ui],
+    [
+      confirm,
+      cycleTab,
+      fileOps,
+      nova,
+      notify,
+      openFile,
+      openFolder,
+      openFromDialog,
+      openOverlay,
+      openRecent,
+      openSettings,
+      openWelcome,
+      setWindowState,
+      tabsDispatch,
+      tabsState,
+      ui,
+    ],
   );
 
   const buildContext = useCallback(
@@ -341,6 +485,11 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
             definition.plannedHint ??
             'Not available in this build';
           notify(`${definition.title}: ${reason}`);
+        } else {
+          // Recent ids only affect palette ordering; they are never persisted.
+          setRecentCommandIds((ids) =>
+            [id, ...ids.filter((candidate) => candidate !== id)].slice(0, 10),
+          );
         }
       } catch (error) {
         workspaceDispatch({
@@ -354,6 +503,17 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
   );
   const executeRef = useRef(execute);
   executeRef.current = execute;
+
+  const executeFromOverlay = useCallback(
+    (id: string, args?: unknown): void => {
+      // Palette selection is a trusted UI action; context-sensitive commands
+      // still see the focus that was active before the overlay was opened.
+      const focus = focusBeforeOverlayRef.current ?? EMPTY_FOCUS;
+      closeOverlay();
+      void executeRef.current(id, 'user-menu', focus, args);
+    },
+    [closeOverlay],
+  );
 
   const menuOpenRef = useRef(menuOpen);
   menuOpenRef.current = menuOpen;
@@ -386,11 +546,15 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       if (resolver === null) {
         return;
       }
+      if (
+        menuOpenRef.current ||
+        overlayRef.current !== null ||
+        modalSurfaceOpen()
+      ) {
+        return;
+      }
       if (event.key === 'Escape' && chordHintRef.current !== null) {
         resolver.cancel();
-      }
-      if (menuOpenRef.current) {
-        return;
       }
       const context = buildContextRef.current(getFocusTarget());
       const result = resolver.handleKey(event, context);
@@ -441,8 +605,13 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       if (dirty.length > 0) {
         const names = dirty.slice(0, 3).map((tab) => tab.name).join(', ');
         const more = dirty.length > 3 ? ` and ${dirty.length - 3} more` : '';
-        confirmed = window.confirm(
+        confirmed = await confirm(
           `Close A6 IDE? Unsaved changes in ${names}${more} will be lost.`,
+          {
+            title: 'Unsaved changes',
+            confirmLabel: 'Discard and quit',
+            destructive: true,
+          },
         );
       }
       try {
@@ -455,7 +624,7 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       unsubscribeState();
       unsubscribeClose();
     };
-  }, [nova, setWindowState]);
+  }, [confirm, nova, setWindowState]);
 
   const captureMenuFocus = useCallback((): void => {
     setMenuFocus(getFocusTarget());
@@ -470,11 +639,29 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
 
   const menuContext = buildContext(menuOpen ? (menuFocus ?? EMPTY_FOCUS) : getFocusTarget());
   const sections = buildMenuModel(DEFINITIONS, menuContext, platform);
+  const overlayContext = buildContext(
+    overlay === null ? EMPTY_FOCUS : (focusBeforeOverlayRef.current ?? EMPTY_FOCUS),
+  );
+  const isCommandEnabled = useCallback(
+    (id: string): boolean => {
+      const definition = DEFINITIONS.find((candidate) => candidate.id === id);
+      return definition?.enabled?.(menuContext) ?? true;
+    },
+    [menuContext],
+  );
+
+  const paletteShortcut = useMemo(() => {
+    const definition = DEFINITIONS.find(
+      (candidate) => candidate.id === COMMAND_IDS.commandPalette,
+    );
+    return describeKeybindings(definition?.keybindings?.[platform], platform) ?? '';
+  }, [platform]);
 
   const value = useMemo<CommandsContextValue>(
     () => ({
       sections,
       chordHint,
+      paletteShortcut,
       executeFromMenu: (id: string, args?: unknown) => {
         void executeRef.current(
           id,
@@ -483,10 +670,18 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
           args,
         );
       },
+      isCommandEnabled,
       captureMenuFocus,
       setMenuOpen,
     }),
-    [captureMenuFocus, chordHint, sections, setMenuOpen],
+    [
+      captureMenuFocus,
+      chordHint,
+      isCommandEnabled,
+      paletteShortcut,
+      sections,
+      setMenuOpen,
+    ],
   );
 
   return (
@@ -501,6 +696,24 @@ export function CommandProvider({ children }: { children: ReactNode }): ReactNod
       ) : null}
       {dialog === 'about' ? (
         <AboutDialog appInfo={appInfo} onClose={() => setDialog(null)} />
+      ) : null}
+      {overlay === 'palette' ? (
+        <CommandPaletteOverlay
+          definitions={DEFINITIONS}
+          context={overlayContext}
+          platform={platform}
+          recentIds={recentCommandIds}
+          onExecute={(id) => executeFromOverlay(id)}
+          onClose={closeOverlay}
+        />
+      ) : null}
+      {overlay === 'quickOpen' ? (
+        <QuickOpenOverlay
+          onOpenFile={(path, options) =>
+            executeFromOverlay(COMMAND_IDS.openFileByPath, { path, ...options })
+          }
+          onClose={closeOverlay}
+        />
       ) : null}
     </CommandsContext.Provider>
   );

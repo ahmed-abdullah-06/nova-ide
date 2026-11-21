@@ -10,6 +10,7 @@
  */
 import { useCallback } from 'react';
 import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
+import { useConfirm } from '../../../components/ui/ConfirmProvider';
 import { useTabs } from '../../../stores/tabs';
 import type { EditorTab } from '../../../stores/tabsReducer';
 import { useWorkspace } from '../../../stores/workspace';
@@ -36,6 +37,7 @@ export interface FileOperations {
 export function useFileOperations(): FileOperations {
   const { state: tabsState, dispatch: tabsDispatch } = useTabs();
   const { state: workspaceState, dispatch } = useWorkspace();
+  const { confirm } = useConfirm();
 
   const notify = useCallback(
     (kind: NotificationKind, message: string): void => {
@@ -200,7 +202,13 @@ export function useFileOperations(): FileOperations {
         }.`;
       }
       message += '\n\nThis cannot be undone.';
-      if (!window.confirm(message)) {
+      if (
+        !(await confirm(message, {
+          title: `Delete ${label}`,
+          confirmLabel: `Delete ${label}`,
+          destructive: true,
+        }))
+      ) {
         return;
       }
 
@@ -235,7 +243,7 @@ export function useFileOperations(): FileOperations {
         `Deleted ${label} "${entry.name}"`,
       );
     },
-    [dispatch, notify, tabsDispatch, tabsState.tabs],
+    [confirm, dispatch, notify, tabsDispatch, tabsState.tabs],
   );
 
   /**
@@ -294,8 +302,13 @@ export function useFileOperations(): FileOperations {
 
       let result = await write(tab.mtimeMs);
       if (!result.ok && result.code === 'CONFLICT') {
-        const overwrite = window.confirm(
+        const overwrite = await confirm(
           `"${tab.name}" changed on disk since you opened it.\n\nOverwrite it with your version?`,
+          {
+            title: 'File changed on disk',
+            confirmLabel: 'Overwrite',
+            destructive: true,
+          },
         );
         if (!overwrite) {
           return;
@@ -304,8 +317,13 @@ export function useFileOperations(): FileOperations {
       }
       if (!result.ok) {
         if (result.code === 'NOT_FOUND') {
-          const recreate = window.confirm(
+          const recreate = await confirm(
             `"${tab.name}" no longer exists on disk.\n\nRecreate it with your changes?`,
+            {
+              title: 'File no longer exists',
+              confirmLabel: 'Recreate',
+              destructive: true,
+            },
           );
           if (!recreate) {
             return;
@@ -326,13 +344,17 @@ export function useFileOperations(): FileOperations {
         mtimeMs: result.value.mtimeMs,
       });
     },
-    [notify, tabsDispatch, workspaceState.workspace],
+    [confirm, notify, tabsDispatch, workspaceState.workspace],
   );
 
   const saveActive = useCallback(async (): Promise<void> => {
     const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
-    // The Settings tab is a view, not a file buffer.
-    if (tab !== undefined && tab.kind !== 'settings') {
+    // Settings and Welcome are views, not file buffers.
+    if (
+      tab !== undefined &&
+      tab.kind !== 'settings' &&
+      tab.kind !== 'welcome'
+    ) {
       await saveTab(tab);
     }
   }, [saveTab, tabsState]);
@@ -340,7 +362,11 @@ export function useFileOperations(): FileOperations {
   const saveAll = useCallback(async (): Promise<void> => {
     // Sequential: each save rechecks the on-disk mtime before writing.
     for (const tab of tabsState.tabs) {
-      if (tab.isDirty && tab.kind !== 'settings') {
+      if (
+        tab.isDirty &&
+        tab.kind !== 'settings' &&
+        tab.kind !== 'welcome'
+      ) {
         await saveTab(tab);
       }
     }
@@ -348,7 +374,12 @@ export function useFileOperations(): FileOperations {
 
   const saveAsActive = useCallback(async (): Promise<void> => {
     const tab = tabsState.tabs.find((t) => t.id === tabsState.activeTabId);
-    if (tab === undefined || tab.kind === 'settings' || !window.nova) {
+    if (
+      tab === undefined ||
+      tab.kind === 'settings' ||
+      tab.kind === 'welcome' ||
+      !window.nova
+    ) {
       return;
     }
     if (tab.origin === 'external') {
