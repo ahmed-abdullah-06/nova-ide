@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 /** Icon names used by the shared A6 UI. */
 export type IconName =
@@ -38,7 +38,28 @@ export type IconName =
   | 'terminal'
   | 'output'
   | 'link'
-  | 'keyboard';
+  | 'keyboard'
+  | 'commandCenter'
+  | 'layoutSidebar'
+  | 'layoutPanel'
+  | 'panelLeft'
+  | 'panelBottom'
+  | 'panelRightOff'
+  | 'bell'
+  | 'branch'
+  | 'gitChange'
+  | 'indent'
+  | 'encoding'
+  | 'eol'
+  | 'newTerminal'
+  | 'maximize'
+  | 'restore'
+  | 'chevronUp'
+  | 'chevronLeft'
+  | 'copyPath'
+  | 'arrowRight'
+  | 'folderOpen'
+  | 'folderClosed';
 
 const ICON_PATHS: Record<IconName, readonly string[]> = {
   app: ['M5 19 12 5l7 14M8 14h8'],
@@ -108,12 +129,48 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
   keyboard: [
     'M4 6h16v12H4V6zm3 3h.01M10 9h.01M13 9h.01M16 9h.01M7 12h.01M10 12h.01M13 12h.01M16 12h.01M8 15h8',
   ],
+  commandCenter: [
+    'M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 15.5v-7z',
+    'M9 10.5a3 3 0 1 1 4.2 2.75L15.5 15',
+  ],
+  layoutSidebar: ['M4 4h16v16H4z', 'M9 4v16'],
+  layoutPanel: ['M4 4h16v16H4z', 'M4 15h16'],
+  panelLeft: ['M4 4h16v16H4z', 'M9 4v16'],
+  panelBottom: ['M4 4h16v16H4z', 'M4 15h16'],
+  panelRightOff: ['M4 4h16v16H4z', 'M15 4v16', 'M17 10l4 4m0-4-4 4'],
+  bell: [
+    'M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z',
+    'M10 21h4',
+  ],
+  branch: [
+    'M7 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+    'M7 7v9a4 4 0 0 0 4 4h6m0 0-3-3m3 3-3 3',
+  ],
+  gitChange: ['M12 5v14M5 12h14', 'M12 5 9 8m3-3 3 3M12 19l-3-3m3 3 3-3'],
+  indent: ['M4 6h16M8 11h12M8 16h12', 'M4 11l3 2-3 2'],
+  encoding: ['M8 9l-3 3 3 3m8-6 3 3-3 3', 'M13 6l-2 12'],
+  eol: ['M5 5v12m0 0 3-3m-3 3-3-3', 'M12 7h7M12 12h7M12 17h4'],
+  newTerminal: ['M5 7l4 4-4 4', 'M11 17h5', 'M18 11v6m-3-3h6'],
+  maximize: ['M5 9V5h4M15 5h4v4M19 15v4h-4M9 19H5v-4'],
+  restore: ['M8 8h11v11H8z', 'M5 5h11v3H8v8H5z'],
+  chevronUp: ['M6 15l6-6 6 6'],
+  chevronLeft: ['M15 6l-6 6 6 6'],
+  copyPath: ['M8 8h11v11H8z', 'M5 16H4V4h12v1'],
+  arrowRight: ['M5 12h14', 'm14 7 5 5-5 5'],
+  folderOpen: [
+    'M3 9h18l-2 10H5L3 9z',
+    'M3 9V6a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2',
+  ],
+  folderClosed: [
+    'M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z',
+  ],
 };
 
 export interface IconProps {
   name: IconName;
   size?: number;
   className?: string;
+  style?: CSSProperties;
   /** Accessible label; omit for decorative icons. */
   title?: string;
 }
@@ -123,11 +180,13 @@ export function Icon({
   name,
   size = 16,
   className,
+  style,
   title,
 }: IconProps): ReactNode {
   return (
     <svg
       className={className}
+      style={style}
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -145,6 +204,92 @@ export function Icon({
       {ICON_PATHS[name].map((path) => (
         <path key={path} d={path} />
       ))}
+    </svg>
+  );
+}
+
+/** Small glyph families drawn inside a document outline. */
+export type FileGlyph =
+  | 'code'
+  | 'markup'
+  | 'style'
+  | 'data'
+  | 'script'
+  | 'doc'
+  | 'image'
+  | 'archive'
+  | 'config'
+  | 'default';
+
+const FILE_GLYPH_PATHS: Readonly<Record<FileGlyph, readonly string[]>> = {
+  code: ['m10 9-2.5 2.5L10 14m4-5 2.5 2.5L14 14'],
+  markup: ['m10 9-2.5 2.5L10 14m4-5 2.5 2.5L14 14', 'M13 8l-2 6'],
+  style: ['M10 9h4M9.5 12h5', 'M11 8l-1 8M14 8l-1 8'],
+  data: [
+    'M12 9c-2.2 0-4-.7-4-1.5S9.8 6 12 6s4 .7 4 1.5S14.2 9 12 9z',
+    'M8 9v4c0 .8 1.8 1.5 4 1.5s4-.7 4-1.5V9',
+  ],
+  script: ['M9 9l2 2-2 2', 'M13 13h3'],
+  doc: ['M9.5 9h5M9.5 12h5M9.5 15h3'],
+  image: ['M8 15l2.5-3 2 2 1.5-1.5L17 15', 'M8 8.5h8v7H8z'],
+  archive: ['M8 10h8v6H8z', 'm9.5 10 1.5-2h2l1.5 2'],
+  config: ['M12 9.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', 'M12 7v1m0 8v1M8 11.5H7m10 0h-1'],
+  default: [],
+};
+
+export interface FileTypeIconProps {
+  glyph: FileGlyph;
+  color: string;
+  /** Short monogram shown under the glyph (max 2 characters). */
+  label?: string;
+  size?: number;
+  className?: string;
+}
+
+/**
+ * Original document icon used by the explorer and tab strip. Colour and
+ * monogram come from the extension mapping in `features/explorer/fileIcons`.
+ */
+export function FileTypeIcon({
+  glyph,
+  color,
+  label,
+  size = 16,
+  className,
+}: FileTypeIconProps): ReactNode {
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ color }}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M6 2.5h7.5L18.5 7.5V21a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z" />
+      <path d="M13 2.8v5h5" />
+      {FILE_GLYPH_PATHS[glyph].map((path) => (
+        <path key={path} d={path} />
+      ))}
+      {label === undefined ? null : (
+        <text
+          x="12"
+          y="19.5"
+          textAnchor="middle"
+          fontSize="6"
+          fontWeight="700"
+          fill="currentColor"
+          stroke="none"
+        >
+          {label}
+        </text>
+      )}
     </svg>
   );
 }

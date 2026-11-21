@@ -4,9 +4,10 @@ export type Theme = 'dark' | 'light';
 
 const STORAGE_KEY = 'nova.theme';
 
+// Kept in sync with --surface-chrome / --text in styles/tokens.css (LF1).
 const TITLEBAR_OVERLAY: Record<Theme, { color: string; symbolColor: string }> = {
-  dark: { color: '#171a21', symbolColor: '#e5e7eb' },
-  light: { color: '#f3f4f6', symbolColor: '#1f2328' },
+  dark: { color: '#181818', symbolColor: '#cccccc' },
+  light: { color: '#f8f8f8', symbolColor: '#1f1f1f' },
 };
 
 function readStoredTheme(): Theme {

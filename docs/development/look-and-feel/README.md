@@ -180,4 +180,33 @@ or documentation.
   delegated to the owner. DOM/CSS evidence and code inspection are the basis
   of this scorecard.
 
-**Status: LF0 complete — awaiting approval before LF1.**
+**Status: LF0 complete — LF1 approved and completed (see below).**
+
+## LF1 — Tokens and theme (completed)
+
+Scope: appearance only, no layout or behaviour changes. No new IPC, no new
+dependency, no new command. Changed files:
+
+| File | Change |
+| --- | --- |
+| `styles/tokens.css` | Neutral Dark Modern-style palette: editor `#1f1f1f`, chrome/side bar `#181818`, borders `#2b2b2b`, text `#cccccc`, muted `#9d9d9d`, accent `#0078d4`. Matching light variant. 13px Segoe UI UI font, 13px mono / 19px line height, 22/28px rows, `--tab-height:28px`. Brand blue kept under `--brand`. All legacy `--color-*` aliases repoint to the new tokens. |
+| `styles/layout.css`, `styles/editor.css`, `styles/explorer.css` | Title bar, activity bar, status bar, tab strip now use `--surface-chrome`; folder icon colour uses the new warm token. |
+| `features/editor/monacoTheme.ts` (new) | Registers `a6-dark` / `a6-light` with token colours mirrored from the CSS variables. Scrollbar, gutter, selection, bracket and widget colours included. |
+| `features/editor/monacoSetup.ts`, `features/editor/MonacoEditor.tsx` | Themes defined once before editors load; editors now call `setTheme('a6-dark' \| 'a6-light')`. Monaco gets the same mono font, 13px size, 19px line height and 8px styled scrollbars. |
+| `hooks/useTheme.ts`, `main/window.ts` | Native title-bar overlay colours follow the new chrome/text tokens. |
+| `components/ui/icons.tsx`, `features/explorer/fileIcons.tsx` | Expanded original inline-SVG set (layout/panel toggles, bell, branch, git change, indent, encoding, EOL, new-terminal, maximize/restore, chevrons, copy path, arrow, open/closed folders) and a shared document-glyph primitive. File-type mapping covers 30+ extensions with glyph + monogram. No vendor artwork, fonts or emoji. |
+| `tests/unit/lookAndFeelTokens.test.ts` (new) | Guards CSS↔Monaco token sync, theme ids, compact tab height, and absence of vendor branding in renderer source. |
+
+### LF1 verification (actually executed)
+
+- `pnpm typecheck` — passed.
+- `pnpm test` — **58 files / 759 tests passed** (baseline 57 / 752; +7 new token tests). The `node-pty` `AttachConsole` messages are pre-existing Windows harness noise and do not fail any test.
+- `pnpm package` — passed.
+- Packaged app launched via CDP with an isolated profile; live probe at 1280×720 with a folder open confirmed:
+  - computed tokens `--surface-app:#1f1f1f`, `--surface-chrome:#181818`, `--text:#ccc`, `--border:#2b2b2b`, `--accent:#0078d4`, `--tab-height:28px`;
+  - rendered title bar / activity bar / tab strip backgrounds `rgb(24,24,24)`, Monaco background `rgb(31,31,31)`;
+  - Monaco view-line font `Cascadia Code…Consolas`, `13px` / `19px` line height;
+  - explorer folder icon renders as inline `<svg>` with the new folder colour;
+  - **0 console errors**.
+
+Status after LF1: items 8 (custom Monaco themes) and 16 (visual system) move from missing/partial toward present. Remaining scorecard items are addressed in LF2–LF5. **Awaiting approval before LF2.**

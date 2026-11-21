@@ -3,7 +3,13 @@ import type * as Monaco from 'monaco-editor';
 import type { EditorTab } from '../../stores/tabsReducer';
 import { disposeAllModels, getModel, getOrCreateModel } from './modelRegistry';
 import { loadMonaco } from './monacoSetup';
+import { A6_MONACO_THEME_IDS } from './monacoTheme';
 import { onEditorLayout, onReveal, setActiveEditor } from './editorCommands';
+
+/** Mirrors --font-mono / --line-height-code in styles/tokens.css (LF1). */
+const EDITOR_FONT =
+  "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace";
+const EDITOR_LINE_HEIGHT = 19;
 
 interface MonacoEditorProps {
   tab: EditorTab | null;
@@ -57,13 +63,20 @@ export function MonacoEditor({
       }
       editor = monaco.editor.create(containerRef.current, {
         automaticLayout: true,
+        fontFamily: EDITOR_FONT,
         fontSize: 13,
+        lineHeight: EDITOR_LINE_HEIGHT,
         minimap: { enabled: true },
         tabSize: 2,
         wordWrap: 'off',
         fixedOverflowWidgets: true,
         renderLineHighlight: 'all',
         scrollBeyondLastLine: false,
+        scrollbar: {
+          verticalScrollbarSize: 8,
+          horizontalScrollbarSize: 8,
+          useShadows: false,
+        },
       });
       editorRef.current = editor;
       setActiveEditor(editor);
@@ -162,7 +175,7 @@ export function MonacoEditor({
       return;
     }
     void loadMonaco().then((monaco) => {
-      monaco.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
+      monaco.editor.setTheme(A6_MONACO_THEME_IDS[theme]);
     });
   }, [ready, theme]);
 

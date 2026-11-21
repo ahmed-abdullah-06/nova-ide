@@ -6,6 +6,7 @@ import JsonWorker from 'monaco-editor/languages/features/json/json.worker?worker
 import CssWorker from 'monaco-editor/languages/features/css/css.worker?worker';
 import HtmlWorker from 'monaco-editor/languages/features/html/html.worker?worker';
 import TsWorker from 'monaco-editor/languages/features/typescript/ts.worker?worker';
+import { defineMonacoThemes } from './monacoTheme';
 
 type MonacoModule = typeof Monaco;
 
@@ -23,6 +24,9 @@ export function loadMonaco(): Promise<MonacoModule> {
   if (!monacoPromise) {
     monacoPromise = (async (): Promise<MonacoModule> => {
       const monaco = await import('monaco-editor');
+
+      // Workbench-matched themes must exist before the first setTheme call.
+      defineMonacoThemes(monaco);
 
       // Ctrl+L is reserved for "Toggle AI Panel". Remove Monaco's default
       // "Expand Line Selection" binding so the shortcut cannot double-fire.

@@ -81,8 +81,11 @@ export function createMainWindow({ onNativeClose }: MainWindowOptions): BrowserW
     // a different strip. Theme changes update it through the renderer.
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#171a21',
-      symbolColor: '#e5e7eb',
+      // Matches --surface-chrome / --text in styles/tokens.css (LF1). The
+      // renderer updates these on every theme change through the existing
+      // window:set-titlebar-overlay channel.
+      color: '#181818',
+      symbolColor: '#cccccc',
       height: 32,
     },
     webPreferences: {

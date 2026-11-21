@@ -1,43 +1,53 @@
 /**
- * A6 design tokens.
+ * A6 design tokens (LF1).
  *
- * New `ui-*` names are the foundation for the shared primitives and the
- * polished layout. The old `--color-*` names remain as aliases until the
- * layout sub-steps migrate; this keeps U1 appearance-only and non-breaking.
+ * The neutral workbench palette is modelled on Dark Modern: a slightly lighter
+ * editor surface over a darker chrome/side bar, 1px borders and compact rows.
+ * The legacy `--color-*` names remain aliases so every existing rule follows
+ * the same source of truth. `monacoTheme.ts` mirrors the editor/foreground
+ * values; `tests/unit/lookAndFeelTokens.test.ts` keeps the two in sync.
  */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces */
-  --surface-app: #111318;
-  --surface-sidebar: #171a21;
-  --surface-panel: #1c2029;
-  --surface-input: #22262f;
-  --surface-raised: #262b35;
-  --surface-hover: rgba(255, 255, 255, 0.05);
-  --surface-active: rgba(255, 255, 255, 0.09);
+  /* Surfaces — editor is one step lighter than the surrounding chrome. */
+  --surface-app: #1f1f1f;
+  --surface-chrome: #181818;
+  --surface-sidebar: #181818;
+  --surface-panel: #181818;
+  --surface-input: #313131;
+  --surface-raised: #252526;
+  --surface-hover: #2a2d2e;
+  --surface-active: #37373d;
 
   /* Lines */
-  --border: #2b303b;
-  --border-strong: #3a4050;
+  --border: #2b2b2b;
+  --border-strong: #3f3f3f;
 
   /* Text */
-  --text: #e5e7eb;
-  --text-muted: #9aa3af;
-  --text-faint: #6f7784;
+  --text: #cccccc;
+  --text-muted: #9d9d9d;
+  --text-faint: #737373;
 
-  /* Accent — sampled from a6-logo.svg */
-  --accent: #2f9bf0;
-  --accent-hover: #4aa8f4;
-  --accent-pressed: #1a63d6;
-  --accent-soft: rgba(47, 155, 240, 0.16);
-  --accent-text: #8ad8ff;
+  /* Accent — focus, active indicators and the command centre. */
+  --accent: #0078d4;
+  --accent-hover: #1a83d8;
+  --accent-pressed: #0266b3;
+  --accent-soft: rgba(0, 120, 212, 0.16);
+  --accent-text: #4da3f0;
+
+  /* A6 brand blue is kept separate so branding does not drift with the accent. */
+  --brand: #2f9bf0;
+
+  /* List rows */
+  --list-hover: #2a2d2e;
+  --list-active: #37373d;
 
   /* Semantic */
-  --danger: #e5484d;
-  --warning: #e2a336;
-  --success: #46a758;
+  --danger: #f14c4c;
+  --warning: #cca700;
+  --success: #89d185;
 
   /* Spacing scale */
   --space-1: 4px;
@@ -58,14 +68,15 @@
     'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
   --font-size-base: 13px;
   --font-size-small: 12px;
-  --font-size-code: 12px;
+  --font-size-code: 13px;
   --line-height-base: 1.45;
+  --line-height-code: 19px;
 
   /* Controls and rows */
-  --row-height: 24px;
+  --row-height: 22px;
   --row-height-lg: 28px;
-  --control-height: 26px;
-  --control-height-lg: 32px;
+  --control-height: 24px;
+  --control-height-lg: 30px;
   --titlebar-height: 32px;
   --titlebar-overlay-width: 138px;
   --statusbar-height: 24px;
@@ -77,8 +88,9 @@
   /* Legacy aliases — retained for existing layout rules */
   --color-background: var(--surface-app);
   --color-sidebar: var(--surface-sidebar);
+  --color-chrome: var(--surface-chrome);
   --color-panel: var(--surface-panel);
-  --color-activitybar: var(--surface-sidebar);
+  --color-activitybar: var(--surface-chrome);
   --color-input: var(--surface-input);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
@@ -91,7 +103,7 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-success: var(--success);
-  --color-tab-active: var(--surface-panel);
+  --color-tab-active: var(--surface-app);
   --color-tab-inactive: transparent;
   --color-hover: var(--surface-hover);
   --color-active: var(--surface-active);
@@ -100,42 +112,53 @@
   --menubar-height: var(--titlebar-height);
   --ai-panel-width: 320px;
   --bottompanel-height: 200px;
-  --tab-height: 36px;
+  --tab-height: 28px;
   --radius: var(--radius-sm);
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
 
+  /* Surfaces */
   --surface-app: #ffffff;
-  --surface-sidebar: #f3f4f6;
-  --surface-panel: #f8f9fb;
+  --surface-chrome: #f8f8f8;
+  --surface-sidebar: #f8f8f8;
+  --surface-panel: #f8f8f8;
   --surface-input: #ffffff;
   --surface-raised: #ffffff;
-  --surface-hover: rgba(0, 0, 0, 0.05);
-  --surface-active: rgba(0, 0, 0, 0.09);
+  --surface-hover: #e8e8e8;
+  --surface-active: #e4e6f1;
 
-  --border: #d7dce3;
-  --border-strong: #b8c0cc;
+  /* Lines */
+  --border: #d4d4d4;
+  --border-strong: #b8b8b8;
 
-  --text: #1f2328;
-  --text-muted: #5b6270;
-  --text-faint: #7a8290;
+  /* Text */
+  --text: #1f1f1f;
+  --text-muted: #616161;
+  --text-faint: #8b8b8b;
 
-  --accent: #1a63d6;
-  --accent-hover: #2f7be8;
-  --accent-pressed: #124bae;
-  --accent-soft: rgba(26, 99, 214, 0.12);
-  --accent-text: #0f4fa8;
+  /* Accent */
+  --accent: #0078d4;
+  --accent-hover: #006cbe;
+  --accent-pressed: #005a9e;
+  --accent-soft: rgba(0, 120, 212, 0.12);
+  --accent-text: #005a9e;
+  --brand: #0f6cbd;
+  --list-hover: #e8e8e8;
+  --list-active: #e4e6f1;
 
+  /* Semantic */
   --danger: #cd2b31;
   --warning: #8f6416;
   --success: #2f7d3c;
 
+  /* Legacy aliases */
   --color-background: var(--surface-app);
   --color-sidebar: var(--surface-sidebar);
+  --color-chrome: var(--surface-chrome);
   --color-panel: var(--surface-panel);
-  --color-activitybar: var(--surface-sidebar);
+  --color-activitybar: var(--surface-chrome);
   --color-input: var(--surface-input);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
@@ -148,7 +171,7 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-success: var(--success);
-  --color-tab-active: var(--surface-panel);
+  --color-tab-active: var(--surface-app);
   --color-hover: var(--surface-hover);
   --color-active: var(--surface-active);
 }

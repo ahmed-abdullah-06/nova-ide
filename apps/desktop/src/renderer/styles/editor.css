@@ -4,7 +4,7 @@
   display: flex;
   align-items: stretch;
   height: var(--tab-height);
-  background: var(--surface-sidebar);
+  background: var(--surface-chrome);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   overflow-y: hidden;
