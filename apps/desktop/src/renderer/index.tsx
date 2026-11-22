@@ -15,6 +15,7 @@ import './styles/ai.css';
 import './styles/agent.css';
 import './styles/settings.css';
 import './styles/welcome.css';
+import './styles/sash.css';
 
 const container = document.getElementById('root');
 if (!container) {

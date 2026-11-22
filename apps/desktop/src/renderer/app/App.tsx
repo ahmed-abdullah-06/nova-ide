@@ -1,4 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { AppInfo, NovaApi, SearchMatch } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
@@ -7,6 +12,11 @@ import { UiProvider, useUi } from '../stores/ui';
 import { useWorkspaceActions } from '../features/workspace/hooks/useWorkspaceActions';
 import { useFileOpener } from '../features/workspace/hooks/useFileOpener';
 import { useExternalFileChanges } from '../features/workspace/hooks/useExternalFileChanges';
+import {
+  AI_PANEL_WIDTH_RANGE,
+  BOTTOM_PANEL_HEIGHT_RANGE,
+  SIDEBAR_WIDTH_RANGE,
+} from '../features/layout/sashModel';
 import { NotificationHost } from '../features/workspace/components/NotificationHost';
 import { ConfirmProvider } from '../components/ui/ConfirmProvider';
 import { ActivityBar } from '../components/layout/ActivityBar';
@@ -14,6 +24,7 @@ import { AiPanel } from '../features/ai/AiPanel';
 import { AiProvider, useAiContext } from '../features/ai/AiContext';
 import { BottomPanel } from '../components/layout/BottomPanel';
 import { TitleBar } from '../components/layout/TitleBar';
+import { Sash } from '../components/layout/Sash';
 import { Sidebar } from '../components/layout/Sidebar';
 import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
@@ -152,8 +163,16 @@ function Workspace(): ReactNode {
     .filter((value) => value !== '')
     .join(' ');
 
+  // Inherited CSS variables drive the existing pane width/height rules, so no
+  // pane component needs to know that a sash changed its size.
+  const shellStyle = {
+    '--sidebar-width': `${ui.sidebarWidth}px`,
+    '--bottompanel-height': `${ui.bottomPanelHeight}px`,
+    '--ai-panel-width': `${ui.aiPanelWidth}px`,
+  } as CSSProperties;
+
   return (
-    <div className={shellClass}>
+    <div className={shellClass} style={shellStyle}>
       <TitleBar
         sections={commands.sections}
         chordHint={commands.chordHint}
@@ -199,6 +218,18 @@ function Workspace(): ReactNode {
         onOpenFile={handleOpenFile}
         visible={ui.sidebarVisible}
       />
+      {ui.sidebarVisible && (
+        <Sash
+          placement="sidebar"
+          label="Resize sidebar"
+          orientation="vertical"
+          axis="x"
+          direction={1}
+          value={ui.sidebarWidth}
+          range={SIDEBAR_WIDTH_RANGE}
+          onChange={ui.setSidebarWidth}
+        />
+      )}
       <div
         className={[
           'main-column',
@@ -213,6 +244,18 @@ function Workspace(): ReactNode {
           onCursorChange={setCursor}
           onSelectionChange={setSelection}
         />
+        {ui.bottomPanelVisible && !ui.bottomPanelMaximized && (
+          <Sash
+            placement="bottom"
+            label="Resize bottom panel"
+            orientation="horizontal"
+            axis="y"
+            direction={-1}
+            value={ui.bottomPanelHeight}
+            range={BOTTOM_PANEL_HEIGHT_RANGE}
+            onChange={ui.setBottomPanelHeight}
+          />
+        )}
         <BottomPanel
           maximized={ui.bottomPanelMaximized}
           onNewTerminal={() =>
@@ -227,6 +270,7 @@ function Workspace(): ReactNode {
           renderTerminal={() => (
             <TerminalPanel
               hasWorkspace={hasWorkspace}
+              theme={theme}
               createSignal={ui.terminalCreateSignal}
             />
           )}
@@ -260,6 +304,18 @@ function Workspace(): ReactNode {
           visible={ui.bottomPanelVisible}
         />
       </div>
+      {ui.aiPanelVisible && (
+        <Sash
+          placement="ai"
+          label="Resize AI panel"
+          orientation="vertical"
+          axis="x"
+          direction={-1}
+          value={ui.aiPanelWidth}
+          range={AI_PANEL_WIDTH_RANGE}
+          onChange={ui.setAiPanelWidth}
+        />
+      )}
       <AiPanel
         hasWorkspace={hasWorkspace}
         activeFile={

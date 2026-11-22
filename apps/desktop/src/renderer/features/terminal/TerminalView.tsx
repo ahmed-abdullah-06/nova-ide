@@ -9,8 +9,12 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import type { Theme } from '../../hooks/useTheme';
+import { TERMINAL_THEMES } from './terminalTheme';
 
 export interface TerminalViewProps {
+  /** Workbench theme, mirrored by the terminal palette. */
+  theme: Theme;
   /** The session this view renders. */
   sessionId: string;
   /** True when the view is the visible one (hidden views are not fitted). */
@@ -27,6 +31,7 @@ export interface TerminalViewProps {
 }
 
 export function TerminalView({
+  theme,
   sessionId,
   active,
   onInput,
@@ -50,12 +55,7 @@ export function TerminalView({
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: false,
-      theme: {
-        background: '#111318',
-        foreground: '#e5e7eb',
-        cursor: '#8ad8ff',
-        selectionBackground: 'rgba(47, 155, 240, 0.25)',
-      },
+      theme: TERMINAL_THEMES[theme],
     });
     const fit = new FitAddon();
     terminal.loadAddon(fit);
@@ -85,6 +85,15 @@ export function TerminalView({
     // stable enough and re-subscribing on every render would replay output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Theme changes update the live terminal in place; the session itself must
+  // not be recreated (that would replay output and kill the shell).
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (terminal !== null) {
+      terminal.options.theme = TERMINAL_THEMES[theme];
+    }
+  }, [theme]);
 
   // Fit the terminal to its container whenever it becomes visible or is
   // resized.

@@ -5,18 +5,22 @@
  * session and offers the session actions (new, close, copy, paste).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Theme } from '../../hooks/useTheme';
 import { TerminalView } from './TerminalView';
 import { useTerminalSessions } from './useTerminalSessions';
 
 export interface TerminalPanelProps {
   /** True when a workspace is open (a terminal needs one). */
   hasWorkspace: boolean;
+  /** Workbench theme, shared with every terminal view. */
+  theme: Theme;
   /** Incremented by the shell's `a6.terminal.new` command. */
   createSignal: number;
 }
 
 export function TerminalPanel({
   hasWorkspace,
+  theme,
   createSignal,
 }: TerminalPanelProps): React.JSX.Element {
   const controller = useTerminalSessions(hasWorkspace);
@@ -145,6 +149,7 @@ export function TerminalPanel({
             hidden={entry.session.id !== controller.activeSessionId}
           >
             <TerminalView
+              theme={theme}
               sessionId={entry.session.id}
               active={entry.session.id === controller.activeSessionId}
               onInput={controller.write}

@@ -3,8 +3,8 @@
 This record tracks the appearance-and-shell milestone on top of `27de244`
 (`dev`). It is separate from product versions V1/V2. The target is roughly
 50% closer to contemporary IDE shells (Kiro / Cursor) in layout,
-density and feel. **This document records the completed LF0–LF4 phases;
-LF5 has not been started.**
+density and feel. **This document records the completed LF0–LF5 phases,
+including the final scorecard.**
 
 ## LF0 method and evidence
 
@@ -182,7 +182,7 @@ documentation.
   delegated to the owner. DOM/CSS evidence and code inspection are the basis
   of this scorecard.
 
-**Status: LF0 complete — LF1 approved and completed — LF2 completed — LF3 completed — LF4 completed (see below).**
+**Status: LF0 complete — LF1 approved and completed — LF2 completed — LF3 completed — LF4 completed — LF5 completed (final scorecard below).**
 
 ## LF1 — Tokens and theme (completed)
 
@@ -340,4 +340,110 @@ bridge; they do not read the filesystem directly. Changed files:
 All LF4 claims above are DOM/CSS and command-trace evidence from the packaged
 app under CDP. Native Windows caption controls are OS-drawn and absent from
 CDP screenshots. Visual review of the BEFORE/AFTER images remains delegated to
-the owner; no visual-quality claim is made here. LF5 has **not** been started.
+the owner; no visual-quality claim is made here. LF5 was completed afterwards
+and is recorded below.
+
+## LF5 — Polish and verification (completed)
+
+Scope: renderer UI shell only. No provider/agent/privacy/permission/IPC/main-
+process/security/fuse/CSP change, no new dependency, no new command id, and no
+copied artwork, fonts or branding. Pane sizes are renderer-local pixel values
+persisted in `localStorage`; they do not go through IPC or a settings bridge.
+Native Windows caption controls remain OS-drawn and are verified by DOM
+geometry, not by CDP screenshots. Changed files:
+
+| File | Change |
+| --- | --- |
+| `features/layout/sashModel.ts` (new) | Pure, unit-tested ranges and input rules: sidebar 180–520px, bottom 120–520px, AI 240–560px; 10px arrow step, 40px Shift step, Home/End and Escape restore. |
+| `components/layout/Sash.tsx` (new) | Focusable `role="separator"` control with orientation/value/label ARIA, pointer capture, hover/focus grip, and arrow/Escape handling that stops propagation so menu and chord handlers cannot also consume the keys. |
+| `styles/sash.css` (new), `index.tsx` | 4px hit areas, resize cursors, grip hover/focus treatment and stylesheet import. The sash classes match the placement (`sash--sidebar`, `sash--bottom`, `sash--ai`). |
+| `stores/ui.tsx` | Clamped pane-size state, `layoutSignal` bumps on resize, and persistence under `nova.layout.sidebarWidth`, `nova.layout.bottomPanelHeight` and `nova.layout.aiPanelWidth`. Invalid or unavailable storage falls back safely. |
+| `app/App.tsx` | Publishes pane sizes as inherited CSS variables and renders the three sashes. The bottom sash is hidden while the panel is hidden or maximized so there is no dead separator. |
+| `features/terminal/terminalTheme.ts` (new), `features/terminal/TerminalPanel.tsx`, `features/terminal/TerminalView.tsx` | Dark/light xterm palette mirrors the workbench tokens and updates live when the theme changes. |
+| `styles/tokens.css`, `styles/ai.css`, `styles/explorer.css` | Light-theme contrast pass: raised surface hierarchy, AI badge/button colours, and folder-icon colour. |
+| `tests/unit/sashModel.test.ts` (new) | Four tests for clamping, pointer direction and keyboard mapping. |
+| `tools/verify/runtime.mjs` | Added LF5 DOM/CSS checks and hardened existing harness interactions: a real file tab is activated before Monaco key checks, focus/sash/menu state is waited for, and pointer drags use multiple steps. No product behaviour changed in these harness fixes. |
+| `docs/development/look-and-feel/after/` (new) | Ten AFTER PNGs at the LF0 viewport/state names. |
+
+### LF5 verification (actually executed)
+
+- `pnpm typecheck` — passed.
+- `pnpm test` — **61 files / 789 tests passed** (after LF4 60 / 785; +4 new
+  sash-model tests). The `node-pty` `AttachConsole failed` stderr is pre-existing
+  Windows harness noise.
+- `pnpm package` — passed.
+- `pnpm verify` — **203/203 checks passed, 0 console errors.** The final run used
+  the freshly packaged app with an isolated profile and fixture workspace. New
+  DOM/CSS and trace evidence includes:
+  - three `.sash` separators with correct roles, labels, orientations, min/max
+    values, `tabIndex=0` and `col-resize`/`row-resize` cursors;
+  - arrow keys, Shift steps, Escape restore and persistence: keyboard resize
+    wrote `300`, CSS variable `300px` and sidebar rect `300px`;
+  - pointer drags moved sidebar `260 → 290`, bottom panel `200 → 176` and AI
+    panel `320 → 296`, with each pane rect matching `aria-valuenow`;
+  - light theme wrote `light`, with surface `#fff`, raised surface `#f3f3f3`,
+    body `rgb(255, 255, 255)` and a white xterm background;
+  - 125% scaling (`deviceScaleFactor` ≈ `1.25`) kept shell, title, sidebar,
+    editor and status-bar rects inside the `1280×720` viewport;
+  - final shell assertions: 5 menu items, command centre, 4 layout actions,
+    4 activity items, OPEN EDITORS, 8 tree nodes, 4 tabs, breadcrumbs, minimap,
+    current-line nodes, 3 panel tabs, 10 status items, 3 sashes, 13px base
+    font, 28px tabs, `#0078d4` accent and no fake Debug/Extensions/Outline/
+    Timeline entries;
+  - no prohibited competitor product names in user-facing DOM text, titles,
+    labels or alt text.
+
+All claims above are DOM/CSS, computed-style and command-trace evidence from
+the packaged app under CDP; no visual-quality claim is made.
+
+### AFTER screenshots
+
+Captured with the same CDP method as BEFORE: packaged app, isolated profile,
+temporary fixture workspace, `deviceScaleFactor: 1`, and the five LF0 states.
+All ten PNG IHDR dimensions are exact (1280×720 or 1920×1080), file sizes are
+distinct, and capture produced **0 console errors**. The capturing model cannot
+view images; visual review is explicitly delegated to the owner.
+
+`docs/development/look-and-feel/after/`:
+
+| State | 1280×720 | 1920×1080 |
+| --- | --- | --- |
+| No folder open | `1280x720-no-folder.png` | `1920x1080-no-folder.png` |
+| Folder open with files | `1280x720-folder-open.png` | `1920x1080-folder-open.png` |
+| Terminal open | `1280x720-terminal.png` | `1920x1080-terminal.png` |
+| AI panel open | `1280x720-ai-panel.png` | `1920x1080-ai-panel.png` |
+| Settings tab | `1280x720-settings.png` | `1920x1080-settings.png` |
+
+### Final scorecard (after LF5)
+
+Legend: **present** = backed by real state and behaviour; **partial** = real
+backing exists but at least one scorecard detail is unmet; **missing** = no
+backing feature. Final result: **15 present / 5 partial / 0 missing**.
+
+| # | Item | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Title row | present | 32px `.title-bar`, A6 mark, 5 menu items, command-centre button, 4 layout actions; native caption controls are OS-drawn and geometry-checked. |
+| 2 | Activity bar | present | 4 shortcut-bearing items with matching `aria-keyshortcuts`, accent active indicator, real git change badge, Settings pinned to the bottom. |
+| 3 | Sidebar headers | present | Uppercase chevron headers, hover actions, collapsible sections and OPEN EDITORS backed by the tabs store. |
+| 4 | Explorer tree | partial | File icons, chevrons, depth padding and hover/selection exist; no vertical indent guides or git status colours in the tree. |
+| 5 | Tabs | partial | File icons, dirty dot ↔ X, active accent, overflow and registry context menu exist; no drag-to-reorder. |
+| 6 | Breadcrumbs | present | `.breadcrumbs` shows workspace/folder/file segments for real paths; read-only rather than fake navigation. |
+| 7 | Monaco options | present | Shared font/line height, guides, bracket colour, sticky scroll, current-line highlight, smooth caret and styled scrollbars. |
+| 8 | Monaco theme matching workbench | present | `a6-dark` / `a6-light` token mapping plus the mirrored xterm palette. |
+| 9 | Bottom panel | present | Three real tabs, problems count badge, command-backed actions, resizable sash and mounted-but-hidden views. |
+| 10 | Status bar | present | Real branch/counts, Ln/Col, `Spaces: 2`, UTF-8, LF/CRLF, language picker, local-only state and notification bell; read-only items are non-interactive. |
+| 11 | Command Palette | present | One `a6.view.commandPalette` id behind Ctrl+Shift+P, F1 and the title command centre, with filtering and focus restore. |
+| 12 | Quick Open | present | Ctrl+P uses the existing search bridge and opens results through a registry command. |
+| 13 | Welcome tab | present | Real closable initial Welcome tab with Start / Recent Workspaces / Help actions. |
+| 14 | Toasts and confirmations | present | Auto-dismissing toasts, bell history and in-app `role="alertdialog"` confirmations; no renderer `window.confirm` remains. |
+| 15 | Context menus | partial | The shared `ContextMenu` drives tab actions; Explorer still uses its dedicated menu component. |
+| 16 | Visual system | present | Dark/light tokens, 13px Segoe UI stack, 1px borders, 22–28px rows, 28px tabs and `#0078d4` accent. |
+| 17 | Focus and hover | partial | 1px accent focus rings and sash hover/focus grips exist; tooltips are native `title` attributes with no custom delay control. |
+| 18 | Sashes with remembered sizes | present | Three accessible separators with clamped pointer/keyboard resizing and localStorage persistence. |
+| 19 | Keyboard shell bindings | present | Ctrl+B, Ctrl+J, Ctrl+L, Ctrl+Tab / Ctrl+PageUp / Ctrl+PageDown and F1 all route through registry ids or aliases. |
+| 20 | Empty and loading states | partial | Explorer empty/loading/retry and Monaco loading are designed; other panels lack one consistent treatment. |
+
+Native Windows caption controls are outside the renderer surface and therefore
+absent from both BEFORE and AFTER PNGs. The five partial items are explicitly
+retained as known limitations, not claimed as finished. No LF6 or later phase
+was started; this record ends with the LF5 commit.

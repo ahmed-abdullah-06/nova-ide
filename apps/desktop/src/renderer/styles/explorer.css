@@ -292,6 +292,10 @@
   color: #dcb67a;
 }
 
+:root[data-theme='light'] .tree-node__icon--folder {
+  color: #9a6b2f;
+}
+
 .tree-node__label {
   overflow: hidden;
   text-overflow: ellipsis;

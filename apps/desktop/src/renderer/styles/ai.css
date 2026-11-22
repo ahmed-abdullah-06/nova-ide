@@ -762,3 +762,25 @@
 .voice-settings__local-only {
   color: var(--color-warning, var(--color-danger));
 }
+
+/* LF5 light-theme pass: the dark-theme literal badge colours do not have
+   enough contrast on white surfaces, so override them with the light tokens. */
+:root[data-theme='light'] .ai-badge--local,
+:root[data-theme='light'] .ai-models__badge {
+  background: rgba(47, 125, 60, 0.14);
+  color: #1f6b32;
+}
+
+:root[data-theme='light'] .ai-badge--cloud,
+:root[data-theme='light'] .ai-badge--local-only,
+:root[data-theme='light'] .ai-models__fit[data-fit='may-not-fit'] {
+  color: #8f6416;
+}
+
+:root[data-theme='light'] .ai-models__delete {
+  color: #a4262c;
+}
+
+:root[data-theme='light'] .ai-panel__action--recording {
+  background: rgba(205, 43, 49, 0.1);
+}

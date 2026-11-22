@@ -2,16 +2,53 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type { ActivityId } from '../components/layout/ActivityBar';
 import type { BottomPanelTab } from '../commands/types';
+import {
+  AI_PANEL_WIDTH_RANGE,
+  BOTTOM_PANEL_HEIGHT_RANGE,
+  SIDEBAR_WIDTH_RANGE,
+  clampSashSize,
+  type SashRange,
+} from '../features/layout/sashModel';
 
 export interface WindowState {
   maximized: boolean;
   fullScreen: boolean;
+}
+
+/** Renderer-local size persistence, mirroring the existing theme preference. */
+const LAYOUT_STORAGE_PREFIX = 'nova.layout.';
+
+function readStoredSize(
+  key: string,
+  fallback: number,
+  range: SashRange,
+): number {
+  try {
+    const raw = window.localStorage.getItem(`${LAYOUT_STORAGE_PREFIX}${key}`);
+    if (raw === null) {
+      return fallback;
+    }
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampSashSize(parsed, range) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistSize(key: string, value: number): void {
+  try {
+    window.localStorage.setItem(`${LAYOUT_STORAGE_PREFIX}${key}`, String(value));
+  } catch {
+    // Storage may be unavailable; sizes still work for the current session.
+  }
 }
 
 interface UiContextValue {
@@ -23,6 +60,13 @@ interface UiContextValue {
   /** True while the bottom panel occupies the whole editor column. */
   bottomPanelMaximized: boolean;
   aiPanelVisible: boolean;
+  /** Persisted pane sizes driven by the LF5 sashes, in CSS pixels. */
+  sidebarWidth: number;
+  bottomPanelHeight: number;
+  aiPanelWidth: number;
+  setSidebarWidth: (value: number) => void;
+  setBottomPanelHeight: (value: number) => void;
+  setAiPanelWidth: (value: number) => void;
   layoutSignal: number;
   explorerFocusSignal: number;
   searchFocusSignal: number;
@@ -67,10 +111,77 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
     maximized: false,
     fullScreen: false,
   });
+  const [sidebarWidth, setSidebarWidthState] = useState(() =>
+    readStoredSize('sidebarWidth', 260, SIDEBAR_WIDTH_RANGE),
+  );
+  const [bottomPanelHeight, setBottomPanelHeightState] = useState(() =>
+    readStoredSize('bottomPanelHeight', 200, BOTTOM_PANEL_HEIGHT_RANGE),
+  );
+  const [aiPanelWidth, setAiPanelWidthState] = useState(() =>
+    readStoredSize('aiPanelWidth', 320, AI_PANEL_WIDTH_RANGE),
+  );
+
+  // Refs keep pointer-move updates from re-bumping layout when a size is
+  // already clamped to the same pixel value.
+  const sidebarWidthRef = useRef(sidebarWidth);
+  const bottomPanelHeightRef = useRef(bottomPanelHeight);
+  const aiPanelWidthRef = useRef(aiPanelWidth);
+  sidebarWidthRef.current = sidebarWidth;
+  bottomPanelHeightRef.current = bottomPanelHeight;
+  aiPanelWidthRef.current = aiPanelWidth;
+
+  useEffect(() => {
+    persistSize('sidebarWidth', sidebarWidth);
+  }, [sidebarWidth]);
+  useEffect(() => {
+    persistSize('bottomPanelHeight', bottomPanelHeight);
+  }, [bottomPanelHeight]);
+  useEffect(() => {
+    persistSize('aiPanelWidth', aiPanelWidth);
+  }, [aiPanelWidth]);
 
   const bumpLayout = useCallback(() => {
     setLayoutSignal((signal) => signal + 1);
   }, []);
+
+  const setSidebarWidth = useCallback(
+    (value: number) => {
+      const next = clampSashSize(value, SIDEBAR_WIDTH_RANGE);
+      if (next === sidebarWidthRef.current) {
+        return;
+      }
+      sidebarWidthRef.current = next;
+      setSidebarWidthState(next);
+      bumpLayout();
+    },
+    [bumpLayout],
+  );
+
+  const setBottomPanelHeight = useCallback(
+    (value: number) => {
+      const next = clampSashSize(value, BOTTOM_PANEL_HEIGHT_RANGE);
+      if (next === bottomPanelHeightRef.current) {
+        return;
+      }
+      bottomPanelHeightRef.current = next;
+      setBottomPanelHeightState(next);
+      bumpLayout();
+    },
+    [bumpLayout],
+  );
+
+  const setAiPanelWidth = useCallback(
+    (value: number) => {
+      const next = clampSashSize(value, AI_PANEL_WIDTH_RANGE);
+      if (next === aiPanelWidthRef.current) {
+        return;
+      }
+      aiPanelWidthRef.current = next;
+      setAiPanelWidthState(next);
+      bumpLayout();
+    },
+    [bumpLayout],
+  );
 
   const setActivity = useCallback((next: ActivityId) => {
     setActivityState(next);
@@ -172,6 +283,12 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       bottomPanelTab,
       bottomPanelMaximized,
       aiPanelVisible,
+      sidebarWidth,
+      bottomPanelHeight,
+      aiPanelWidth,
+      setSidebarWidth,
+      setBottomPanelHeight,
+      setAiPanelWidth,
       layoutSignal,
       explorerFocusSignal,
       searchFocusSignal,
@@ -193,6 +310,8 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
     [
       activity,
       aiPanelVisible,
+      aiPanelWidth,
+      bottomPanelHeight,
       bottomPanelMaximized,
       bottomPanelTab,
       bottomPanelVisible,
@@ -204,9 +323,13 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       requestNewTerminal,
       searchFocusSignal,
       setActivity,
+      setAiPanelWidth,
+      setBottomPanelHeight,
+      setSidebarWidth,
       selectBottomPanelTab,
       showActivity,
       sidebarVisible,
+      sidebarWidth,
       terminalCreateSignal,
       toggleActivity,
       toggleAiPanel,

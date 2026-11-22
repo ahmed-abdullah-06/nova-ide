@@ -1,0 +1,72 @@
+/* A6 — LF5 resize sashes. Loaded after the panel styles so the focus ring and
+   hover grip are never covered by a pane. */
+
+.app-shell,
+.main-column {
+  position: relative;
+}
+
+.sash {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+  outline: none;
+}
+
+.sash--vertical {
+  top: var(--titlebar-height);
+  bottom: var(--statusbar-height);
+  width: 4px;
+  cursor: col-resize;
+}
+
+.sash--horizontal {
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: row-resize;
+}
+
+.sash--sidebar {
+  left: calc(var(--activitybar-width) + var(--sidebar-width) - 2px);
+}
+
+.sash--ai {
+  right: calc(var(--ai-panel-width) - 2px);
+}
+
+.sash--bottom {
+  bottom: calc(var(--bottompanel-height) - 2px);
+}
+
+.sash__grip {
+  position: absolute;
+  border-radius: 1px;
+  background: transparent;
+  transition: background var(--transition);
+}
+
+.sash--vertical .sash__grip {
+  top: 0;
+  bottom: 0;
+  left: 1px;
+  right: 1px;
+}
+
+.sash--horizontal .sash__grip {
+  left: 0;
+  right: 0;
+  top: 1px;
+  bottom: 1px;
+}
+
+.sash:hover .sash__grip,
+.sash:focus-visible .sash__grip,
+.sash:active .sash__grip {
+  background: var(--accent);
+}
+
+.sash:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

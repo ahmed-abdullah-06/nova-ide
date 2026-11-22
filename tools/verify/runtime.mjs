@@ -3211,13 +3211,15 @@ async function main() {
       );
     })();
     await session.pressKey('Escape', 27);
-    const closedByEscape = await session.evaluate(
+    const closedByEscape = await waitFor(
+      session,
       `(() => {
         const menu = document.querySelector('.menu-bar__dropdown');
         const top = [...document.querySelectorAll('.menu-bar__top')]
           .find((node) => node.textContent.trim() === 'File');
         return menu === null && top?.getAttribute('aria-expanded') === 'false';
       })()`,
+      3000,
     );
     check(
       'menu opens on click, switches on hover and closes on Escape',
@@ -3374,6 +3376,9 @@ async function main() {
     const quickPickClosed = () =>
       waitFor(session, `document.querySelector('.quick-pick') === null`, 5000);
 
+    // Park the pointer away from the overlay: a row appearing under the
+    // cursor would fire mouseenter and legitimately change the initial row.
+    await moveMouseTo(session, { x: 2, y: 2 });
     await focusText(session, '.menu-bar__top', 'File');
     const beforePalette = await traceSequence(session);
     await session.pressShortcut('P', 'KeyP', 80, ['ctrl', 'shift']);
@@ -3937,7 +3942,23 @@ async function main() {
     );
 
     // Monaco owns Find/Replace/Undo/Redo; Ctrl+L is unbound there so the
-    // registry can still toggle the AI panel outside the terminal.
+    // registry can still toggle the AI panel outside the terminal. The Welcome
+    // view was restored earlier, so activate a real file tab first: otherwise
+    // these keys would be tested against the empty state, not Monaco.
+    const fileTabActivated = await session.evaluate(
+      `(() => {
+        const tab = [...document.querySelectorAll('.editor-tab__name')]
+          .find((node) => node.textContent.includes('index.js'));
+        if (tab === undefined) return false;
+        tab.click();
+        return true;
+      })()`,
+    );
+    const monacoMounted = await waitFor(
+      session,
+      `document.querySelector('.editor-content .monaco-editor') !== null`,
+      5000,
+    );
     await clickWithMouse(session, '.editor-content .view-lines');
     const monacoFocused = await waitFor(
       session,
@@ -3945,15 +3966,36 @@ async function main() {
       5000,
     );
     const beforeEditorKeys = await traceSequence(session);
-    await session.pressShortcut('f', 'KeyF', 70, ['ctrl']);
-    await session.pressShortcut('h', 'KeyH', 72, ['ctrl']);
-    await session.pressShortcut('z', 'KeyZ', 90, ['ctrl']);
-    await session.pressShortcut('y', 'KeyY', 89, ['ctrl']);
+    const perKey = [];
+    for (const [key, code, keyCode] of [
+      ['f', 'KeyF', 70],
+      ['h', 'KeyH', 72],
+      ['z', 'KeyZ', 90],
+      ['y', 'KeyY', 89],
+    ]) {
+      const focus = await session.evaluate(
+        `(() => {
+          const active = document.activeElement;
+          return active === null ? null : {
+            tag: active.tagName,
+            className: active.className?.toString?.() ?? '',
+            monaco: active.closest('.monaco-editor') !== null,
+          };
+        })()`,
+      );
+      await session.pressShortcut(key, code, keyCode, ['ctrl']);
+      const last = await session.evaluate(
+        `(() => { const trace = window.__a6CommandTrace(); return trace[trace.length - 1] ?? null; })()`,
+      );
+      perKey.push({ key, focus, last, trace: await traceSequence(session) });
+    }
     const afterEditorKeys = await traceSequence(session);
     check(
       'Monaco keeps Ctrl+F/H/Z/Y without registry commands',
-      monacoFocused === true && beforeEditorKeys === afterEditorKeys,
-      JSON.stringify({ beforeEditorKeys, afterEditorKeys }),
+      fileTabActivated === true &&
+        monacoMounted !== false &&
+        monacoFocused === true && beforeEditorKeys === afterEditorKeys,
+      JSON.stringify({ beforeEditorKeys, afterEditorKeys, perKey }),
     );
     // Ctrl+F/H opened Monaco's find/replace widget; close it so its inputs do
     // not masquerade as the editor for the later typing checks.
@@ -4164,17 +4206,16 @@ async function main() {
     // Recreate a dirty buffer for the window-level close checks.
     console.log('  step: recreate dirty buffer');
     await session.evaluate(`document.querySelector('.editor-tabs__new')?.click()`);
-    await clickWithMouse(session, '.editor-content .view-lines');
-    await session.evaluate(
+    const freshTab = await waitFor(
+      session,
       `(() => {
-        const area = document.querySelector(
-          '.monaco-editor textarea[aria-label*="Editor content"], .monaco-editor textarea.inputarea',
-        );
-        if (area !== null) area.focus();
-        return area !== null;
+        const name = document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? '';
+        return name.startsWith('Untitled') && name !== ${JSON.stringify(dirtyTabName ?? '')};
       })()`,
+      5000,
     );
-    await waitFor(
+    await clickWithMouse(session, '.editor-content .view-lines');
+    const closeFocused = await waitFor(
       session,
       `document.activeElement?.closest('.editor-content') !== null`,
       5000,
@@ -4185,12 +4226,19 @@ async function main() {
       `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
       5000,
     );
-    const closeReady = await session.evaluate(
-      `document.querySelector('.editor-tab--active .editor-tab__dirty') !== null`,
+    const closeState = await session.evaluate(
+      `(() => ({
+        dirty: document.querySelector('.editor-tab--active .editor-tab__dirty') !== null,
+        name: document.querySelector('.editor-tab--active .editor-tab__name')?.textContent ?? null,
+        focus: document.activeElement?.className ?? null,
+        modal: document.querySelector('[aria-modal="true"]')?.getAttribute('aria-label') ?? null,
+      }))()`,
     );
+    const closeReady = closeState.dirty === true;
     if (closeReady !== true) {
-      check('declining a dirty window close leaves the app alive', false, 'no dirty buffer');
-      check('declining Exit with unsaved changes leaves the app alive', false, 'no dirty buffer');
+      const detail = JSON.stringify({ freshTab, closeFocused, closeState });
+      check('declining a dirty window close leaves the app alive', false, detail);
+      check('declining Exit with unsaved changes leaves the app alive', false, detail);
     } else {
     // `void` prevents Runtime.evaluate from awaiting the tokenized close
     // handshake while the in-app confirmation waits for a user choice.
@@ -4370,6 +4418,421 @@ async function main() {
     check(
       'panel reopens with the terminal session intact',
       panelReopened === true && terminalStillMounted !== false,
+    );
+
+    // LF5 polish: three persisted sashes, a light-theme pass, 125% display
+    // scaling and the final scorecard probes. These run last because they
+    // deliberately change pane sizes, theme and device scale.
+    const paneSetup = await session.evaluate(
+      `(() => {
+        const toggle = (label) => {
+          const button = document.querySelector(
+            '.title-bar__actions button[aria-label="' + label + '"]'
+          );
+          if (button !== null) button.click();
+          return button !== null;
+        };
+        const hidden = (selector, modifier) =>
+          document.querySelector(selector)?.classList.contains(modifier) === true;
+        const sidebarHidden = hidden('.sidebar', 'sidebar--hidden');
+        const aiHidden = hidden('.ai-panel', 'ai-panel--hidden');
+        const panelHidden = hidden('.bottom-panel', 'bottom-panel--hidden');
+        if (sidebarHidden) toggle('Toggle Sidebar');
+        if (aiHidden) toggle('Toggle AI Panel');
+        if (panelHidden) toggle('Toggle Panel');
+        return { sidebarHidden, aiHidden, panelHidden };
+      })()`,
+    );
+    const threeSashes = await waitFor(
+      session,
+      `document.querySelectorAll('.sash').length === 3`,
+      5000,
+    );
+    check(
+      'all three pane sashes render when their panes are visible',
+      threeSashes !== false,
+      JSON.stringify(paneSetup),
+    );
+
+    const sashModel = await session.evaluate(
+      `(() => ({
+        count: document.querySelectorAll('.sash').length,
+        items: [...document.querySelectorAll('.sash')].map((node) => ({
+          placement: [...node.classList].find((cls) =>
+            cls.startsWith('sash--') &&
+            cls !== 'sash--vertical' && cls !== 'sash--horizontal') ?? null,
+          role: node.getAttribute('role'),
+          orientation: node.getAttribute('aria-orientation'),
+          label: node.getAttribute('aria-label'),
+          min: Number(node.getAttribute('aria-valuemin')),
+          max: Number(node.getAttribute('aria-valuemax')),
+          value: Number(node.getAttribute('aria-valuenow')),
+          tabIndex: node.tabIndex,
+          cursor: getComputedStyle(node).cursor,
+          width: node.getBoundingClientRect().width,
+          height: node.getBoundingClientRect().height,
+        })),
+      }))()`,
+    );
+    check(
+      'sashes expose separator roles, labels, values and focus order',
+      Array.isArray(sashModel.items) &&
+        sashModel.count === 3 &&
+        ['sidebar', 'bottom', 'ai'].every((placement) =>
+          sashModel.items.some((item) =>
+            item.placement === `sash--${placement}` &&
+            item.role === 'separator' &&
+            typeof item.label === 'string' && item.label.length > 0 &&
+            item.orientation === (placement === 'bottom' ? 'horizontal' : 'vertical') &&
+            item.tabIndex === 0 &&
+            item.min < item.value && item.value < item.max &&
+            item.width > 0 && item.height > 0 &&
+            item.cursor === (placement === 'bottom' ? 'row-resize' : 'col-resize'))),
+      JSON.stringify(sashModel),
+    );
+
+    const focusSidebarSash = await session.evaluate(
+      `(() => {
+        const sash = document.querySelector('.sash--sidebar');
+        if (sash === null) return false;
+        sash.focus();
+        return document.activeElement === sash;
+      })()`,
+    );
+    const sidebarStart = await session.evaluate(
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow'))`,
+    );
+    await session.pressKey('ArrowRight', 39);
+    const sidebarAfterArrow = await waitFor(
+      session,
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow')) === ${sidebarStart + 10}`,
+      3000,
+    );
+    await session.pressKey('Escape', 27);
+    const sidebarAfterEscape = await waitFor(
+      session,
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow')) === ${sidebarStart}`,
+      3000,
+    );
+    await session.pressKey('ArrowRight', 39, ['shift']);
+    const sidebarAfterShift = await waitFor(
+      session,
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow')) === ${sidebarStart + 40}`,
+      3000,
+    );
+    const sidebarPersistence = await session.evaluate(
+      `(() => ({
+        stored: Number(localStorage.getItem('nova.layout.sidebarWidth')),
+        css: getComputedStyle(document.querySelector('.app-shell'))
+          .getPropertyValue('--sidebar-width').trim(),
+        rect: document.querySelector('.sidebar').getBoundingClientRect().width,
+      }))()`,
+    );
+    check(
+      'sash arrows, Shift steps, Escape and size persistence work',
+      focusSidebarSash === true &&
+        sidebarAfterArrow !== false && sidebarAfterEscape !== false &&
+        sidebarAfterShift !== false &&
+        sidebarPersistence.stored === sidebarStart + 40 &&
+        sidebarPersistence.css === `${sidebarStart + 40}px` &&
+        Math.abs(sidebarPersistence.rect - (sidebarStart + 40)) <= 2,
+      JSON.stringify({ sidebarStart, sidebarPersistence }),
+    );
+    await session.pressKey('Escape', 27);
+    await waitFor(
+      session,
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow')) === ${sidebarStart}`,
+      3000,
+    );
+
+    const dragSash = async (selector, dx, dy) => {
+      const point = await session.evaluate(
+        `(() => {
+          const node = document.querySelector(${JSON.stringify(selector)});
+          if (node === null) return null;
+          const rect = node.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        })()`,
+      );
+      if (point === null || typeof point !== 'object') {
+        return false;
+      }
+      const end = { x: point.x + dx, y: point.y + dy };
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', ...point,
+      });
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed', ...point, button: 'left', buttons: 1, clickCount: 1,
+      });
+      // Move in short steps so the sash receives a real pointermove after
+      // React has installed its pointer capture. A single jump can land before
+      // the pointerdown handler is committed and leave the pane unchanged.
+      for (let step = 1; step <= 4; step += 1) {
+        await session.send('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          x: point.x + (dx * step) / 4,
+          y: point.y + (dy * step) / 4,
+          button: 'left',
+          buttons: 1,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', ...end, button: 'left', buttons: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await session.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', ...end, button: 'left', buttons: 0, clickCount: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return true;
+    };
+
+    const sidebarDragStart = sidebarStart;
+    const sidebarDragged = await dragSash('.sash--sidebar', 30, 0);
+    const sidebarDragValue = await waitFor(
+      session,
+      `(() => {
+        const value = Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow'));
+        return value > ${sidebarDragStart} ? value : false;
+      })()`,
+      3000,
+    );
+    const sidebarDragWidth = await session.evaluate(
+      `document.querySelector('.sidebar').getBoundingClientRect().width`,
+    );
+    check(
+      'dragging the sidebar sash resizes the pane',
+      sidebarDragged === true && typeof sidebarDragValue === 'number' &&
+        Math.abs(sidebarDragWidth - sidebarDragValue) <= 2,
+      JSON.stringify({ sidebarDragStart, sidebarDragValue, sidebarDragWidth }),
+    );
+    await dragSash('.sash--sidebar', -30, 0);
+    await waitFor(
+      session,
+      `Number(document.querySelector('.sash--sidebar').getAttribute('aria-valuenow')) === ${sidebarDragStart}`,
+      3000,
+    );
+
+    const bottomStart = await session.evaluate(
+      `Number(document.querySelector('.sash--bottom').getAttribute('aria-valuenow'))`,
+    );
+    const bottomDragged = await dragSash('.sash--bottom', 0, 24);
+    const bottomDragValue = await waitFor(
+      session,
+      `(() => {
+        const value = Number(document.querySelector('.sash--bottom').getAttribute('aria-valuenow'));
+        return value < ${bottomStart} ? value : false;
+      })()`,
+      3000,
+    );
+    const bottomDragHeight = await session.evaluate(
+      `document.querySelector('.bottom-panel').getBoundingClientRect().height`,
+    );
+    check(
+      'dragging the bottom sash resizes the panel',
+      bottomDragged === true && typeof bottomDragValue === 'number' &&
+        Math.abs(bottomDragHeight - bottomDragValue) <= 2,
+      JSON.stringify({ bottomStart, bottomDragValue, bottomDragHeight }),
+    );
+    await dragSash('.sash--bottom', 0, -24);
+    await waitFor(
+      session,
+      `Number(document.querySelector('.sash--bottom').getAttribute('aria-valuenow')) === ${bottomStart}`,
+      3000,
+    );
+
+    const aiStart = await session.evaluate(
+      `Number(document.querySelector('.sash--ai').getAttribute('aria-valuenow'))`,
+    );
+    const aiDragged = await dragSash('.sash--ai', 24, 0);
+    const aiDragValue = await waitFor(
+      session,
+      `(() => {
+        const value = Number(document.querySelector('.sash--ai').getAttribute('aria-valuenow'));
+        return value < ${aiStart} ? value : false;
+      })()`,
+      3000,
+    );
+    const aiDragWidth = await session.evaluate(
+      `document.querySelector('.ai-panel').getBoundingClientRect().width`,
+    );
+    check(
+      'dragging the AI sash resizes the panel',
+      aiDragged === true && typeof aiDragValue === 'number' &&
+        Math.abs(aiDragWidth - aiDragValue) <= 2,
+      JSON.stringify({ aiStart, aiDragValue, aiDragWidth }),
+    );
+    await dragSash('.sash--ai', -24, 0);
+    await waitFor(
+      session,
+      `Number(document.querySelector('.sash--ai').getAttribute('aria-valuenow')) === ${aiStart}`,
+      3000,
+    );
+
+    const lightClicked = await clickWithMouse(
+      session,
+      '.status-bar button[title="Switch to light theme"]',
+    );
+    const lightApplied = await waitFor(
+      session,
+      `document.documentElement.dataset.theme === 'light'`,
+      5000,
+    );
+    const lightProbe = await session.evaluate(
+      `(() => {
+        const root = getComputedStyle(document.documentElement);
+        const terminalNodes = [...document.querySelectorAll(
+          '.terminal-panel__view:not([hidden]) .xterm, ' +
+          '.terminal-panel__view:not([hidden]) .xterm *'
+        )];
+        return {
+          stored: localStorage.getItem('nova.theme'),
+          surface: root.getPropertyValue('--surface-app').trim(),
+          raised: root.getPropertyValue('--surface-raised').trim(),
+          body: getComputedStyle(document.body).backgroundColor,
+          terminalWhite: terminalNodes.some(
+            (node) => getComputedStyle(node).backgroundColor === 'rgb(255, 255, 255)'
+          ),
+        };
+      })()`,
+    );
+    check(
+      'light-theme pass applies tokens, surfaces and terminal colours',
+      lightClicked === true && lightApplied !== false &&
+        lightProbe.stored === 'light' &&
+        ['#ffffff', '#fff'].includes(lightProbe.surface) &&
+        lightProbe.raised === '#f3f3f3' &&
+        lightProbe.body === 'rgb(255, 255, 255)' &&
+        lightProbe.terminalWhite === true,
+      JSON.stringify(lightProbe),
+    );
+    const darkClicked = await clickWithMouse(
+      session,
+      '.status-bar button[title="Switch to dark theme"]',
+    );
+    const darkApplied = await waitFor(
+      session,
+      `document.documentElement.dataset.theme === 'dark'`,
+      5000,
+    );
+    check(
+      'theme can be switched back to dark',
+      darkClicked === true && darkApplied !== false,
+    );
+
+    await session.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1.25,
+      mobile: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const scaleProbe = await session.evaluate(
+      `(() => {
+        const rect = (selector) => {
+          const node = document.querySelector(selector);
+          if (node === null) return null;
+          const value = node.getBoundingClientRect();
+          return {
+            left: value.left, top: value.top, right: value.right,
+            bottom: value.bottom, width: value.width, height: value.height,
+          };
+        };
+        return {
+          dpr: window.devicePixelRatio,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          shell: rect('.app-shell'),
+          title: rect('.title-bar'),
+          sidebar: rect('.sidebar'),
+          editor: rect('.editor-area'),
+          status: rect('.status-bar'),
+        };
+      })()`,
+    );
+    const scaleRects = [
+      scaleProbe.shell, scaleProbe.title, scaleProbe.sidebar,
+      scaleProbe.editor, scaleProbe.status,
+    ].filter((value) => value !== null);
+    check(
+      '125% display scaling keeps every main region inside the viewport',
+      Math.abs(scaleProbe.dpr - 1.25) < 0.001 &&
+        scaleRects.length === 5 &&
+        scaleRects.every(
+          (value) =>
+            value.width > 0 && value.height > 0 &&
+            value.right <= scaleProbe.innerWidth + 1 &&
+            value.bottom <= scaleProbe.innerHeight + 1,
+        ) &&
+        scaleProbe.editor.left >= scaleProbe.sidebar.right - 4 &&
+        scaleProbe.status.top >= scaleProbe.editor.bottom - 4,
+      JSON.stringify(scaleProbe),
+    );
+    await session.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 720,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const scorecard = await session.evaluate(
+      `(() => {
+        const node = (selector) => document.querySelector(selector);
+        const count = (selector) => document.querySelectorAll(selector).length;
+        const token = (name) =>
+          getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return {
+          titleBar: node('.title-bar') !== null,
+          menuItems: count('.menu-bar__top'),
+          commandCenter: node('.title-bar__actions button[aria-label="Open Command Palette"], .command-center') !== null,
+          layoutActions: count('.title-bar__actions button'),
+          activityItems: count('.activity-bar__item'),
+          openEditors: document.body.innerText.includes('OPEN EDITORS'),
+          treeNodes: count('.tree-node'),
+          tabs: count('.editor-tab'),
+          breadcrumbs: node('.breadcrumbs') !== null,
+          minimap: node('.minimap') !== null,
+          currentLine: count('.current-line'),
+          panelTabs: count('.bottom-panel__tab'),
+          statusItems: count('.status-bar__item'),
+          sashes: count('.sash'),
+          fontBase: token('--font-size-base'),
+          tabHeight: token('--tab-height'),
+          accent: token('--accent'),
+          noFakeEntries: !/Debug|Extensions|Outline|Timeline/.test(document.body.innerText),
+        };
+      })()`,
+    );
+    check(
+      'final scorecard DOM/CSS assertions cover the completed shell',
+      scorecard.titleBar === true &&
+        scorecard.menuItems >= 5 && scorecard.commandCenter === true &&
+        scorecard.layoutActions >= 4 && scorecard.activityItems === 4 &&
+        scorecard.openEditors === true && scorecard.treeNodes > 0 &&
+        scorecard.tabs > 0 && scorecard.breadcrumbs === true &&
+        scorecard.minimap === true && scorecard.currentLine > 0 &&
+        scorecard.panelTabs === 3 && scorecard.statusItems > 0 &&
+        scorecard.sashes === 3 && scorecard.fontBase === '13px' &&
+        scorecard.tabHeight === '28px' && scorecard.accent.length > 0 &&
+        scorecard.noFakeEntries === true,
+      JSON.stringify(scorecard),
+    );
+    const bannedUiText = await session.evaluate(
+      `(() => {
+        const values = [document.body.innerText];
+        for (const node of document.querySelectorAll('[title],[aria-label],[alt]')) {
+          values.push(node.getAttribute('title') ?? '');
+          values.push(node.getAttribute('aria-label') ?? '');
+          values.push(node.getAttribute('alt') ?? '');
+        }
+        return /visual studio code|vscode|vs code/i.test(values.join(' '));
+      })()`,
+    );
+    check(
+      'no prohibited product names appear in user-facing UI text',
+      bannedUiText === false,
     );
 
     mockOllama.stop();
