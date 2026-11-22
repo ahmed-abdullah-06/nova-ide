@@ -26,6 +26,9 @@ import { useSpeech } from '../voice/useSpeech';
 import { useVoiceInput } from '../voice/useVoiceInput';
 import { useVoiceSettingsContext } from '../voice/VoiceSettingsContext';
 
+/** The composer grows up to this height and scrolls beyond it. */
+const COMPOSER_MAX_HEIGHT = 200;
+
 export interface AiPanelProps {
   /** True when a workspace is open (the context needs one). */
   hasWorkspace: boolean;
@@ -245,7 +248,7 @@ export function AiPanel({
     const node = composerRef.current;
     if (node === null) return;
     node.style.height = 'auto';
-    node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
+    node.style.height = `${Math.min(node.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
   }, [input]);
 
   return (
