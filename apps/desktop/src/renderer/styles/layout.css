@@ -450,19 +450,32 @@
 }
 
 .ai-panel__composer {
+  position: relative;
   border-top: 1px solid var(--border);
-  padding: 12px;
+  padding: 8px 10px 10px;
+}
+
+.ai-panel__composer-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: calc(var(--radius) * 1.5);
+  background: var(--surface-input);
+  padding: 6px;
 }
 
 .ai-panel__input {
   width: 100%;
-  min-height: 72px;
+  min-height: 56px;
+  max-height: 220px;
   resize: none;
-  background: var(--surface-input);
+  overflow-y: auto;
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 4px 4px 0;
   font: inherit;
 }
 

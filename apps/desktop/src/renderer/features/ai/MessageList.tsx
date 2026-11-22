@@ -8,6 +8,8 @@
  */
 import { useCallback } from 'react';
 import type { ChatMessage } from '../../../shared/ai-types';
+import { Icon } from '../../components/ui/icons';
+import { IconButton } from '../../components/ui/IconButton';
 import { CodeBlock } from './CodeBlock';
 import { parseInline, parseMarkdown, type InlineNode } from './markdown';
 
@@ -24,6 +26,8 @@ export interface MessageListProps {
   speakingIndex?: number | null;
   /** Stops the speech at once. */
   onStopSpeech?: () => void;
+  /** Regenerates the last assistant answer (icon action on that message). */
+  onRegenerate?: () => void;
 }
 
 /** Renders the inline elements of a text. */
@@ -151,6 +155,7 @@ export function MessageList({
   onReadAloud,
   speakingIndex = null,
   onStopSpeech,
+  onRegenerate,
 }: MessageListProps): React.JSX.Element {
   const handleOpenLink = useCallback(
     (url: string): void => {
@@ -170,6 +175,13 @@ export function MessageList({
     );
   }
 
+  let lastAssistantIndex = -1;
+  messages.forEach((message, index) => {
+    if (message.role === 'assistant') {
+      lastAssistantIndex = index;
+    }
+  });
+
   return (
     <div className="ai-messages">
       {messages.map((message, index) => (
@@ -185,30 +197,45 @@ export function MessageList({
                   ? 'Assistant'
                   : 'System'}
             </span>
-            {message.role === 'assistant' &&
-            onReadAloud !== undefined &&
-            !(streaming && index === messages.length - 1) &&
-            message.content.trim().length > 0 ? (
-              <button
-                type="button"
-                className="ai-message__read"
-                aria-pressed={speakingIndex === index}
-                onClick={() => {
-                  if (speakingIndex === index) {
-                    onStopSpeech?.();
-                    return;
+            <div className="ai-message__actions">
+              {message.role === 'assistant' &&
+              onRegenerate !== undefined &&
+              index === lastAssistantIndex &&
+              !streaming &&
+              message.content.trim().length > 0 ? (
+                <IconButton
+                  label="Regenerate answer"
+                  className="ai-message__regenerate"
+                  icon={<Icon name="regenerate" size={13} />}
+                  size="sm"
+                  onClick={onRegenerate}
+                />
+              ) : null}
+              {message.role === 'assistant' &&
+              onReadAloud !== undefined &&
+              !(streaming && index === messages.length - 1) &&
+              message.content.trim().length > 0 ? (
+                <button
+                  type="button"
+                  className="ai-message__read"
+                  aria-pressed={speakingIndex === index}
+                  onClick={() => {
+                    if (speakingIndex === index) {
+                      onStopSpeech?.();
+                      return;
+                    }
+                    onReadAloud(message.content, index);
+                  }}
+                  title={
+                    speakingIndex === index
+                      ? 'Stop reading the answer aloud'
+                      : 'Read the answer aloud (code blocks are skipped by default)'
                   }
-                  onReadAloud(message.content, index);
-                }}
-                title={
-                  speakingIndex === index
-                    ? 'Stop reading the answer aloud'
-                    : 'Read the answer aloud (code blocks are skipped by default)'
-                }
-              >
-                {speakingIndex === index ? 'Stop reading' : 'Read aloud'}
-              </button>
-            ) : null}
+                >
+                  {speakingIndex === index ? 'Stop reading' : 'Read aloud'}
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="ai-message__content">
             {parseMarkdown(message.content).map((block, blockIndex) =>

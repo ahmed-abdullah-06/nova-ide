@@ -9,6 +9,7 @@ export type IconName =
   | 'settings'
   | 'ai'
   | 'newChat'
+  | 'plus'
   | 'history'
   | 'more'
   | 'mic'
@@ -78,6 +79,7 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
     'M18 16l.7 1.9 1.9.7-1.9.7L18 21l-.7-1.7-1.9-.7 1.9-.7L18 16z',
   ],
   newChat: ['M4 5h16v11H9l-5 4V5zM12 9v4M10 11h4'],
+  plus: ['M12 5v14M5 12h14'],
   history: ['M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l4 2'],
   more: ['M5 12h.01M12 12h.01M19 12h.01'],
   mic: [
