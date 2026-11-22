@@ -839,13 +839,61 @@ async function main() {
       'editor starts on the honest Welcome empty state',
       welcomeStart !== false &&
         welcomeStart.tab === 'Welcome' &&
-        welcomeStart.heading === 'Welcome to A6 IDE' &&
+        welcomeStart.heading === 'Welcome to A6' &&
         ['Start', 'Recent Workspaces', 'Help'].every(
           (section, index) => welcomeStart.sections[index] === section,
         ) &&
-        ['New File', 'Open File...', 'Quick Open...', 'Keyboard Shortcuts', 'About A6 IDE']
-          .every((label) => welcomeStart.labels.includes(label)),
+        ['New File', 'Open File...', 'Quick Open...', 'Keyboard Shortcuts', 'About A6']
+          .every((label) => welcomeStart.labels.includes(label)) &&
+        !welcomeStart.labels.includes('Toggle Developer Tools'),
       JSON.stringify(welcomeStart),
+    );
+
+    // LF6-4: the Welcome mark is the real A6 raster asset, not a generic icon.
+    const welcomeMark = await session.evaluate(
+      `(() => {
+        const image = document.querySelector('.welcome-view__mark img');
+        const src = image?.getAttribute('src') ?? '';
+        return image !== null && image.complete && image.naturalWidth > 0 && /a6-64/.test(src)
+          ? src
+          : false;
+      })()`,
+    );
+    check(
+      'the Welcome hero uses the real A6 mark',
+      typeof welcomeMark === 'string',
+      String(welcomeMark),
+    );
+
+    // LF6-3: the no-folder states are one short line each.
+    const noFolderStates = await session.evaluate(
+      `(() => {
+        const text = (selector) => document.querySelector(selector)?.textContent.trim() ?? null;
+        return {
+          explorerTitle: text('.explorer__empty-title'),
+          explorerRecent: document.querySelector('.explorer__recent') !== null,
+          explorerHint: document.querySelector('.explorer__empty-hint') !== null,
+          terminal: text('.terminal-panel__empty'),
+          problems: text('.problems-panel__empty'),
+          output: text('.task-panel__empty'),
+          status: document.querySelector('.status-bar')?.textContent ?? '',
+        };
+      })()`,
+    );
+    check(
+      'no-folder empty states are short and recent lives only on Welcome',
+      noFolderStates.explorerTitle === 'Open a folder to explore files' &&
+        noFolderStates.explorerRecent === false &&
+        noFolderStates.explorerHint === false &&
+        noFolderStates.terminal === 'Open a folder to start a terminal' &&
+        noFolderStates.problems === 'No problems have been detected' &&
+        noFolderStates.output === 'No output yet',
+      JSON.stringify(noFolderStates),
+    );
+    check(
+      'the status bar no longer repeats the About version',
+      !/Electron\\s+\\d/i.test(noFolderStates.status),
+      String(noFolderStates.status).slice(0, 120),
     );
 
     // Open the fixture workspace through the typed bridge and let the
@@ -969,34 +1017,29 @@ async function main() {
     );
     check('terminal renders the output of a command', terminalOutput);
 
-    // Explorer empty state must derive its Open Folder hint from the command
-    // registry. Run this AFTER the first terminal echo check: closing and
-    // reopening the workspace leaves the auto-created terminal session in an
-    // exited state, so it must not happen before terminal output is verified.
-    // The renderer observes a bridge-driven workspace change on focus, just as
-    // it does after workspace.open() above.
+    // LF6-3: reopening a no-folder workspace keeps the Explorer empty state
+    // to one short line and one Open Folder button; the shortcut hint and the
+    // recent list now live only on Welcome. Run this AFTER the first terminal
+    // echo check: closing and reopening the workspace leaves the auto-created
+    // terminal session in an exited state, so it must not happen before
+    // terminal output is verified.
     await session.evaluate(`window.nova.workspace.close()`);
     await session.evaluate(`window.dispatchEvent(new Event('focus'))`);
-    const explorerEmpty = await waitFor(
+    const explorerNoFolder = await waitFor(
       session,
       `(() => {
-        const hint = document.querySelector('.explorer__empty-hint');
         const title = document.querySelector('.explorer__empty-title');
-        return hint !== null && title !== null ? hint.textContent.trim() : false;
+        return title !== null &&
+          title.textContent.trim() === 'Open a folder to explore files' &&
+          document.querySelector('.explorer__empty-hint') === null &&
+          document.querySelector('.explorer__recent') === null &&
+          document.querySelector('.explorer__open-button') !== null;
       })()`,
       10000,
     );
-    const expectedOpenHint = await session.evaluate(
-      `(() => {
-        // Mirror CommandRegistry display: openWorkspace chord is Ctrl+K Ctrl+O on win32/linux, Cmd+K Cmd+O on darwin.
-        const mac = navigator.userAgent.toLowerCase().includes('mac');
-        return mac ? 'Cmd+K Cmd+O' : 'Ctrl+K Ctrl+O';
-      })()`,
-    );
     check(
-      'Explorer Open Folder hint matches the command registry shortcut',
-      explorerEmpty === expectedOpenHint,
-      JSON.stringify({ explorerEmpty, expectedOpenHint }),
+      'Explorer no-folder state stays short after workspace close',
+      explorerNoFolder === true,
     );
     const reopenedWorkspace = await session.evaluate(
       `window.nova.workspace.open(${JSON.stringify(fixture)}).then((r) => r.ok)`,
@@ -1585,20 +1628,33 @@ async function main() {
     );
     check('the terminal tab is reachable', terminalTab === true);
 
+    // LF6-3: the terminal keeps only its session tab strip; New Terminal is
+    // a tab-strip action and Copy/Stop live on the tab context menu.
+    const terminalLayout = await session.evaluate(
+      `(() => ({
+        toolbar: document.querySelector('.terminal-panel__toolbar') !== null,
+        localActions: document.querySelectorAll('.terminal-panel__action').length,
+        newTerminal: document.querySelector('.bottom-panel__actions [aria-label="New Terminal"]') !== null,
+      }))()`,
+    );
+    check(
+      'the terminal has one toolbar with a New Terminal action',
+      terminalLayout.toolbar === false &&
+        terminalLayout.localActions === 0 &&
+        terminalLayout.newTerminal === true,
+      JSON.stringify(terminalLayout),
+    );
+
     // Earlier checks may have closed the original shell. Create a fresh
-    // session through the UI so the Stop button, the typed command and the
-    // rendered view all belong to one live session.
+    // session through the tab-strip action so the context menu, typed command
+    // and rendered view all belong to one live session.
     const sessionsBefore = await session.evaluate(
       `document.querySelectorAll('.terminal-panel__tab').length`,
     );
     const newSessionClicked = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.terminal-panel__action')];
-        const button = buttons.find((candidate) =>
-          candidate.textContent.trim() === '+' ||
-          candidate.getAttribute('title')?.includes('New terminal session') === true,
-        );
-        if (button === undefined) return false;
+        const button = document.querySelector('.bottom-panel__actions [aria-label="New Terminal"]');
+        if (button === null) return false;
         button.click();
         return true;
       })()`,
@@ -1645,18 +1701,41 @@ async function main() {
     );
     check('the command in the terminal is running', commandStarted !== false);
 
-    const stopButtonClicked = await session.evaluate(
+    const terminalContextOpened = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.terminal-panel__action')];
-        const stop = buttons.find((b) => b.textContent.trim() === 'Stop');
+        const label = document.querySelector('.terminal-panel__view:not([hidden])');
+        const tabs = [...document.querySelectorAll('.terminal-panel__tab-label')];
+        const active = tabs.find((tab) =>
+          tab.closest('.terminal-panel__tab')?.getAttribute('aria-selected') === 'true');
+        if (label === null || active === undefined) return false;
+        active.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, cancelable: true, clientX: 40, clientY: 160,
+        }));
+        return true;
+      })()`,
+    );
+    const contextMenuShown = await waitFor(
+      session,
+      `(() => {
+        const items = [...document.querySelectorAll('.context-menu__item')];
+        return items.some((item) => item.textContent.trim() === 'Stop');
+      })()`,
+      5000,
+    );
+    const stopFromContext = await session.evaluate(
+      `(() => {
+        const stop = [...document.querySelectorAll('.context-menu__item')]
+          .find((item) => item.textContent.trim() === 'Stop');
         if (stop === undefined) return false;
         stop.click();
         return true;
       })()`,
     );
     check(
-      'the terminal can stop a running command',
-      stopButtonClicked === true,
+      'the terminal can stop a running command from the tab menu',
+      terminalContextOpened === true &&
+        contextMenuShown === true &&
+        stopFromContext === true,
     );
 
     // The session must still be usable after the interrupt.
@@ -1749,6 +1828,96 @@ async function main() {
     );
     check('the Settings editor tab is opened', settingsTabOpened === true);
 
+    // LF6-2: the Settings tab keeps the Explorer in the side bar and uses a
+    // keyboard-navigable section list with one heading per section.
+    const settingsStructure = await session.evaluate(
+      `(() => {
+        const headings = [...document.querySelectorAll('.settings-view__section h2')]
+          .map((node) => node.textContent.trim());
+        const theme = document.querySelector('select[aria-label="Theme"]');
+        return {
+          explorerSidebar: document.querySelector('.sidebar .explorer') !== null,
+          sidebarLabel: document.querySelector('.sidebar')?.getAttribute('aria-label') ?? null,
+          sidebarThemeRow: document.querySelector('.sidebar__row') !== null,
+          sections: [...document.querySelectorAll('.settings-view__section-link')]
+            .map((node) => node.textContent.trim()),
+          headingCounts: {
+            providers: headings.filter((text) => text === 'Providers').length,
+            appearance: headings.filter((text) => text === 'Appearance').length,
+          },
+          themeOptions: theme === null ? [] : [...theme.options].map((option) => option.value),
+        };
+      })()`,
+    );
+    check(
+      'Settings has one heading per section and no old sidebar theme row',
+      settingsStructure.sidebarThemeRow === false &&
+        settingsStructure.sections.length === 6 &&
+        settingsStructure.headingCounts.providers === 1 &&
+        settingsStructure.headingCounts.appearance === 1 &&
+        settingsStructure.themeOptions.join(',') === 'dark,light',
+      JSON.stringify(settingsStructure),
+    );
+
+    const settingsSearch = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('input[aria-label="Search settings"]');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'voice');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    const filteredSections = await waitFor(
+      session,
+      `(() => {
+        const visible = [...document.querySelectorAll('.settings-view__section')]
+          .filter((section) => !section.hidden)
+          .map((section) => section.id);
+        return visible.length === 1 && visible[0] === 'settings-voice' ? visible : false;
+      })()`,
+      5000,
+    );
+    check(
+      'the Settings search filters sections by label',
+      settingsSearch === true && Array.isArray(filteredSections),
+      JSON.stringify(filteredSections),
+    );
+    await session.evaluate(
+      `(() => {
+        const input = document.querySelector('input[aria-label="Search settings"]');
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    await waitFor(
+      session,
+      `document.querySelectorAll('.settings-view__section:not([hidden])').length === 6`,
+      5000,
+    );
+
+    await session.evaluate(
+      `document.querySelector('.settings-view__section-link')?.focus() ?? false`,
+    );
+    await session.pressKey('ArrowDown', 40);
+    const settingsKeyboard = await session.evaluate(
+      `(() => {
+        const links = [...document.querySelectorAll('.settings-view__section-link')];
+        const active = links.findIndex((link) => link.getAttribute('aria-current') === 'true');
+        return active === 1 && links[1] === document.activeElement ? active : false;
+      })()`,
+    );
+    check(
+      'the Settings section list is keyboard navigable',
+      settingsKeyboard === 1,
+      String(settingsKeyboard),
+    );
+
     const settingsRendered = await waitFor(
       session,
       `document.querySelector('.ai-settings__address-input') !== null`,
@@ -1779,14 +1948,20 @@ async function main() {
     const modelListed = await waitFor(
       session,
       `(() => {
-        const select = document.querySelector('select[aria-label="Model"]');
+        // LF6-2: provider settings no longer own a second model picker; the
+        // refreshed catalog feeds the default chat model select in Models.
+        const select = document.querySelector('select[aria-label="Default chat model"]');
         if (select === null) return false;
         const options = [...select.options].map((o) => o.value);
-        return options.includes('nova-verify-model');
+        return options.includes('nova-verify-model') ? options.join(',') : false;
       })()`,
       20000,
     );
-    check('the model of the provider is listed', modelListed === true);
+    check(
+      'the refreshed model is available as the default chat model',
+      typeof modelListed === 'string',
+      String(modelListed),
+    );
 
     // --- The management of the local models (Milestone 7) --------------
 
@@ -2010,20 +2185,27 @@ async function main() {
       String(newModelListed),
     );
 
-    const newModelInDropdown = await waitFor(
+    // LF6-1: the chat model list is the chip menu above the single composer,
+    // not a select in the AI header.
+    const newModelInChat = await waitFor(
       session,
-      `(() => {
-        const select = document.querySelector('select[aria-label="Model"]');
-        if (select === null) return false;
-        const options = [...select.options].map((o) => o.value);
-        return options.includes('nova-new-model') ? options.join(',') : false;
-      })()`,
+      `new Promise((resolve) => {
+        const chip = document.querySelector('.ai-model-chip');
+        if (chip === null) { resolve(false); return; }
+        chip.click();
+        setTimeout(() => {
+          const rows = [...document.querySelectorAll('.ai-panel__model-menu__row')]
+            .map((row) => row.textContent.trim());
+          chip.click();
+          resolve(rows.includes('nova-new-model') ? rows.join(',') : false);
+        }, 100);
+      })`,
       20000,
     );
     check(
       'the downloaded model appears in the model list of the chat',
-      typeof newModelInDropdown === 'string',
-      String(newModelInDropdown).slice(0, 160),
+      typeof newModelInChat === 'string',
+      String(newModelInChat).slice(0, 160),
     );
 
     // The deletion asks for a confirmation and can be declined.
@@ -2146,22 +2328,107 @@ async function main() {
       String(modelRemoved),
     );
 
+    // LF6-1: one composer, no old text buttons, one provider marker and a
+    // model chip that stays inside a 360px panel. The panel starts hidden, so
+    // show it before measuring DOM geometry.
+    const aiHiddenForComposer = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        return panel === null || panel.classList.contains('ai-panel--hidden');
+      })()`,
+    );
+    if (aiHiddenForComposer === true) {
+      await session.evaluate(
+        `(() => {
+          const button = [...document.querySelectorAll('.title-bar__actions button')]
+            .find((node) => node.getAttribute('aria-label') === 'Toggle AI Panel');
+          if (button === undefined) return false;
+          button.click();
+          return true;
+        })()`,
+      );
+      await waitFor(
+        session,
+        `(() => {
+          const panel = document.querySelector('.ai-panel');
+          return panel !== null && !panel.classList.contains('ai-panel--hidden');
+        })()`,
+        5000,
+      );
+    }
+
+    const composerAcceptance = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        const row = document.querySelector('.ai-panel__composer-row');
+        const removed = ['Mic', 'Send', 'Stop', 'Ask again', 'Attach file', 'Browse files', 'Attach selection'];
+        const rowText = row?.textContent ?? '';
+        return {
+          composers: document.querySelectorAll('.ai-panel__composer').length,
+          rows: document.querySelectorAll('.ai-panel__composer-row').length,
+          removedInRow: removed.filter((text) => rowText.includes(text)),
+          badges: panel === null ? -1 : panel.querySelectorAll('.ai-badge').length,
+          markers: document.querySelectorAll('.ai-model-chip__marker').length,
+          headerSelects: document.querySelectorAll('.ai-panel__header select').length,
+        };
+      })()`,
+    );
+    check(
+      'the AI panel has one composer and no duplicated provider badge',
+      composerAcceptance.composers === 1 &&
+        composerAcceptance.rows === 1 &&
+        composerAcceptance.removedInRow.length === 0 &&
+        composerAcceptance.badges === 0 &&
+        composerAcceptance.markers === 1 &&
+        composerAcceptance.headerSelects === 0,
+      JSON.stringify(composerAcceptance),
+    );
+
+    const chipFit = await session.evaluate(
+      `(() => {
+        const shell = document.querySelector('.app-shell');
+        const chip = document.querySelector('.ai-model-chip');
+        const row = document.querySelector('.ai-panel__composer-row');
+        if (shell === null || chip === null || row === null) return false;
+        shell.style.setProperty('--ai-panel-width', '360px');
+        const chipRect = chip.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        const fits = chipRect.left >= rowRect.left - 1 &&
+          chipRect.right <= rowRect.right + 1 &&
+          row.scrollWidth <= row.clientWidth + 1 &&
+          getComputedStyle(chip).overflow === 'hidden' &&
+          getComputedStyle(chip.querySelector('.ai-model-chip__name')).textOverflow === 'ellipsis';
+        shell.style.removeProperty('--ai-panel-width');
+        return {
+          fits,
+          chipLeft: Math.round(chipRect.left),
+          chipRight: Math.round(chipRect.right),
+          rowLeft: Math.round(rowRect.left),
+          rowRight: Math.round(rowRect.right),
+          rowScrollWidth: row.scrollWidth,
+          rowClientWidth: row.clientWidth,
+          chipOverflow: getComputedStyle(chip).overflow,
+          nameTextOverflow: getComputedStyle(chip.querySelector('.ai-model-chip__name')).textOverflow,
+        };
+      })()`,
+    );
+    check(
+      'the model chip does not overflow at 360px panel width',
+      chipFit !== false && chipFit.fits === true,
+      JSON.stringify(chipFit),
+    );
+
     const localBadge = await waitFor(
       session,
       `(() => {
-        // The compact provider chip next to the model picker shows which
-        // kind of provider the shared composer uses.
-        const controls = document.querySelector('.ai-panel__controls');
-        if (controls === null) return false;
-        const badge = controls.querySelector('.ai-panel__provider-chip');
-        if (badge === null) return false;
-        const text = badge.textContent.trim();
+        const marker = document.querySelector('.ai-model-chip__marker');
+        const text = marker?.textContent.trim() ?? '';
         return text === 'LOCAL' ? text : false;
       })()`,
       10000,
     );
     check(
-      'the panel shows that the provider is local',
+      'the composer chip shows that the provider is local',
       localBadge === 'LOCAL',
       String(localBadge),
     );
@@ -2189,18 +2456,27 @@ async function main() {
 
     // The current file can be attached as context, and the panel shows
     // what will be sent.
-    const attached = await session.evaluate(
+    const attachMenuOpened = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const attach = buttons.find(
-          (b) => b.textContent.trim() === 'Attach file');
-        if (attach === undefined || attach.disabled) return false;
-        const chip = document.querySelector('.ai-panel__attachment');
+        const attach = document.querySelector('.ai-panel__attach-button');
+        if (attach === null || attach.disabled) return false;
         attach.click();
         return true;
       })()`,
     );
-    check('the current file can be attached', attached === true);
+    const attached = await session.evaluate(
+      `(() => {
+        const item = [...document.querySelectorAll('.ai-panel__attach-menu [role="menuitem"]')]
+          .find((button) => button.textContent.trim() === 'Attach file');
+        if (item === undefined || item.disabled) return false;
+        item.click();
+        return true;
+      })()`,
+    );
+    check(
+      'the current file can be attached',
+      attachMenuOpened === true && attached === true,
+    );
 
     const contextShown = await waitFor(
       session,
@@ -2248,9 +2524,8 @@ async function main() {
 
     await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const send = buttons.find((b) => b.textContent.trim() === 'Send');
-        if (send === undefined) return false;
+        const send = document.querySelector('.ai-panel__send-button');
+        if (send === null || send.disabled) return false;
         send.click();
         return true;
       })()`,
@@ -2371,7 +2646,7 @@ async function main() {
 
     const micWhileOff = await clickWithMouse(
       session,
-      '.ai-panel__action--mic',
+      '.ai-panel__mic-button',
     );
     const offNotice = await waitFor(
       session,
@@ -2391,15 +2666,15 @@ async function main() {
 
     const localOnlyOn = await session.evaluate(
       `(() => {
-        const box = document.querySelector('input[aria-label="Local-only mode"]');
-        if (box === null) return false;
-        box.click();
+        const toggle = document.querySelector('[role="switch"][aria-label="Local-only mode"]');
+        if (toggle === null || toggle.getAttribute('aria-checked') === 'true') return false;
+        toggle.click();
         return true;
       })()`,
     );
     const voiceLocalBadge = await waitFor(
       session,
-      `document.querySelector('.ai-badge--local-only') !== null`,
+      `document.querySelector('.status-bar__privacy--on') !== null`,
       10000,
     );
     const cloudBlocked = await session.evaluate(
@@ -2463,15 +2738,15 @@ async function main() {
 
     const localOnlyOff = await session.evaluate(
       `(() => {
-        const box = document.querySelector('input[aria-label="Local-only mode"]');
-        if (box === null || !box.checked) return false;
-        box.click();
+        const toggle = document.querySelector('[role="switch"][aria-label="Local-only mode"]');
+        if (toggle === null || toggle.getAttribute('aria-checked') !== 'true') return false;
+        toggle.click();
         return true;
       })()`,
     );
     const voiceLocalBadgeGone = await waitFor(
       session,
-      `document.querySelector('.ai-badge--local-only') === null`,
+      `document.querySelector('.status-bar__privacy--on') === null`,
       10000,
     );
     check(
@@ -2544,11 +2819,11 @@ async function main() {
     );
     const micFocused = await clickWithMouse(
       session,
-      '.ai-panel__action--mic',
+      '.ai-panel__mic-button',
     );
     const recording = await waitFor(
       session,
-      `document.querySelector('.ai-panel__action--mic')?.getAttribute('aria-pressed') === 'true'`,
+      `document.querySelector('.ai-panel__mic-button')?.getAttribute('aria-pressed') === 'true'`,
       15000,
     );
     check(
@@ -2559,11 +2834,11 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const stoppedRecording = await clickWithMouse(
       session,
-      '.ai-panel__action--mic',
+      '.ai-panel__mic-button',
     );
     await waitFor(
       session,
-      `document.querySelector('.ai-panel__action--mic')?.getAttribute('aria-pressed') !== 'true'`,
+      `document.querySelector('.ai-panel__mic-button')?.getAttribute('aria-pressed') !== 'true'`,
       15000,
     );
     const transcript = await waitFor(
@@ -2707,9 +2982,8 @@ async function main() {
 
     const started = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const start = buttons.find((b) => b.textContent.trim() === 'Start');
-        if (start === undefined || start.disabled) return false;
+        const start = document.querySelector('.ai-panel__send-button');
+        if (start === null || start.disabled) return false;
         start.click();
         return true;
       })()`,
@@ -2887,9 +3161,8 @@ async function main() {
 
     const secondStarted = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const start = buttons.find((b) => b.textContent.trim() === 'Start');
-        if (start === undefined || start.disabled) return false;
+        const start = document.querySelector('.ai-panel__send-button');
+        if (start === null || start.disabled) return false;
         start.click();
         return true;
       })()`,
@@ -3019,9 +3292,8 @@ async function main() {
           window.HTMLTextAreaElement.prototype, 'value').set;
         setter.call(input, 'Do something that must not run');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const start = buttons.find((b) => b.textContent.trim() === 'Start');
-        if (start === undefined || start.disabled) return false;
+        const start = document.querySelector('.ai-panel__send-button');
+        if (start === null || start.disabled) return false;
         start.click();
         return true;
       })()`,
@@ -3097,9 +3369,8 @@ async function main() {
           window.HTMLTextAreaElement.prototype, 'value').set;
         setter.call(input, 'Stop me');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const start = buttons.find((b) => b.textContent.trim() === 'Start');
-        if (start === undefined) return false;
+        const start = document.querySelector('.ai-panel__send-button');
+        if (start === null) return false;
         start.click();
         return true;
       })()`,
@@ -3108,9 +3379,8 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const stopped = await session.evaluate(
       `(() => {
-        const buttons = [...document.querySelectorAll('.ai-panel__action')];
-        const stop = buttons.find((b) => b.textContent.trim() === 'Stop');
-        if (stop === undefined || stop.disabled) return false;
+        const stop = document.querySelector('.ai-panel__send-button');
+        if (stop === null || stop.disabled) return false;
         stop.click();
         return true;
       })()`,
