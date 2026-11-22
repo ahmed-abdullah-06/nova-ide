@@ -249,7 +249,7 @@ export function AiPanel({
     if (node === null) return;
     node.style.height = 'auto';
     node.style.height = `${Math.min(node.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
-  }, [input]);
+  }, [input, visible]);
 
   return (
     <aside

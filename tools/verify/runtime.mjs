@@ -1925,6 +1925,55 @@ async function main() {
     );
     check('the provider settings are rendered', settingsRendered === true);
 
+    // LF7-3: the settings controls use the shared primitives; the three
+    // address actions stay on one row and labels share a two-column grid.
+    const settingsForm = await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.ai-settings__address-input');
+        const findAction = (text) => [...document.querySelectorAll(
+          '.ai-settings__row--address .ai-settings__action')].find(
+          (node) => node.textContent.trim() === text);
+        const save = findAction('Save address');
+        const toggle = findAction('Switch off') ?? findAction('Switch on');
+        const test = findAction('Test connection');
+        const actions = [save, toggle, test];
+        const rects = actions.filter((node) => node !== undefined).map(
+          (node) => node.getBoundingClientRect());
+        const inputStyle = input === null ? null : getComputedStyle(input);
+        const buttonStyle = save === undefined ? null : getComputedStyle(save);
+        const theme = document.querySelector('select[aria-label="Theme"]');
+        const themeStyle = theme === null ? null : getComputedStyle(theme);
+        const field = document.querySelector('.settings-view__section .ui-field-row--horizontal');
+        const fieldStyle = field === null ? null : getComputedStyle(field);
+        return {
+          inputStyled: inputStyle !== null &&
+            inputStyle.borderStyle === 'solid' &&
+            inputStyle.borderRadius !== '0px' &&
+            inputStyle.backgroundColor !== 'rgba(0, 0, 0, 0)',
+          buttonStyled: buttonStyle !== null &&
+            buttonStyle.borderRadius !== '0px' &&
+            buttonStyle.backgroundColor !== 'rgba(0, 0, 0, 0)',
+          selectStyled: themeStyle !== null && themeStyle.appearance === 'none',
+          sameRow: rects.length === 3 && rects.every(
+            (rect) => Math.abs(rect.top - rects[0].top) <= 2),
+          labelGrid: fieldStyle !== null && fieldStyle.display === 'grid' &&
+            field.querySelector('.ui-field-row__label') !== null &&
+            field.querySelector('.ui-field-row__control') !== null,
+          actionCount: actions.filter((node) => node !== undefined).length,
+        };
+      })()`,
+    );
+    check(
+      'the settings form uses styled primitives on one aligned grid',
+      settingsForm.inputStyled === true &&
+        settingsForm.buttonStyled === true &&
+        settingsForm.selectStyled === true &&
+        settingsForm.sameRow === true &&
+        settingsForm.labelGrid === true &&
+        settingsForm.actionCount === 3,
+      JSON.stringify(settingsForm),
+    );
+
     const providerConfigured = await session.evaluate(
       `(() => {
         const input = document.querySelector('.ai-settings__address-input');
@@ -2382,6 +2431,81 @@ async function main() {
         composerAcceptance.markers === 1 &&
         composerAcceptance.headerSelects === 0,
       JSON.stringify(composerAcceptance),
+    );
+
+    // LF7-1: the empty composer stays compact; long text grows to 200px and
+    // scrolls inside the textarea instead of pushing the message list away.
+    const composerEmpty = await session.evaluate(
+      `(() => {
+        const panel = document.querySelector('.ai-panel');
+        const input = document.querySelector('.ai-panel__input');
+        const body = document.querySelector('.ai-panel__body');
+        const composer = document.querySelector('.ai-panel__composer');
+        if (panel === null || input === null || body === null || composer === null) {
+          return false;
+        }
+        const style = getComputedStyle(input);
+        const panelRect = panel.getBoundingClientRect();
+        return {
+          height: input.getBoundingClientRect().height,
+          maxHeight: style.maxHeight,
+          overflowY: style.overflowY,
+          bodyGrow: getComputedStyle(body).flexGrow,
+          composerShare: composer.getBoundingClientRect().height / panelRect.height,
+        };
+      })()`,
+    );
+    check(
+      'the empty composer is compact and the message area keeps the space',
+      composerEmpty !== false &&
+        composerEmpty.height >= 56 &&
+        composerEmpty.height <= 72 &&
+        composerEmpty.maxHeight === '200px' &&
+        composerEmpty.overflowY === 'auto' &&
+        composerEmpty.bodyGrow === '1' &&
+        composerEmpty.composerShare < 1 / 3,
+      JSON.stringify(composerEmpty),
+    );
+
+    await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.ai-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, Array.from({ length: 30 }, (_, i) => 'line ' + i).join('\\n'));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    const composerGrown = await waitFor(
+      session,
+      `(() => {
+        const input = document.querySelector('.ai-panel__input');
+        if (input === null) return false;
+        const height = input.getBoundingClientRect().height;
+        if (height <= 72 || height > 200 || input.scrollHeight <= input.clientHeight) {
+          return false;
+        }
+        return { height, scrollHeight: input.scrollHeight, clientHeight: input.clientHeight };
+      })()`,
+      5000,
+    );
+    check(
+      'a long message grows the composer to 200px and scrolls',
+      composerGrown !== false,
+      JSON.stringify(composerGrown),
+    );
+    await session.evaluate(
+      `(() => {
+        const input = document.querySelector('.ai-panel__input');
+        if (input === null) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`,
     );
 
     const chipFit = await session.evaluate(
@@ -2966,6 +3090,82 @@ async function main() {
     );
     check('the agent mode of the panel is reachable', agentTab === true);
 
+    // LF7-2: the agent has one status line, icon-only menus and no progress
+    // bar while idle. The audit and permissions content lives in popovers.
+    const agentHeaderIdle = await session.evaluate(
+      `(() => {
+        const status = document.querySelector('.agent-panel__status');
+        const state = document.querySelector('.agent-panel__state');
+        const buttons = [...document.querySelectorAll(
+          '.agent-panel__status-actions button')].map(
+          (node) => node.getAttribute('aria-label'));
+        return {
+          label: state === null ? null : state.textContent.trim(),
+          state: state === null ? null : state.getAttribute('data-state'),
+          progress: document.querySelectorAll('.agent-panel__progress').length,
+          auditButtons: [...document.querySelectorAll('.agent-panel button')].filter(
+            (node) => node.textContent.includes('audit history')).length,
+          permissionRows: document.querySelectorAll(
+            '.agent-panel__permissions-slot, .agent-panel__permissions-summary').length,
+          buttons,
+          oneLine: status !== null &&
+            getComputedStyle(status).whiteSpace === 'nowrap' &&
+            status.getBoundingClientRect().height <= 32,
+        };
+      })()`,
+    );
+    check(
+      'the idle agent shows one status line and icon menus',
+      agentHeaderIdle.label === 'Idle' &&
+        agentHeaderIdle.state === 'idle' &&
+        agentHeaderIdle.progress === 0 &&
+        agentHeaderIdle.auditButtons === 0 &&
+        agentHeaderIdle.permissionRows === 0 &&
+        agentHeaderIdle.buttons.includes('Agent permissions') &&
+        agentHeaderIdle.buttons.includes('Audit history') &&
+        agentHeaderIdle.oneLine === true,
+      JSON.stringify(agentHeaderIdle),
+    );
+
+    const permissionMenu = await session.evaluate(
+      `new Promise((resolve) => {
+        const button = document.querySelector('button[aria-label="Agent permissions"]');
+        if (button === null) { resolve(false); return; }
+        button.click();
+        setTimeout(() => {
+          const popover = document.querySelector('.ui-popover[role="dialog"]');
+          const text = popover === null ? '' : popover.textContent;
+          button.click();
+          resolve(text.includes('Forbidden operations') ? text.slice(0, 120) : false);
+        }, 250);
+      })`,
+    );
+    check(
+      'the shield menu opens the agent permissions',
+      typeof permissionMenu === 'string',
+      String(permissionMenu),
+    );
+
+    const auditMenu = await session.evaluate(
+      `new Promise((resolve) => {
+        const button = document.querySelector('button[aria-label="Audit history"]');
+        if (button === null) { resolve(false); return; }
+        button.click();
+        setTimeout(() => {
+          const popover = document.querySelector('.ui-popover[role="dialog"]');
+          const text = popover === null ? '' : popover.textContent;
+          button.click();
+          resolve(text.includes('Audit history') || text.includes('audit history')
+            ? text.slice(0, 120) : false);
+        }, 250);
+      })`,
+    );
+    check(
+      'the history menu opens the audit history',
+      typeof auditMenu === 'string',
+      String(auditMenu),
+    );
+
     // The task of the agent.
     const taskTyped = await session.evaluate(
       `(() => {
@@ -3037,6 +3237,27 @@ async function main() {
       10000,
     );
     check('the edited plan can be approved', planApproved === true);
+
+    const activeHeader = await waitFor(
+      session,
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        const progress = document.querySelector('.agent-panel__progress');
+        const elapsed = document.querySelector('.agent-panel__elapsed');
+        if (state === null || progress === null || elapsed === null) return false;
+        const label = state.textContent.trim();
+        const value = elapsed.textContent.trim();
+        if ((label !== 'Running' && label !== 'Planning') ||
+            !/^\\d{2}:\\d{2}$/.test(value)) return false;
+        return { label, value, role: progress.getAttribute('role') };
+      })()`,
+      10000,
+    );
+    check(
+      'the active run shows a status, a progress bar and elapsed time',
+      activeHeader !== false && activeHeader.role === 'progressbar',
+      JSON.stringify(activeHeader),
+    );
 
     const editedEvent = await waitFor(
       session,
@@ -3127,12 +3348,30 @@ async function main() {
       `(() => {
         const state = document.querySelector('.agent-panel__state');
         if (state === null) return false;
-        const text = state.textContent.trim();
-        return text === 'completed' || text === 'failed' ? text : false;
+        const value = state.getAttribute('data-state');
+        return value === 'completed' || value === 'failed' ? value : false;
       })()`,
       30000,
     );
     check('the first run finishes', firstRunFinished !== false);
+
+    const finishedHeader = await session.evaluate(
+      `(() => {
+        const state = document.querySelector('.agent-panel__state');
+        return {
+          label: state === null ? null : state.textContent.trim(),
+          progress: document.querySelectorAll('.agent-panel__progress').length,
+          elapsed: document.querySelectorAll('.agent-panel__elapsed').length,
+        };
+      })()`,
+    );
+    check(
+      'a finished run hides the progress bar and the elapsed time',
+      finishedHeader.label === 'Done' &&
+        finishedHeader.progress === 0 &&
+        finishedHeader.elapsed === 0,
+      JSON.stringify(finishedHeader),
+    );
 
     // A rejected proposal must leave the disk untouched.
     agentAnswers.length = 0;
@@ -3346,8 +3585,8 @@ async function main() {
       `(() => {
         const state = document.querySelector('.agent-panel__state');
         if (state === null) return false;
-        const text = state.textContent.trim();
-        return text === 'cancelled' ? text : false;
+        const value = state.getAttribute('data-state');
+        return value === 'cancelled' ? value : false;
       })()`,
       30000,
     );
@@ -3392,25 +3631,55 @@ async function main() {
       `(() => {
         const state = document.querySelector('.agent-panel__state');
         if (state === null) return false;
-        const text = state.textContent.trim();
-        return text === 'cancelled' ? text : false;
+        const value = state.getAttribute('data-state');
+        return value === 'cancelled' ? value : false;
       })()`,
       30000,
     );
     check('the stopped run reports that it was cancelled', cancelled === 'cancelled');
 
     // A permission can be narrowed at once; the main process applies it.
+    // The controls now live in the shield popover, so open it first.
+    const permissionsOpened = await session.evaluate(
+      `(() => {
+        const button = document.querySelector(
+          'button[aria-label="Agent permissions"]');
+        if (button === null) return false;
+        button.click();
+        return true;
+      })()`,
+    );
+    const permissionBox = await waitFor(
+      session,
+      `(() => {
+        const box = document.querySelector(
+          '.ui-popover .agent-panel__permission input[type="checkbox"]');
+        return box !== null && box.checked && !box.disabled ? box.checked : false;
+      })()`,
+      10000,
+    );
     const narrowed = await session.evaluate(
       `(() => {
         const box = document.querySelector(
-          '.agent-panel__permission input[type="checkbox"]',
-        );
+          '.ui-popover .agent-panel__permission input[type="checkbox"]');
         if (box === null || !box.checked) return false;
         box.click();
         return true;
       })()`,
     );
-    check('the read permission can be narrowed', narrowed === true);
+    check(
+      'the read permission can be narrowed',
+      permissionsOpened === true && permissionBox === true && narrowed === true,
+    );
+
+    await session.evaluate(
+      `(() => {
+        const button = document.querySelector(
+          'button[aria-label="Agent permissions"]');
+        if (button !== null) button.click();
+        return true;
+      })()`,
+    );
 
     const persisted = await waitFor(
       session,
