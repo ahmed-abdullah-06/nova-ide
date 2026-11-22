@@ -7,12 +7,41 @@
  * set of controls.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentRevertPreview } from '../../../shared/agent-types';
+import type {
+  AgentRevertPreview,
+  AgentRunState,
+} from '../../../shared/agent-types';
+import { Icon, IconButton, Popover, type IconName } from '../../components/ui';
 import { useTabs } from '../../stores/tabs';
 import { ProposalReview } from './ProposalReview';
 import { AgentPermissionSettings } from './AgentPermissionSettings';
 import { PlanReview } from './PlanReview';
 import { useAgent } from './useAgent';
+
+/** The one-line status header keeps the user-facing words short. */
+const STATUS: Record<
+  AgentRunState,
+  { label: string; tone: string; icon: IconName }
+> = {
+  idle: { label: 'Idle', tone: 'idle', icon: 'info' },
+  planning: { label: 'Planning', tone: 'planning', icon: 'ai' },
+  waitingForPlan: { label: 'Planning', tone: 'planning', icon: 'ai' },
+  running: { label: 'Running', tone: 'running', icon: 'ai' },
+  waitingForApproval: {
+    label: 'Waiting for approval',
+    tone: 'approval',
+    icon: 'shield',
+  },
+  completed: { label: 'Done', tone: 'success', icon: 'success' },
+  failed: { label: 'Failed', tone: 'failed', icon: 'error' },
+  cancelled: { label: 'Failed', tone: 'failed', icon: 'error' },
+};
+
+function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 export function AgentPanel(): React.JSX.Element {
   const agent = useAgent();
@@ -23,9 +52,19 @@ export function AgentPanel(): React.JSX.Element {
     null,
   );
   const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
-  const [showAudit, setShowAudit] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const state = agent.state;
+  const active =
+    state.runId !== null &&
+    (state.state === 'planning' ||
+      state.state === 'waitingForPlan' ||
+      state.state === 'running' ||
+      state.state === 'waitingForApproval');
+  const status = STATUS[state.state];
 
   // The changes of the run are the ones of the active run.
   useEffect(() => {
@@ -33,6 +72,24 @@ export function AgentPanel(): React.JSX.Element {
     setRevertPreview(null);
     setConfirmed(new Set());
   }, [state.runId]);
+
+  useEffect(() => {
+    if (state.runId === null) {
+      setRunStartedAt(null);
+      return;
+    }
+    const fromEvent =
+      state.events.find(
+        (event) => event.runId === state.runId && event.type === 'run-started',
+      )?.at ?? state.events.find((event) => event.runId === state.runId)?.at;
+    setRunStartedAt(fromEvent ?? Date.now());
+  }, [state.runId]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
 
   const handleAccept = useCallback(
     async (proposalId: string): Promise<void> => {
@@ -117,21 +174,117 @@ export function AgentPanel(): React.JSX.Element {
     state.proposals.find((proposal) => proposal.id === openProposal) ??
     state.proposals[0] ??
     null;
+  const elapsed =
+    active && runStartedAt !== null ? formatElapsed(now - runStartedAt) : null;
 
   return (
     <div className="agent-panel">
-      {state.state !== 'idle' ? (
-        <div className="agent-panel__status">
-          <span className={`agent-panel__state agent-panel__state--${state.state}`}>
-            {state.state}
+      <div className="agent-panel__status">
+        <span
+          className={`agent-panel__state agent-panel__state--${status.tone}`}
+          data-state={state.state}
+        >
+          <Icon name={status.icon} size={12} />
+          {status.label}
+        </span>
+        {state.kind === 'cloud' ? (
+          <span className="ai-badge ai-badge--cloud">CLOUD</span>
+        ) : null}
+        {state.task.length > 0 ? (
+          <span className="agent-panel__task" title={state.task}>
+            {state.task}
           </span>
-          {state.kind === 'cloud' ? (
-            <span className="ai-badge ai-badge--cloud">CLOUD</span>
-          ) : null}
-          {state.task.length > 0 ? (
-            <span className="agent-panel__task">{state.task}</span>
-          ) : null}
+        ) : null}
+        {elapsed !== null ? (
+          <span className="agent-panel__elapsed" aria-label={`Elapsed ${elapsed}`}>
+            {elapsed}
+          </span>
+        ) : null}
+        <div className="agent-panel__status-actions">
+          <div className="agent-panel__popover-anchor">
+            <IconButton
+              label="Agent permissions"
+              icon={<Icon name="shield" size={14} />}
+              size="sm"
+              active={permissionsOpen}
+              aria-expanded={permissionsOpen}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => {
+                setAuditOpen(false);
+                setPermissionsOpen((open) => !open);
+              }}
+            />
+            <Popover
+              open={permissionsOpen}
+              onClose={() => setPermissionsOpen(false)}
+              title="Agent permissions"
+              align="end"
+              className="agent-panel__popover"
+            >
+              <AgentPermissionSettings />
+            </Popover>
+          </div>
+          <div className="agent-panel__popover-anchor">
+            <IconButton
+              label="Audit history"
+              icon={<Icon name="history" size={14} />}
+              size="sm"
+              active={auditOpen}
+              aria-expanded={auditOpen}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => {
+                if (!auditOpen) {
+                  void agent.loadAudit();
+                }
+                setPermissionsOpen(false);
+                setAuditOpen((open) => !open);
+              }}
+            />
+            <Popover
+              open={auditOpen}
+              onClose={() => setAuditOpen(false)}
+              title="Audit history"
+              align="end"
+              className="agent-panel__popover"
+            >
+              {agent.audit.length === 0 ? (
+                <p className="agent-panel__audit-empty">
+                  The audit history is empty. It holds metadata only.
+                </p>
+              ) : (
+                <ol className="agent-panel__audit-list">
+                  {agent.audit
+                    .slice(-50)
+                    .reverse()
+                    .map((entry, index) => (
+                      <li
+                        key={`${entry.at}-${entry.step}-${index}`}
+                        className="agent-panel__audit-entry"
+                      >
+                        <span className="agent-panel__audit-time">
+                          {new Date(entry.at).toLocaleString()}
+                        </span>
+                        <span className="agent-panel__audit-kind">
+                          {entry.kind}
+                        </span>
+                        <span className="agent-panel__audit-summary">
+                          {entry.summary}
+                        </span>
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </Popover>
+          </div>
         </div>
+      </div>
+
+      {active ? (
+        <div
+          className="agent-panel__progress"
+          role="progressbar"
+          aria-label="Agent run progress"
+        />
       ) : null}
 
       {agent.error !== null ? (
@@ -147,56 +300,6 @@ export function AgentPanel(): React.JSX.Element {
           onAnswer={(decision, edits) => void handleAnswerPlan(decision, edits)}
         />
       ) : null}
-
-      <details className="agent-panel__permissions-slot">
-        <summary className="agent-panel__permissions-summary">Permissions</summary>
-        <AgentPermissionSettings />
-      </details>
-
-      <div className="agent-panel__audit-slot">
-        <button
-          type="button"
-          className="agent-panel__action"
-          aria-expanded={showAudit}
-          onClick={() => {
-            if (!showAudit) {
-              void agent.loadAudit();
-            }
-            setShowAudit((current) => !current);
-          }}
-        >
-          {showAudit ? 'Hide audit history' : 'Show audit history'}
-        </button>
-        {showAudit ? (
-          agent.audit.length === 0 ? (
-            <p className="agent-panel__audit-empty">
-              The audit history is empty. It holds metadata only.
-            </p>
-          ) : (
-            <ol className="agent-panel__audit-list">
-              {agent.audit
-                .slice(-50)
-                .reverse()
-                .map((entry, index) => (
-                  <li
-                    key={`${entry.at}-${entry.step}-${index}`}
-                    className="agent-panel__audit-entry"
-                  >
-                    <span className="agent-panel__audit-time">
-                      {new Date(entry.at).toLocaleString()}
-                    </span>
-                    <span className="agent-panel__audit-kind">
-                      {entry.kind}
-                    </span>
-                    <span className="agent-panel__audit-summary">
-                      {entry.summary}
-                    </span>
-                  </li>
-                ))}
-            </ol>
-          )
-        ) : null}
-      </div>
 
       <div className="agent-panel__timeline">
         {state.events.map((event) => (
