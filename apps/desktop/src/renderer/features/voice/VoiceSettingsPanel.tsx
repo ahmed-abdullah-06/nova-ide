@@ -15,6 +15,7 @@ import {
   describePushToTalkEvent,
 } from '../../../shared/pushToTalk';
 import type { VoiceSettings } from '../../../shared/voice-types';
+import { Button, FieldRow, Input, Select } from '../../components/ui';
 import type { VoiceSettingsState } from './useVoiceSettings';
 
 export interface VoiceSettingsPanelProps {
@@ -104,40 +105,39 @@ export function VoiceSettingsPanel({
         Voice assistant: record the microphone and read answers aloud
       </label>
 
-      <div className="ai-settings__row">
-        <label className="voice-settings__label" htmlFor="voice-engine">
-          Recognition
-        </label>
-        <select
+      <FieldRow label="Recognition" htmlFor="voice-engine" horizontal>
+        <Select
           id="voice-engine"
-          className="ai-settings__key"
           value={draft.engine}
-          onChange={(event) =>
-            update({ engine: event.target.value as VoiceSettings['engine'] })
+          onChange={(value) =>
+            update({ engine: value as VoiceSettings['engine'] })
           }
-        >
-          <option value="none">Off — no speech recognition</option>
-          <option value="local">Local engine (whisper.cpp compatible)</option>
-          <option value="cloud" disabled={localOnly}>
-            {localOnly
-              ? 'Cloud service — blocked by the local-only mode'
-              : 'Cloud service — not available in this build'}
-          </option>
-        </select>
-      </div>
+          options={[
+            { value: 'none', label: 'Off — no speech recognition' },
+            { value: 'local', label: 'Local engine (whisper.cpp compatible)' },
+            {
+              value: 'cloud',
+              disabled: localOnly,
+              label: localOnly
+                ? 'Cloud service — blocked by the local-only mode'
+                : 'Cloud service — not available in this build',
+            },
+          ]}
+        />
+      </FieldRow>
 
       {draft.engine === 'local' ? (
         <>
           <div className="ai-settings__row">
-            <input
+            <Input
               className="ai-settings__key"
               aria-label="Path of the speech engine"
               placeholder="Path of the speech engine (whisper-cli.exe)"
               value={draft.enginePath}
               onChange={(event) => update({ enginePath: event.target.value })}
             />
-            <button
-              type="button"
+            <Button
+              size="sm"
               className="ai-settings__action"
               onClick={async () => {
                 const picked = await state.pickFile('engine');
@@ -147,18 +147,18 @@ export function VoiceSettingsPanel({
               }}
             >
               Browse…
-            </button>
+            </Button>
           </div>
           <div className="ai-settings__row">
-            <input
+            <Input
               className="ai-settings__key"
               aria-label="Path of the speech model"
               placeholder="Path of the speech model (ggml-base.bin)"
               value={draft.modelPath}
               onChange={(event) => update({ modelPath: event.target.value })}
             />
-            <button
-              type="button"
+            <Button
+              size="sm"
               className="ai-settings__action"
               onClick={async () => {
                 const picked = await state.pickFile('model');
@@ -168,7 +168,7 @@ export function VoiceSettingsPanel({
               }}
             >
               Browse…
-            </button>
+            </Button>
           </div>
           <p className="ai-settings__off">
             The audio is written to the standard input of the engine and never
@@ -178,7 +178,7 @@ export function VoiceSettingsPanel({
           <details className="voice-settings__advanced">
             <summary>Advanced arguments</summary>
             <div className="ai-settings__row">
-              <input
+              <Input
                 className="ai-settings__key"
                 aria-label="Arguments of the speech engine"
                 value={engineArgs}
@@ -203,26 +203,25 @@ export function VoiceSettingsPanel({
         <label className="voice-settings__label" htmlFor="voice-name">
           Voice
         </label>
-        <select
+        <Select
           id="voice-name"
-          className="ai-settings__key"
           value={draft.voice}
-          onChange={(event) => update({ voice: event.target.value })}
-        >
-          <option value="">Default voice of the system</option>
-          {voices.map((voice) => (
-            <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
-              {voice.name} ({voice.lang})
-            </option>
-          ))}
-        </select>
+          onChange={(value) => update({ voice: value })}
+          options={[
+            { value: '', label: 'Default voice of the system' },
+            ...voices.map((voice) => ({
+              value: voice.name,
+              label: `${voice.name} (${voice.lang})`,
+            })),
+          ]}
+        />
       </div>
 
       <div className="ai-settings__row">
         <label className="voice-settings__label" htmlFor="voice-rate">
           Speed
         </label>
-        <input
+        <Input
           id="voice-rate"
           type="range"
           min={0.5}
@@ -252,7 +251,7 @@ export function VoiceSettingsPanel({
         <label className="voice-settings__label" htmlFor="voice-push-to-talk">
           Push-to-talk
         </label>
-        <input
+        <Input
           id="voice-push-to-talk"
           className="ai-settings__key"
           aria-label="Push-to-talk key"
@@ -271,13 +270,13 @@ export function VoiceSettingsPanel({
             }
           }}
         />
-        <button
-          type="button"
+        <Button
+          size="sm"
           className="ai-settings__action"
           onClick={() => update({ pushToTalkKey: DEFAULT_PUSH_TO_TALK_KEY })}
         >
           Reset
-        </button>
+        </Button>
       </div>
       <p className="ai-settings__off">
         Press the field and then the key. Hold the key to record, release it to
@@ -289,7 +288,7 @@ export function VoiceSettingsPanel({
         <label className="voice-settings__label" htmlFor="voice-max-seconds">
           Longest recording
         </label>
-        <input
+        <Input
           id="voice-max-seconds"
           className="voice-settings__number"
           type="number"
@@ -307,14 +306,14 @@ export function VoiceSettingsPanel({
       </div>
 
       <div className="ai-settings__row">
-        <button
-          type="button"
+        <Button
+          size="sm"
           className="ai-settings__action"
           onClick={() => void save()}
           disabled={state.saving}
         >
           {state.saving ? 'Saving…' : 'Save voice settings'}
-        </button>
+        </Button>
         {saved ? (
           <span className="ai-settings__message" role="status">
             Saved.

@@ -14,6 +14,7 @@ import type {
   ProviderDescriptor,
   ProviderStatus,
 } from '../../../shared/ai-types';
+import { Button, Input } from '../../components/ui';
 export interface ProviderSettingsProps {
   /** The providers. */
   providers: ProviderDescriptor[];
@@ -207,9 +208,8 @@ export function ProviderSettings({
         ))}
       </ul>
 
-      <div className="ai-settings__row">
-        <input
-          type="text"
+      <div className="ai-settings__row ai-settings__row--address">
+        <Input
           className="ai-settings__address-input"
           placeholder="Address of the service"
           aria-label="Address of the service"
@@ -217,22 +217,30 @@ export function ProviderSettings({
           disabled={busy}
           onChange={(event) => setAddress(event.target.value)}
         />
-        <button
-          type="button"
+        <Button
+          size="sm"
           className="ai-settings__action"
           onClick={() => void handleSaveAddress()}
           disabled={busy}
         >
           Save address
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
           className="ai-settings__action"
           onClick={() => void handleToggle()}
           disabled={busy || selected === null}
         >
           {selected?.enabled === true ? 'Switch off' : 'Switch on'}
-        </button>
+        </Button>
+        <Button
+          size="sm"
+          className="ai-settings__action"
+          onClick={() => void handleTest()}
+          disabled={busy}
+        >
+          Test connection
+        </Button>
       </div>
 
       {selected !== null && !isLoopback(selected.baseUrl) ? (
@@ -250,7 +258,7 @@ export function ProviderSettings({
       <div className="ai-settings__row">
         {selected?.kind === 'cloud' || selected?.hasKey === true ? (
           <>
-            <input
+            <Input
               type="password"
               className="ai-settings__key"
               placeholder="API key"
@@ -260,32 +268,24 @@ export function ProviderSettings({
               disabled={busy}
               onChange={(event) => setKey(event.target.value)}
             />
-            <button
-              type="button"
+            <Button
+              size="sm"
               className="ai-settings__action"
               onClick={() => void handleSaveKey()}
               disabled={busy || key.trim().length === 0}
             >
               Save key
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               className="ai-settings__action"
               onClick={() => void handleClearKey()}
               disabled={busy}
             >
               Remove key
-            </button>
+            </Button>
           </>
         ) : null}
-        <button
-          type="button"
-          className="ai-settings__action"
-          onClick={() => void handleTest()}
-          disabled={busy}
-        >
-          Test connection
-        </button>
       </div>
 
       {message !== null ? (

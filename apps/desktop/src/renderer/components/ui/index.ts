@@ -5,6 +5,7 @@ export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { FieldRow, type FieldRowProps } from './FieldRow';
 export { Icon, type IconProps, type IconName } from './icons';
 export { IconButton, type IconButtonProps } from './IconButton';
+export { Input, type InputProps } from './Input';
 export { Popover, type PopoverProps } from './Popover';
 export {
   Segmented,

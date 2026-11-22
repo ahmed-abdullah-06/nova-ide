@@ -355,6 +355,48 @@
   font-size: var(--font-size-small);
 }
 
+/* ---------- Input ---------- */
+
+.ui-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height-lg);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-base);
+}
+
+.ui-input::placeholder {
+  color: var(--text-muted);
+}
+
+.ui-input:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.ui-input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.ui-input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ui-input[type='range'] {
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+
 /* ---------- Toggle ---------- */
 
 .ui-toggle {

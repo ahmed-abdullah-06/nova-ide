@@ -8,7 +8,7 @@
  * and the search field filters sections by their labels.
  */
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Select, Toggle } from '../../components/ui';
+import { FieldRow, Input, Select, Toggle } from '../../components/ui';
 import type { Theme } from '../../hooks/useTheme';
 import { useAiContext } from '../ai/AiContext';
 import { LocalModels } from '../ai/LocalModels';
@@ -91,7 +91,7 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
     <div className="settings-view" role="tabpanel" aria-label="Settings">
       <aside className="settings-view__nav" aria-label="Settings sections">
         <div className="settings-view__nav-title">Settings</div>
-        <input
+        <Input
           type="search"
           className="settings-view__search"
           aria-label="Search settings"
@@ -147,9 +147,9 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
             The workbench theme applies to the shell, the editor and the
             terminal.
           </p>
-          <div className="settings-view__field">
-            <span className="settings-view__field-label">Theme</span>
+          <FieldRow label="Theme" htmlFor="settings-theme" horizontal>
             <Select
+              id="settings-theme"
               value={theme}
               aria-label="Theme"
               options={[
@@ -160,7 +160,7 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
                 if (value !== theme) onToggleTheme();
               }}
             />
-          </div>
+          </FieldRow>
         </section>
 
         <section

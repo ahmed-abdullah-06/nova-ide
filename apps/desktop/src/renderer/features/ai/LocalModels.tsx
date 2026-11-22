@@ -17,6 +17,7 @@ import type {
   LocalModelEntry,
   ModelFit,
 } from '../../../shared/local-model-types';
+import { Button, FieldRow, Input, Select } from '../../components/ui';
 import { useLocalModels } from './useLocalModels';
 
 /** The text of a fit. */
@@ -85,14 +86,14 @@ export function LocalModels({
     <section className="ai-models" aria-label="Local models">
       <div className="ai-models__header">
         <h4 className="ai-models__title">Available models</h4>
-        <button
-          type="button"
+        <Button
+          size="sm"
           className="ai-settings__action ai-models__action"
           onClick={models.refresh}
           disabled={models.busy}
         >
           Refresh
-        </button>
+        </Button>
       </div>
 
       {catalog === null ? (
@@ -189,49 +190,55 @@ export function LocalModels({
                 The capabilities are what Ollama reports. The application does
                 not guess them.
               </p>
-              <button
-                type="button"
+              <Button
+                size="sm"
                 className="ai-settings__action ai-models__action"
                 onClick={models.closeDetails}
               >
                 Close
-              </button>
+              </Button>
             </div>
           ) : null}
 
           <div className="ai-models__defaults">
-            <label className="ai-models__default">
-              <span>Default chat model</span>
-              <select
-                className="ai-panel__select"
+            <FieldRow
+              label="Default chat model"
+              htmlFor="default-chat-model"
+              horizontal
+            >
+              <Select
+                id="default-chat-model"
                 aria-label="Default chat model"
                 value={models.defaults.chatModel}
-                onChange={(event) => models.setChatModel(event.target.value)}
-              >
-                <option value="">none</option>
-                {catalog.installed.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="ai-models__default">
-              <span>Default agent model</span>
-              <select
-                className="ai-panel__select"
+                onChange={(value) => models.setChatModel(value)}
+                options={[
+                  { value: '', label: 'none' },
+                  ...catalog.installed.map((model) => ({
+                    value: model.id,
+                    label: model.name,
+                  })),
+                ]}
+              />
+            </FieldRow>
+            <FieldRow
+              label="Default agent model"
+              htmlFor="default-agent-model"
+              horizontal
+            >
+              <Select
+                id="default-agent-model"
                 aria-label="Default agent model"
                 value={models.defaults.agentModel}
-                onChange={(event) => models.setAgentModel(event.target.value)}
-              >
-                <option value="">none</option>
-                {catalog.installed.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(value) => models.setAgentModel(value)}
+                options={[
+                  { value: '', label: 'none' },
+                  ...catalog.installed.map((model) => ({
+                    value: model.id,
+                    label: model.name,
+                  })),
+                ]}
+              />
+            </FieldRow>
             {models.defaults.agentModel.length > 0 ? (
               <AgentWarning
                 model={models.defaults.agentModel}
@@ -244,8 +251,7 @@ export function LocalModels({
           <div className="ai-models__download">
             <h4 className="ai-models__title">Download a model</h4>
             <div className="ai-settings__row">
-              <input
-                type="text"
+              <Input
                 className="ai-settings__key"
                 placeholder="Name of the model (for example qwen2.5:7b)"
                 aria-label="Name of the model"
@@ -254,8 +260,8 @@ export function LocalModels({
                 disabled={running}
                 onChange={(event) => models.setDownloadName(event.target.value)}
               />
-              <button
-                type="button"
+              <Button
+                size="sm"
                 className="ai-settings__action ai-models__action"
                 onClick={models.startDownload}
                 disabled={
@@ -266,7 +272,7 @@ export function LocalModels({
                 }
               >
                 Download
-              </button>
+              </Button>
             </div>
             <label className="ai-models__confirm">
               <input
@@ -304,13 +310,13 @@ export function LocalModels({
                     : ''}
                 </p>
                 {running ? (
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
                     className="ai-settings__action ai-models__action"
                     onClick={models.cancelDownload}
                   >
                     Stop the download
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             ) : null}
@@ -382,52 +388,52 @@ function ModelRow({
             The files are removed from the disk.
           </p>
           <div className="ai-models__item-actions">
-            <button
-              type="button"
+            <Button
+              size="sm"
               className="ai-settings__action ai-models__action ai-models__delete"
               onClick={onConfirmDelete}
               disabled={busy}
             >
               Delete the model
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               className="ai-settings__action ai-models__action"
               onClick={onCancelDelete}
               disabled={busy}
             >
               Keep the model
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
         <div className="ai-models__item-actions">
-          <button
-            type="button"
+          <Button
+            size="sm"
             className="ai-settings__action ai-models__action"
             onClick={onDetails}
             disabled={busy}
           >
             Details
-          </button>
+          </Button>
           {model.loaded ? (
-            <button
-              type="button"
+            <Button
+              size="sm"
               className="ai-settings__action ai-models__action"
               onClick={onUnload}
               disabled={busy}
             >
               Unload
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
+          <Button
+            size="sm"
             className="ai-settings__action ai-models__action ai-models__delete"
             onClick={onDelete}
             disabled={busy}
           >
             Delete
-          </button>
+          </Button>
         </div>
       )}
     </li>
