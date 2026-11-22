@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { AppInfo } from '../../../shared/ipc-types';
 import { Icon } from '../ui/icons';
 import type { Theme } from '../../hooks/useTheme';
 import { LANGUAGES } from '../../utils/language';
@@ -23,7 +22,6 @@ interface StatusBarProps {
   cursor: CursorPosition;
   theme: Theme;
   onToggleTheme: () => void;
-  appInfo: AppInfo | null;
   /** Display name of the active workspace (null when no folder is open). */
   workspaceName: string | null;
   /** Canonical root of the active workspace (for the tooltip). */
@@ -56,7 +54,6 @@ export function StatusBar({
   cursor,
   theme,
   onToggleTheme,
-  appInfo,
   workspaceName,
   workspaceRoot,
   localOnly,
@@ -229,19 +226,6 @@ export function StatusBar({
       >
         {theme === 'dark' ? '☾ Dark' : '☀ Light'}
       </button>
-
-      <span
-        className="status-bar__item status-bar__item--accent"
-        title={
-          appInfo
-            ? `Electron ${appInfo.electronVersion} · Chrome ${appInfo.chromeVersion} · Node ${appInfo.nodeVersion}`
-            : 'Application information'
-        }
-      >
-        {appInfo
-          ? `A6 ${appInfo.appVersion} · Electron ${appInfo.electronVersion}`
-          : 'A6'}
-      </span>
     </footer>
   );
 }

@@ -4,7 +4,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import type { AppInfo, NovaApi, SearchMatch } from '../../shared/ipc-types';
+import type { SearchMatch } from '../../shared/ipc-types';
 import { useTheme } from '../hooks/useTheme';
 import { TabsProvider, useTabs } from '../stores/tabs';
 import { WorkspaceProvider, useWorkspace } from '../stores/workspace';
@@ -66,7 +66,6 @@ function Workspace(): ReactNode {
     startLine: number;
     endLine: number;
   } | null>(null);
-  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const { openFile } = useFileOpener();
   const hasWorkspace = workspaceState.workspace !== null;
   useExternalFileChanges();
@@ -112,30 +111,6 @@ function Workspace(): ReactNode {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [workspaceActions]);
-
-  // Exercise the typed preload bridge once on startup.
-  useEffect(() => {
-    const bridge: NovaApi | undefined = window.nova;
-    if (!bridge) {
-      // Preload unavailable (e.g. page opened outside the Electron shell):
-      // the status bar simply omits the version.
-      return;
-    }
-    let cancelled = false;
-    bridge
-      .getAppInfo()
-      .then((info) => {
-        if (!cancelled) {
-          setAppInfo(info);
-        }
-      })
-      .catch(() => {
-        // Status bar simply omits the version if the bridge is unavailable.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const activeTab =
     state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
@@ -346,7 +321,6 @@ function Workspace(): ReactNode {
         cursor={settingsActive ? { line: 1, column: 1 } : cursor}
         theme={theme}
         onToggleTheme={toggleTheme}
-        appInfo={appInfo}
         workspaceName={workspaceState.workspace?.name ?? null}
         workspaceRoot={workspaceState.workspace?.rootPath ?? null}
         localOnly={ai.localOnly}

@@ -1,5 +1,6 @@
 /** Honest Welcome editor tab backed by real commands and recent workspaces. */
 import { useEffect, type ReactNode } from 'react';
+import a6Mark from '../../../../icons/a6-64.png';
 import type { RecentWorkspace } from '../../../shared/ipc-types';
 import { COMMAND_IDS } from '../../commands/catalog';
 import { useCommands } from '../../commands/CommandProvider';
@@ -25,9 +26,8 @@ const START_ACTIONS: readonly StartAction[] = [
 
 const HELP_ACTIONS: readonly StartAction[] = [
   { id: COMMAND_IDS.shortcuts, label: 'Keyboard Shortcuts', icon: 'keyboard' },
-  { id: COMMAND_IDS.about, label: 'About A6 IDE', icon: 'info' },
+  { id: COMMAND_IDS.about, label: 'About A6', icon: 'info' },
   { id: COMMAND_IDS.openLogsFolder, label: 'Open Logs / Data Folder', icon: 'folderOpen' },
-  { id: COMMAND_IDS.toggleDevTools, label: 'Toggle Developer Tools', icon: 'details' },
 ];
 
 function ActionButton({ action }: { action: StartAction }): ReactNode {
@@ -60,10 +60,10 @@ export function WelcomeView({ recent }: WelcomeViewProps): ReactNode {
     <div className="welcome-view" role="region" aria-label="Welcome">
       <div className="welcome-view__hero">
         <span className="welcome-view__mark" aria-hidden="true">
-          <Icon name="app" size={30} />
+          <img src={a6Mark} alt="" />
         </span>
         <div>
-          <h1>Welcome to A6 IDE</h1>
+          <h1>Welcome to A6</h1>
           <p>Open a folder or file to begin. Everything stays local unless you choose otherwise.</p>
         </div>
       </div>

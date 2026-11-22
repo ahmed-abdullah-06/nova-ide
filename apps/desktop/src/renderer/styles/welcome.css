@@ -30,6 +30,12 @@
   background: var(--surface-raised);
 }
 
+.welcome-view__mark img {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+
 .welcome-view__hero h1 {
   margin: 0 0 6px;
   font-size: 22px;
