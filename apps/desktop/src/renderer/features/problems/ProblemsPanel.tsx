@@ -52,7 +52,7 @@ export function ProblemsPanel({
     return (
       <div className="problems-panel">
         <p className="problems-panel__empty">
-          No problems have been reported for the open files.
+          No problems have been detected
         </p>
       </div>
     );

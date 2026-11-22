@@ -276,6 +276,7 @@ function Workspace(): ReactNode {
           problemCount={problems.errorCount}
           renderOutput={() => (
             <TaskOutputPanel
+              hasWorkspace={hasWorkspace}
               tasks={tasks.tasks}
               runningTask={tasks.runningTask}
               output={tasks.output}

@@ -1,16 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import type { FileEntry, FileKind } from '../../../../shared/ipc-types';
-import { COMMAND_IDS, createCommandDefinitions } from '../../../commands/catalog';
-import { describeKeybindings } from '../../../commands/keybindings';
-import type { Platform } from '../../../commands/types';
 import { useConfirm } from '../../../components/ui/ConfirmProvider';
 import { useTabs } from '../../../stores/tabs';
 import { useWorkspace } from '../../../stores/workspace';
@@ -32,20 +28,6 @@ interface ExplorerProps {
   focusSignal: number;
   /** Bumped by New File (Ctrl+N); starts inline creation at the root. */
   createFileSignal: number;
-}
-
-function detectPlatform(): Platform {
-  if (typeof navigator === 'undefined') {
-    return 'win32';
-  }
-  const agent = navigator.userAgent.toLowerCase();
-  if (agent.includes('mac')) {
-    return 'darwin';
-  }
-  if (agent.includes('linux')) {
-    return 'linux';
-  }
-  return 'win32';
 }
 
 /**
@@ -300,12 +282,6 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
   }, [dispatch]);
 
   const workspace = state.workspace;
-  const platform = useMemo(detectPlatform, []);
-  const shortcutHint = useMemo(() => {
-    const command = createCommandDefinitions().find((entry) => entry.id === COMMAND_IDS.openWorkspace);
-    const spec = command?.keybindings?.[platform] ?? command?.keybindings?.win32 ?? command?.keybindings?.linux;
-    return describeKeybindings(spec, platform) ?? '';
-  }, [platform]);
 
   return (
     <div className="explorer">
@@ -424,7 +400,7 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
 
       {workspace === null ? (
         <div className="explorer__empty">
-          <span className="explorer__empty-title">No Folder Open</span>
+          <span className="explorer__empty-title">Open a folder to explore files</span>
           <button
             type="button"
             className="explorer__open-button"
@@ -432,25 +408,6 @@ export function Explorer({ focusSignal, createFileSignal }: ExplorerProps): Reac
           >
             Open Folder…
           </button>
-          <span className="explorer__empty-hint">{shortcutHint}</span>
-
-          {state.recent.length > 0 ? (
-            <div className="explorer__recent">
-              <span className="explorer__recent-title">RECENT</span>
-              {state.recent.map((item) => (
-                <button
-                  key={item.rootPath}
-                  type="button"
-                  className="explorer__recent-item"
-                  title={item.rootPath}
-                  onClick={() => void actions.openRecent(item.rootPath)}
-                >
-                  <span className="explorer__recent-dot" aria-hidden="true" />
-                  <span className="explorer__recent-name">{item.name}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
       ) : (
         <div

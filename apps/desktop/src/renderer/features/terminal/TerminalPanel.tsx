@@ -5,6 +5,7 @@
  * session and offers the session actions (new, close, copy, paste).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ContextMenu, type ContextMenuItem } from '../../components/ui/ContextMenu';
 import type { Theme } from '../../hooks/useTheme';
 import { TerminalView } from './TerminalView';
 import { useTerminalSessions } from './useTerminalSessions';
@@ -25,6 +26,7 @@ export function TerminalPanel({
 }: TerminalPanelProps): React.JSX.Element {
   const controller = useTerminalSessions(hasWorkspace);
   const [error, setError] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const viewHostRef = useRef<HTMLDivElement | null>(null);
   const handledSignal = useRef(createSignal);
 
@@ -67,9 +69,14 @@ export function TerminalPanel({
     }
   }, []);
 
+  const contextItems: ContextMenuItem[] = [
+    { id: 'copy', label: 'Copy', disabled: controller.activeSessionId === null },
+    { id: 'stop', label: 'Stop', disabled: controller.activeSessionId === null },
+  ];
+
   return (
     <div className="terminal-panel">
-      <div className="terminal-panel__toolbar">
+      <div className="terminal-panel__tabstrip">
         <div
           className="terminal-panel__tabs"
           role="tablist"
@@ -90,6 +97,11 @@ export function TerminalPanel({
                 type="button"
                 className="terminal-panel__tab-label"
                 onClick={() => controller.selectSession(entry.session.id)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  controller.selectSession(entry.session.id);
+                  setMenu({ x: event.clientX, y: event.clientY });
+                }}
                 title={`${entry.session.shell} — ${entry.session.cwd}`}
               >
                 {entry.session.shell}
@@ -106,33 +118,6 @@ export function TerminalPanel({
             </span>
           ))}
         </div>
-        <div className="terminal-panel__actions">
-          <button
-            type="button"
-            className="terminal-panel__action"
-            onClick={() => void handleCreate()}
-            title="New terminal session"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="terminal-panel__action"
-            onClick={handleStop}
-            disabled={controller.activeSessionId === null}
-            title="Stop the running command (Ctrl+C)"
-          >
-            Stop
-          </button>
-          <button
-            type="button"
-            className="terminal-panel__action"
-            onClick={handleCopy}
-            title="Copy the selection"
-          >
-            Copy
-          </button>
-        </div>
       </div>
 
       {error !== null ? (
@@ -141,24 +126,42 @@ export function TerminalPanel({
         </p>
       ) : null}
 
-      <div className="terminal-panel__views" ref={viewHostRef}>
-        {controller.sessions.map((entry) => (
-          <div
-            key={entry.session.id}
-            className="terminal-panel__view"
-            hidden={entry.session.id !== controller.activeSessionId}
-          >
-            <TerminalView
-              theme={theme}
-              sessionId={entry.session.id}
-              active={entry.session.id === controller.activeSessionId}
-              onInput={controller.write}
-              onResize={controller.resize}
-              subscribeOutput={controller.subscribeOutput}
-            />
-          </div>
-        ))}
-      </div>
+      {!hasWorkspace ? (
+        <p className="terminal-panel__empty">Open a folder to start a terminal</p>
+      ) : (
+        <div className="terminal-panel__views" ref={viewHostRef}>
+          {controller.sessions.map((entry) => (
+            <div
+              key={entry.session.id}
+              className="terminal-panel__view"
+              hidden={entry.session.id !== controller.activeSessionId}
+            >
+              <TerminalView
+                theme={theme}
+                sessionId={entry.session.id}
+                active={entry.session.id === controller.activeSessionId}
+                onInput={controller.write}
+                onResize={controller.resize}
+                subscribeOutput={controller.subscribeOutput}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {menu !== null ? (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={contextItems}
+          onClose={() => setMenu(null)}
+          onSelect={(id) => {
+            setMenu(null);
+            if (id === 'copy') handleCopy();
+            if (id === 'stop') handleStop();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

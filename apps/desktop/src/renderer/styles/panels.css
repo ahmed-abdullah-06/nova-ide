@@ -12,14 +12,20 @@
   height: 100%;
 }
 
-.terminal-panel__toolbar {
+.terminal-panel__tabstrip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
+  min-height: 28px;
   padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-panel);
+}
+
+.terminal-panel__empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
 }
 
 .terminal-panel__tabs {

@@ -23,6 +23,8 @@ export interface TaskRunState {
 }
 
 export interface TaskOutputPanelProps {
+  /** True when a workspace is open; without one there is no output to show. */
+  hasWorkspace: boolean;
   /** The scripts of the workspace `package.json`. */
   tasks: TaskDefinition[];
   /** The task that is currently running. */
@@ -38,6 +40,7 @@ export interface TaskOutputPanelProps {
 }
 
 export function TaskOutputPanel({
+  hasWorkspace,
   tasks,
   runningTask,
   output,
@@ -58,6 +61,14 @@ export function TaskOutputPanel({
     },
     [onRun],
   );
+
+  if (!hasWorkspace) {
+    return (
+      <div className="task-panel">
+        <p className="task-panel__empty">No output yet</p>
+      </div>
+    );
+  }
 
   return (
     <div className="task-panel">
