@@ -84,7 +84,7 @@ export function LocalModels({
   return (
     <section className="ai-models" aria-label="Local models">
       <div className="ai-models__header">
-        <h4 className="ai-models__title">Models</h4>
+        <h4 className="ai-models__title">Available models</h4>
         <button
           type="button"
           className="ai-settings__action ai-models__action"

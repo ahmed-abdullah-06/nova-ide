@@ -76,7 +76,7 @@ export function VoiceSettingsPanel({
   if (draft === null) {
     return (
       <section className="ai-settings voice-settings" aria-label="Voice settings">
-        <h3 className="ai-settings__title">Voice</h3>
+        <h3 className="ai-settings__title">Voice input</h3>
         <p className="ai-settings__message">
           {state.error ?? 'The voice settings are loading…'}
         </p>
@@ -93,7 +93,7 @@ export function VoiceSettingsPanel({
 
   return (
     <section className="ai-settings voice-settings" aria-label="Voice settings">
-      <h3 className="ai-settings__title">Voice</h3>
+      <h3 className="ai-settings__title">Voice input</h3>
 
       <label className="ai-settings__confirm">
         <input

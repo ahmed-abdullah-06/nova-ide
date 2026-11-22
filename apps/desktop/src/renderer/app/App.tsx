@@ -209,8 +209,6 @@ function Workspace(): ReactNode {
       />
       <Sidebar
         activity={ui.activity}
-        theme={theme}
-        onToggleTheme={toggleTheme}
         focusSignal={ui.explorerFocusSignal}
         createFileSignal={ui.createFileSignal}
         hasWorkspace={hasWorkspace}
@@ -241,6 +239,7 @@ function Workspace(): ReactNode {
       >
         <EditorArea
           theme={theme}
+          onToggleTheme={toggleTheme}
           onCursorChange={setCursor}
           onSelectionChange={setSelection}
         />

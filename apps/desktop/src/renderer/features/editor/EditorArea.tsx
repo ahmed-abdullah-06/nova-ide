@@ -12,6 +12,7 @@ import { WelcomeView } from '../welcome/WelcomeView';
 
 interface EditorAreaProps {
   theme: Theme;
+  onToggleTheme: () => void;
   onCursorChange: (position: { line: number; column: number }) => void;
   /** Reports the selected lines (the context of the chat). */
   onSelectionChange?: (
@@ -22,6 +23,7 @@ interface EditorAreaProps {
 /** Tab strip + Monaco editor composition (spec §6.1, §8). */
 export function EditorArea({
   theme,
+  onToggleTheme,
   onCursorChange,
   onSelectionChange,
 }: EditorAreaProps): ReactNode {
@@ -70,7 +72,7 @@ export function EditorArea({
       {welcomeActive ? (
         <WelcomeView recent={workspaceState.recent} />
       ) : settingsActive ? (
-        <SettingsView />
+        <SettingsView theme={theme} onToggleTheme={onToggleTheme} />
       ) : (
         <MonacoEditor
           tab={activeTab}

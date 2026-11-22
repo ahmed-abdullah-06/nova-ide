@@ -177,7 +177,7 @@ export function ProviderSettings({
 
   return (
     <section className="ai-settings" aria-label="Provider settings">
-      <h3 className="ai-settings__title">Providers</h3>
+      <h3 className="ai-settings__title">Configured providers</h3>
 
       <ul className="ai-settings__list">
         {providers.map((provider) => (

@@ -7,15 +7,98 @@
  */
 
 .settings-view {
+  display: flex;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-6) clamp(var(--space-4), 5vw, 64px) 64px;
+  overflow: hidden;
   background: var(--surface-app);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
+}
+
+.settings-view__nav {
+  flex: 0 0 200px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+}
+
+.settings-view__nav-title {
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-view__search {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: 5px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-small);
+}
+
+.settings-view__search:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.settings-view__section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-view__section-link {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-align: left;
+}
+
+.settings-view__section-link:hover,
+.settings-view__section-link:focus-visible {
+  background: var(--surface-input);
+  color: var(--text);
+  outline: none;
+}
+
+.settings-view__section-link--active {
+  background: var(--surface-input);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-view__no-match {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  margin: 0;
+  padding: 4px 8px;
+}
+
+.settings-view__content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-6) clamp(var(--space-4), 5vw, 64px) 64px;
+  scroll-behavior: smooth;
 }
 
 .settings-view__header {
@@ -48,6 +131,11 @@
   background: var(--surface-panel);
 }
 
+.settings-view__section--active {
+  border-color: var(--border-strong);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
 .settings-view__section-title {
   margin: 0 0 var(--space-1);
   font-size: 15px;
@@ -56,6 +144,19 @@
 
 .settings-view__section-note {
   margin-bottom: var(--space-3);
+}
+
+.settings-view__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 420px;
+}
+
+.settings-view__field-label {
+  color: var(--text);
+  font-size: var(--font-size-small);
 }
 
 /* The nested controls were designed for the narrow AI panel. On the wide

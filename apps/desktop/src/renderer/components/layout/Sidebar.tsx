@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { ActivityId } from './ActivityBar';
-import type { Theme } from '../../hooks/useTheme';
 import { Explorer } from '../../features/explorer/components/Explorer';
 import { SearchView } from '../../features/search/SearchView';
 import { SourceControlView } from '../../features/git/SourceControlView';
@@ -8,8 +7,6 @@ import type { SearchMatch } from '../../../shared/ipc-types';
 
 interface SidebarProps {
   activity: ActivityId;
-  theme: Theme;
-  onToggleTheme: () => void;
   /** Bumped by Ctrl+Shift+E to focus the explorer tree. */
   focusSignal: number;
   /** True when a workspace is open. */
@@ -26,8 +23,6 @@ interface SidebarProps {
 
 function bodyFor(
   activity: ActivityId,
-  theme: Theme,
-  onToggleTheme: () => void,
   hasWorkspace: boolean,
   onOpenSearchResult: (match: SearchMatch) => void,
   onOpenFile: (path: string) => void,
@@ -47,26 +42,6 @@ function bodyFor(
           onOpenFile={onOpenFile}
         />
       );
-    case 'settings':
-      return (
-        <div className="sidebar__section">
-          <div className="sidebar__header" style={{ padding: '8px 0' }}>
-            Appearance
-          </div>
-          <button
-            type="button"
-            className="sidebar__row"
-            onClick={onToggleTheme}
-            aria-pressed={theme === 'light'}
-          >
-            Theme: {theme === 'dark' ? 'Dark' : 'Light'} (click to switch)
-          </button>
-          <p className="placeholder-view__note" style={{ textAlign: 'left' }}>
-            Providers, models, agent, voice and privacy settings are in the
-            Settings editor tab.
-          </p>
-        </div>
-      );
     default:
       return null;
   }
@@ -81,8 +56,6 @@ const TITLES: Record<ActivityId, string> = {
 
 export function Sidebar({
   activity,
-  theme,
-  onToggleTheme,
   focusSignal,
   hasWorkspace,
   onOpenSearchResult,
@@ -91,8 +64,9 @@ export function Sidebar({
   createFileSignal,
 }: SidebarProps): ReactNode {
   const className = `sidebar${visible ? '' : ' sidebar--hidden'}`;
-  // The explorer renders its own header (title + refresh/close actions).
-  if (activity === 'explorer') {
+  // The Settings editor keeps the Explorer in the side bar. The explorer
+  // renders its own header (title + refresh/close actions).
+  if (activity === 'explorer' || activity === 'settings') {
     return (
       <aside className={className} aria-label="Explorer sidebar" aria-hidden={!visible}>
         <Explorer focusSignal={focusSignal} createFileSignal={createFileSignal} />
@@ -102,14 +76,7 @@ export function Sidebar({
   return (
     <aside className={className} aria-label={`${TITLES[activity]} sidebar`} aria-hidden={!visible}>
       <div className="sidebar__header">{TITLES[activity]}</div>
-      {bodyFor(
-        activity,
-        theme,
-        onToggleTheme,
-        hasWorkspace,
-        onOpenSearchResult,
-        onOpenFile,
-      )}
+      {bodyFor(activity, hasWorkspace, onOpenSearchResult, onOpenFile)}
     </aside>
   );
 }
