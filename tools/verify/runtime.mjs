@@ -50,13 +50,36 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 const DESKTOP = path.join(REPO, 'apps', 'desktop');
-const DEVTOOLS_PORT = 9333;
 const require = createRequire(import.meta.url);
 
 const options = {
   dev: process.argv.includes('--dev'),
   keepOpen: process.argv.includes('--keep-open'),
 };
+
+/**
+ * Reserves an ephemeral DevTools port for this run.
+ *
+ * A fixed port lets a process left by an earlier run answer first, so the
+ * harness can attach to an app with stale agent/UI state. Each run gets its
+ * own port instead; no retry or process cleanup is needed.
+ *
+ * @returns {Promise<number>} A currently free loopback port.
+ */
+async function allocateDevToolsPort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        server.close(() => reject(new Error('No DevTools port was allocated')));
+        return;
+      }
+      server.close(() => resolve(address.port));
+    });
+  });
+}
 
 /**
  * Starts a mock of the local Ollama service.
@@ -682,9 +705,10 @@ function createFixture() {
  * user.
  *
  * @param {string} profileDir The isolated profile directory.
+ * @param {number} devtoolsPort The DevTools port reserved for this run.
  * @returns {import('node:child_process').ChildProcess} The child process.
  */
-function startApp(profileDir) {
+function startApp(profileDir, devtoolsPort) {
   const profileArgument = userDataArgument(profileDir);
   if (options.dev) {
     // Launch Forge directly: no pnpm/cmd shim, no shell, no helper console.
@@ -737,7 +761,7 @@ function startApp(profileDir) {
   return spawn(
     executable,
     [
-      `--remote-debugging-port=${DEVTOOLS_PORT}`,
+      `--remote-debugging-port=${devtoolsPort}`,
       '--use-fake-device-for-media-stream',
       '--use-fake-ui-for-media-stream',
       '--autoplay-policy=no-user-gesture-required',
@@ -768,20 +792,21 @@ async function main() {
 
   const userProfile = realUserDataPath();
   const fingerprintBefore = profileFingerprint(userProfile);
+  const devtoolsPort = await allocateDevToolsPort();
 
-  const app = startApp(profile.dir);
+  const app = startApp(profile.dir, devtoolsPort);
   let session = null;
   let exitCode = 0;
 
   try {
-    const ready = await waitForDevTools('127.0.0.1', DEVTOOLS_PORT, 90000);
+    const ready = await waitForDevTools('127.0.0.1', devtoolsPort, 90000);
     if (!ready) {
       check('application starts', false, 'the DevTools endpoint never answered');
       return;
     }
     check('application starts', true);
 
-    const target = await findPageTarget('127.0.0.1', DEVTOOLS_PORT);
+    const target = await findPageTarget('127.0.0.1', devtoolsPort);
     if (target === null) {
       check('renderer window exists', false);
       return;
@@ -1081,6 +1106,89 @@ async function main() {
       40000,
     );
     check('terminal renders the output of a command', terminalOutput);
+
+    // LF7-2: check the idle agent here, before the workspace-close step.
+    // Closing a workspace terminates its child processes and cancels the
+    // agent, so the same snapshot later would observe a cancelled run. The
+    // renderer also starts from a local idle placeholder; wait for it to
+    // agree with the authoritative main-process state before sampling.
+    const agentTabEarly = await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.ai-panel__mode')];
+        const agent = tabs.find((tab) => tab.textContent.trim() === 'Agent');
+        if (agent === undefined) return false;
+        agent.click();
+        return true;
+      })()`,
+    );
+    await waitFor(
+      session,
+      `document.querySelector('.ai-panel__mode--active')?.textContent.trim() === 'Agent'`,
+      5000,
+    );
+    const agentStateSettled = await waitFor(
+      session,
+      `window.nova.agent.state().then((s) => {
+        const state = document.querySelector('.agent-panel__state');
+        return state !== null &&
+          state.getAttribute('data-state') === s.state
+          ? s.state
+          : false;
+      })`,
+      5000,
+    );
+    const agentHeaderIdle = await session.evaluate(
+      `(() => {
+        const status = document.querySelector('.agent-panel__status');
+        const state = document.querySelector('.agent-panel__state');
+        const buttons = [...document.querySelectorAll(
+          '.agent-panel__status-actions button')].map(
+          (node) => node.getAttribute('aria-label'));
+        return {
+          label: state === null ? null : state.textContent.trim(),
+          state: state === null ? null : state.getAttribute('data-state'),
+          progress: document.querySelectorAll('.agent-panel__progress').length,
+          auditButtons: [...document.querySelectorAll('.agent-panel button')].filter(
+            (node) => node.textContent.includes('audit history')).length,
+          permissionRows: document.querySelectorAll(
+            '.agent-panel__permissions-slot, .agent-panel__permissions-summary').length,
+          emptyTimelines: document.querySelectorAll('.agent-panel__timeline').length,
+          buttons,
+          autoApproveItems: document.querySelectorAll('.status-bar__auto-approve').length,
+          oneLine: status !== null &&
+            getComputedStyle(status).whiteSpace === 'nowrap' &&
+            status.getBoundingClientRect().height <= 32,
+        };
+      })()`,
+    );
+    check(
+      'the idle agent shows one status line and icon menus',
+      agentTabEarly === true &&
+        agentStateSettled === 'idle' &&
+        agentHeaderIdle.label === 'Idle' &&
+        agentHeaderIdle.state === 'idle' &&
+        agentHeaderIdle.progress === 0 &&
+        agentHeaderIdle.auditButtons === 0 &&
+        agentHeaderIdle.permissionRows === 0 &&
+        agentHeaderIdle.emptyTimelines === 0 &&
+        agentHeaderIdle.autoApproveItems === 0 &&
+        agentHeaderIdle.buttons.includes('Agent permissions') &&
+        agentHeaderIdle.buttons.includes('Audit history') &&
+        agentHeaderIdle.oneLine === true,
+      JSON.stringify({ agentStateSettled, agentHeaderIdle }),
+    );
+    await session.evaluate(
+      `(() => {
+        const tabs = [...document.querySelectorAll('.ai-panel__mode')];
+        const chat = tabs.find((tab) => tab.textContent.trim() === 'Chat');
+        if (chat !== undefined) chat.click();
+      })()`,
+    );
+    await waitFor(
+      session,
+      `document.querySelector('.ai-panel__mode--active')?.textContent.trim() === 'Chat'`,
+      5000,
+    );
 
     // LF6-3: reopening a no-folder workspace keeps the Explorer empty state
     // to one short line and one Open Folder button; the shortcut hint and the
@@ -3267,47 +3375,6 @@ async function main() {
     );
     check('the agent mode of the panel is reachable', agentTab === true);
 
-    // LF7-2: the agent has one status line, icon-only menus and no progress
-    // bar while idle. The audit and permissions content lives in popovers.
-    const agentHeaderIdle = await session.evaluate(
-      `(() => {
-        const status = document.querySelector('.agent-panel__status');
-        const state = document.querySelector('.agent-panel__state');
-        const buttons = [...document.querySelectorAll(
-          '.agent-panel__status-actions button')].map(
-          (node) => node.getAttribute('aria-label'));
-        return {
-          label: state === null ? null : state.textContent.trim(),
-          state: state === null ? null : state.getAttribute('data-state'),
-          progress: document.querySelectorAll('.agent-panel__progress').length,
-          auditButtons: [...document.querySelectorAll('.agent-panel button')].filter(
-            (node) => node.textContent.includes('audit history')).length,
-          permissionRows: document.querySelectorAll(
-            '.agent-panel__permissions-slot, .agent-panel__permissions-summary').length,
-          emptyTimelines: document.querySelectorAll('.agent-panel__timeline').length,
-          buttons,
-          autoApproveItems: document.querySelectorAll('.status-bar__auto-approve').length,
-          oneLine: status !== null &&
-            getComputedStyle(status).whiteSpace === 'nowrap' &&
-            status.getBoundingClientRect().height <= 32,
-        };
-      })()`,
-    );
-    check(
-      'the idle agent shows one status line and icon menus',
-      agentHeaderIdle.label === 'Idle' &&
-        agentHeaderIdle.state === 'idle' &&
-        agentHeaderIdle.progress === 0 &&
-        agentHeaderIdle.auditButtons === 0 &&
-        agentHeaderIdle.permissionRows === 0 &&
-        agentHeaderIdle.emptyTimelines === 0 &&
-        agentHeaderIdle.autoApproveItems === 0 &&
-        agentHeaderIdle.buttons.includes('Agent permissions') &&
-        agentHeaderIdle.buttons.includes('Audit history') &&
-        agentHeaderIdle.oneLine === true,
-      JSON.stringify(agentHeaderIdle),
-    );
-
     const permissionMenu = await session.evaluate(
       `new Promise((resolve) => {
         const button = document.querySelector('button[aria-label="Agent permissions"]');
@@ -4450,15 +4517,72 @@ async function main() {
       JSON.stringify({ hiddenPanel, shownPanel }),
     );
 
-    // Ctrl+N reuses the explorer inline creation instead of an untitled buffer.
+    // Ctrl+N reuses the explorer inline creation instead of an untitled
+    // buffer. Keyboard commands are ignored while a menu, quick pick or modal
+    // is open, and an inline input cancels itself on blur. Wait for both the
+    // keyboard preconditions and a focused input instead of sampling the DOM
+    // once after an unrelated menu toggle.
+    const beforeNewFile = await traceSequence(session);
+    const keyboardReady = await waitFor(
+      session,
+      `(() => {
+        if (typeof window.nova === 'undefined') return false;
+        if (document.querySelector(
+          '.menu-bar__dropdown, .quick-pick, [aria-modal="true"]') !== null) return false;
+        if (document.querySelector('.explorer__tree') === null) return false;
+        return document.querySelector('.editor-tab--active .editor-tab__name') !== null;
+      })()`,
+      5000,
+    );
+    const neutralFocus = await session.evaluate(
+      `(() => {
+        const tab = document.querySelector('.editor-tab--active');
+        if (tab === null) return false;
+        tab.focus({ preventScroll: true });
+        return document.activeElement === tab;
+      })()`,
+    );
+
     await session.pressShortcut('n', 'KeyN', 78, ['ctrl']);
+    const newFileCommand = await waitFor(
+      session,
+      `(() => {
+        if (typeof window.__a6CommandTrace !== 'function') return false;
+        const trace = window.__a6CommandTrace();
+        if (!Array.isArray(trace) || trace.length === 0) return false;
+        const last = trace[trace.length - 1];
+        return last.sequence > ${beforeNewFile} &&
+          last.id === 'a6.file.newFile' &&
+          last.source === 'user-keyboard' &&
+          last.outcome === 'ran'
+          ? last
+          : false;
+      })()`,
+      5000,
+    );
     const inlineCreate = await waitFor(
       session,
-      `document.querySelector('.tree-node__input') !== null`,
+      `(() => {
+        const input = document.querySelector('.tree-node__input');
+        return input !== null && document.activeElement === input;
+      })()`,
       5000,
     );
     await session.pressKey('Escape', 27);
-    check('Ctrl+N starts inline creation in the explorer', inlineCreate === true);
+    const inlineDismissed = await waitFor(
+      session,
+      `document.querySelector('.tree-node__input') === null`,
+      5000,
+    );
+    check(
+      'Ctrl+N starts inline creation in the explorer',
+      keyboardReady === true &&
+        neutralFocus === true &&
+        newFileCommand !== false &&
+        inlineCreate === true &&
+        inlineDismissed === true,
+      JSON.stringify({ keyboardReady, neutralFocus, newFileCommand, inlineCreate, inlineDismissed }),
+    );
 
     // Terminal-owned Ctrl+B/J/P must reach xterm instead of firing the shell
     // commands that own those bindings when focus is elsewhere.
