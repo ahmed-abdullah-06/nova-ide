@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@12.18.0",
   "scripts": {
-    "dev": "pnpm --filter @a6/desktop dev",
+    "dev": "node tools/dev/start.mjs",
     "start": "pnpm --filter @a6/desktop start",
     "build": "pnpm --filter @a6/desktop build",
     "package": "pnpm --filter @a6/desktop package",
