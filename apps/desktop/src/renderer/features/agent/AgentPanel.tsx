@@ -301,22 +301,24 @@ export function AgentPanel(): React.JSX.Element {
         />
       ) : null}
 
-      <div className="agent-panel__timeline">
-        {state.events.map((event) => (
-          <div
-            key={`${event.step}-${event.at}-${event.type}`}
-            className={`agent-panel__event agent-panel__event--${event.type}`}
-          >
-            {event.tool !== undefined ? (
-              <span className="agent-panel__event-tool">{event.tool}</span>
-            ) : null}
-            <span className="agent-panel__event-summary">{event.summary}</span>
-            {event.error !== undefined ? (
-              <span className="agent-panel__event-error">{event.error}</span>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      {state.events.length > 0 ? (
+        <div className="agent-panel__timeline">
+          {state.events.map((event) => (
+            <div
+              key={`${event.step}-${event.at}-${event.type}`}
+              className={`agent-panel__event agent-panel__event--${event.type}`}
+            >
+              {event.tool !== undefined ? (
+                <span className="agent-panel__event-tool">{event.tool}</span>
+              ) : null}
+              <span className="agent-panel__event-summary">{event.summary}</span>
+              {event.error !== undefined ? (
+                <span className="agent-panel__event-error">{event.error}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {state.approval !== null ? (
         <div className="agent-panel__approval" role="alert">

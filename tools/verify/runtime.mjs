@@ -3203,6 +3203,7 @@ async function main() {
             (node) => node.textContent.includes('audit history')).length,
           permissionRows: document.querySelectorAll(
             '.agent-panel__permissions-slot, .agent-panel__permissions-summary').length,
+          emptyTimelines: document.querySelectorAll('.agent-panel__timeline').length,
           buttons,
           autoApproveItems: document.querySelectorAll('.status-bar__auto-approve').length,
           oneLine: status !== null &&
@@ -3218,6 +3219,7 @@ async function main() {
         agentHeaderIdle.progress === 0 &&
         agentHeaderIdle.auditButtons === 0 &&
         agentHeaderIdle.permissionRows === 0 &&
+        agentHeaderIdle.emptyTimelines === 0 &&
         agentHeaderIdle.autoApproveItems === 0 &&
         agentHeaderIdle.buttons.includes('Agent permissions') &&
         agentHeaderIdle.buttons.includes('Audit history') &&
