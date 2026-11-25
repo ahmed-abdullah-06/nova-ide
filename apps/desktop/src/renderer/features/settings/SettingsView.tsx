@@ -55,6 +55,7 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
   const [query, setQuery] = useState('');
   const [active, setActive] = useState<SectionId>('appearance');
   const navRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   const visibleSections = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -77,8 +78,50 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  // The highlight follows the section the user is actually reading, not just
+  // the last nav item that was clicked. A search only exposes its matches, so
+  // the same scan works for the filtered list.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (content === null || visibleSections.length === 0) {
+      return;
+    }
+    let frame = 0;
+    const update = (): void => {
+      frame = 0;
+      const threshold = content.getBoundingClientRect().top + 64;
+      const atBottom =
+        content.scrollTop + content.clientHeight >= content.scrollHeight - 4;
+      let current = visibleSections[0]?.id ?? 'appearance';
+      for (const section of visibleSections) {
+        const node = document.getElementById(`settings-${section.id}`);
+        if (node !== null && !node.hidden && node.getBoundingClientRect().top <= threshold) {
+          current = section.id;
+        }
+      }
+      if (atBottom) {
+        current = visibleSections[visibleSections.length - 1]?.id ?? current;
+      }
+      setActive(current);
+    };
+    const onScroll = (): void => {
+      if (frame === 0) {
+        frame = window.requestAnimationFrame(update);
+      }
+    };
+    content.addEventListener('scroll', onScroll, { passive: true });
+    update();
+    return () => {
+      content.removeEventListener('scroll', onScroll);
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [visibleSections]);
+
   // A status-bar or popover action can open Settings directly at a section.
-  // The signal lets a repeated request scroll to the same section again.
+  // The signal lets a repeated request scroll to the same section again. This
+  // runs after the scroll tracker so the requested section wins on mount.
   useEffect(() => {
     const section = ui.settingsSection;
     if (section === null) {
@@ -144,7 +187,11 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
         </nav>
       </aside>
 
-      <div className="settings-view__content" id="settings-content">
+      <div
+        className="settings-view__content"
+        id="settings-content"
+        ref={contentRef}
+      >
         <header className="settings-view__header">
           <h1 className="settings-view__title">Settings</h1>
           <p className="settings-view__intro">

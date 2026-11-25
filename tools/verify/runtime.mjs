@@ -343,6 +343,49 @@ async function waitFor(session, expression, timeoutMs = 30000) {
 }
 
 /**
+ * Scrolls a Settings section into view and waits for its nav item to become
+ * the active one. Used for the LF8-2 scroll-follow check.
+ *
+ * @param {import('./cdp.mjs').DevToolsSession} session The session.
+ * @param {string} id The section id without the `settings-` prefix.
+ * @param {string} label The visible label of the nav item.
+ * @returns {Promise<boolean>} True when the highlight followed the scroll.
+ */
+async function scrollSettingsSection(session, id, label) {
+  const scrolled = await session.evaluate(
+    `(() => {
+      const content = document.querySelector('.settings-view__content');
+      const section = document.getElementById(${JSON.stringify(`settings-${id}`)});
+      if (content === null || section === null) return false;
+      content.style.scrollBehavior = 'auto';
+      const delta = section.getBoundingClientRect().top -
+        content.getBoundingClientRect().top;
+      content.scrollTop += delta - 24;
+      content.dispatchEvent(new Event('scroll'));
+      return true;
+    })()`,
+  );
+  const highlighted = await waitFor(
+    session,
+    `(() => {
+      const content = document.querySelector('.settings-view__content');
+      const section = document.getElementById(${JSON.stringify(`settings-${id}`)});
+      const link = document.querySelector(
+        '.settings-view__section-link[aria-current="true"]');
+      if (content === null || section === null || link === null) return false;
+      const top = section.getBoundingClientRect().top;
+      const bottom = section.getBoundingClientRect().bottom;
+      const viewTop = content.getBoundingClientRect().top;
+      const viewBottom = content.getBoundingClientRect().bottom;
+      return link.textContent.trim() === ${JSON.stringify(label)} &&
+        bottom > viewTop && top < viewBottom ? true : false;
+    })()`,
+    5000,
+  );
+  return scrolled === true && highlighted === true;
+}
+
+/**
  * Clicks an element with a real mouse event.
  *
  * A DOM `click()` is not a trusted user gesture, so it cannot open the
@@ -1945,6 +1988,30 @@ async function main() {
       'the Settings section list is keyboard navigable',
       settingsKeyboard === 1,
       String(settingsKeyboard),
+    );
+
+    // LF8-2: the nav highlight follows the section the user scrolls to,
+    // including the ones below Models and the one at the bottom.
+    const agentHighlighted = await scrollSettingsSection(session, 'agent', 'Agent');
+    const voiceHighlighted = await scrollSettingsSection(session, 'voice', 'Voice');
+    const privacyHighlighted = await scrollSettingsSection(
+      session,
+      'privacy',
+      'Privacy',
+    );
+    check(
+      'the Settings nav highlight follows Agent, Voice and Privacy in view',
+      agentHighlighted === true &&
+        voiceHighlighted === true &&
+        privacyHighlighted === true,
+      `agent=${agentHighlighted} voice=${voiceHighlighted} privacy=${privacyHighlighted}`,
+    );
+    await session.evaluate(
+      `(() => {
+        const content = document.querySelector('.settings-view__content');
+        if (content !== null) content.scrollTop = 0;
+        return true;
+      })()`,
     );
 
     const settingsRendered = await waitFor(
