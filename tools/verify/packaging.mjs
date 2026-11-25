@@ -28,6 +28,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,7 @@ import {
   createIsolatedProfile,
   profileFingerprint,
   realUserDataPath,
+  userDataArgument,
 } from './isolation.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -48,8 +50,6 @@ const REPO = path.resolve(HERE, '..', '..');
 const DESKTOP = path.join(REPO, 'apps', 'desktop');
 const PACKAGED = path.join(DESKTOP, 'out', 'A6-win32-x64');
 const NUPKG = path.join(DESKTOP, 'out', 'make', 'squirrel.windows', 'x64', 'A6IDE-0.1.0-full.nupkg');
-const PORT = 9410;
-const SURVIVAL_PORT = 9411;
 
 const results = [];
 function check(name, ok, detail = '') {
@@ -84,6 +84,47 @@ Get-CimInstance Win32_Process |
   return output.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
 }
 
+/**
+ * Reserves an ephemeral DevTools port for one launch.
+ *
+ * Fixed ports let an app left by an earlier verification answer first, so a
+ * check can silently inspect the wrong profile. Each launch gets its own port
+ * instead; no retry is needed.
+ *
+ * @returns {Promise<number>} A currently free loopback port.
+ */
+async function allocateDevToolsPort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        server.close(() => reject(new Error('No DevTools port was allocated')));
+        return;
+      }
+      server.close(() => resolve(address.port));
+    });
+  });
+}
+
+/** Kills the whole process tree of a launched app, not just its parent. */
+function terminateApp(app) {
+  if (app?.pid === undefined || app.killed) return;
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      return;
+    } catch {
+      // The tree has already gone; fall through to the Node fallback.
+    }
+  }
+  app.kill();
+}
+
 function readNuspec() {
   const script = `
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -97,7 +138,7 @@ $text
   return powerShell(script);
 }
 
-async function connect(port = PORT) {
+async function connect(port) {
   if (!(await waitForDevTools('127.0.0.1', port, 60000))) {
     throw new Error('DevTools endpoint never became ready');
   }
@@ -138,6 +179,11 @@ async function run() {
   // may change it. 10G pinned userData to "NOVA IDE", so that is the path the
   // harness must guard — not the new product name.
   const realBefore = profileFingerprint(realUserDataPath());
+  const cleanPort = await allocateDevToolsPort();
+  let survivalPort = await allocateDevToolsPort();
+  if (survivalPort === cleanPort) {
+    survivalPort = await allocateDevToolsPort();
+  }
 
   // --- 1. Metadata -------------------------------------------------------
   const exe = path.join(PACKAGED, 'A6IDE.exe');
@@ -254,12 +300,12 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
   try {
     const cleanExe = path.join(cleanExeDir, 'A6IDE.exe');
     app = spawn(cleanExe, [
-      `--remote-debugging-port=${PORT}`,
+      `--remote-debugging-port=${cleanPort}`,
       `--user-data-dir=${profile.dir}`,
     ], { stdio: 'ignore', windowsHide: true });
     check('launches from a path containing spaces', app.pid !== undefined, cleanExeDir);
 
-    session = await connect();
+    session = await connect(cleanPort);
     const ready = await waitForExpression(
       session,
       `window.nova !== undefined && document.readyState === 'complete'`,
@@ -304,7 +350,7 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
     check('persisted data is valid settings JSON', settings?.settings?.localOnly === true);
   } finally {
     session?.close();
-    if (app && !app.killed) app.kill();
+    terminateApp(app);
     await delay(2000);
 
     // --- 5. No surviving processes ---------------------------------------
@@ -319,14 +365,14 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
     profile.cleanup();
   }
 
-  // --- 6. 10G profile survival (packaged, no explicit --user-data-dir) ---
-  // Prove the packaged app still reads the legacy "NOVA IDE" profile after the
-  // rename. We point APPDATA at a throwaway root and seed
-  //   <fake APPDATA>/NOVA IDE/app-settings.json = { version:1, settings:{ localOnly:true } }
-  // then launch WITHOUT --user-data-dir. The startup resolver must pin userData
-  // to <fake APPDATA>/NOVA IDE, so window.nova.localOnly() returns true and no
-  // fresh <fake APPDATA>/A6 profile is created. A regression that drops the pin
-  // would read a fresh A6 profile (localOnly false) and fail this check.
+  // --- 6. 10G profile survival (packaged, isolated legacy profile) -------
+  // Prove the packaged app still reads a legacy "NOVA IDE" profile after the
+  // rename. On Windows Electron resolves appData through the OS known-folder
+  // API, so changing the APPDATA environment variable does NOT isolate this
+  // launch; it silently reads the real user profile. Use the harness's
+  // supported --user-data-dir isolation, pointed at a seeded legacy directory.
+  // The resolver that pins an ordinary launch to "NOVA IDE" is covered by the
+  // profilePath unit tests.
   if (process.platform === 'win32') {
     const survivalRoot = mkdtempSync(path.join(tmpdir(), 'A6 profile survival '));
     const legacyDir = path.join(survivalRoot, 'NOVA IDE');
@@ -343,14 +389,13 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
     try {
       survivalApp = spawn(
         path.join(PACKAGED, 'A6IDE.exe'),
-        [`--remote-debugging-port=${SURVIVAL_PORT}`],
-        {
-          stdio: 'ignore',
-          windowsHide: true,
-          env: { ...process.env, APPDATA: survivalRoot },
-        },
+        [
+          `--remote-debugging-port=${survivalPort}`,
+          userDataArgument(legacyDir),
+        ],
+        { stdio: 'ignore', windowsHide: true },
       );
-      survivalSession = await connect(SURVIVAL_PORT);
+      survivalSession = await connect(survivalPort);
       const survivalReady = await waitForExpression(
         survivalSession,
         `window.nova !== undefined && document.readyState === 'complete'`,
@@ -378,7 +423,7 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
       );
     } finally {
       survivalSession?.close();
-      if (survivalApp && !survivalApp.killed) survivalApp.kill();
+      terminateApp(survivalApp);
       await delay(2000);
       rmSync(survivalRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
