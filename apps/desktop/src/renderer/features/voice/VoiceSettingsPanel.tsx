@@ -15,7 +15,7 @@ import {
   describePushToTalkEvent,
 } from '../../../shared/pushToTalk';
 import type { VoiceSettings } from '../../../shared/voice-types';
-import { Button, FieldRow, Input, Select } from '../../components/ui';
+import { Button, Checkbox, FieldRow, Input, Select, Toggle } from '../../components/ui';
 import type { VoiceSettingsState } from './useVoiceSettings';
 
 export interface VoiceSettingsPanelProps {
@@ -96,14 +96,12 @@ export function VoiceSettingsPanel({
     <section className="ai-settings voice-settings" aria-label="Voice settings">
       <h3 className="ai-settings__title">Voice input</h3>
 
-      <label className="ai-settings__confirm">
-        <input
-          type="checkbox"
-          checked={draft.enabled}
-          onChange={(event) => update({ enabled: event.target.checked })}
-        />
-        Voice assistant: record the microphone and read answers aloud
-      </label>
+      <Toggle
+        checked={draft.enabled}
+        label="Voice assistant"
+        description="Record the microphone and read answers aloud."
+        onChange={(checked) => update({ enabled: checked })}
+      />
 
       <FieldRow label="Recognition" htmlFor="voice-engine" horizontal>
         <Select
@@ -199,10 +197,7 @@ export function VoiceSettingsPanel({
         </>
       ) : null}
 
-      <div className="ai-settings__row">
-        <label className="voice-settings__label" htmlFor="voice-name">
-          Voice
-        </label>
+      <FieldRow label="Voice" htmlFor="voice-name" horizontal>
         <Select
           id="voice-name"
           value={draft.voice}
@@ -215,37 +210,34 @@ export function VoiceSettingsPanel({
             })),
           ]}
         />
-      </div>
+      </FieldRow>
 
-      <div className="ai-settings__row">
-        <label className="voice-settings__label" htmlFor="voice-rate">
-          Speed
-        </label>
-        <Input
-          id="voice-rate"
-          type="range"
-          min={0.5}
-          max={2}
-          step={0.1}
-          value={draft.rate}
-          onChange={(event) => {
-            const value = Number(event.target.value);
-            if (Number.isFinite(value)) {
-              update({ rate: value });
-            }
-          }}
-        />
-        <span className="ai-settings__off">{draft.rate.toFixed(1)}×</span>
-      </div>
+      <FieldRow label="Speed" htmlFor="voice-rate" horizontal>
+        <div className="voice-settings__speed">
+          <Input
+            id="voice-rate"
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={draft.rate}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value)) {
+                update({ rate: value });
+              }
+            }}
+          />
+          <span className="ai-settings__off">{draft.rate.toFixed(1)}×</span>
+        </div>
+      </FieldRow>
 
-      <label className="ai-settings__confirm">
-        <input
-          type="checkbox"
-          checked={draft.readCodeBlocks}
-          onChange={(event) => update({ readCodeBlocks: event.target.checked })}
-        />
-        Read code blocks aloud (they are skipped by default)
-      </label>
+      <Checkbox
+        checked={draft.readCodeBlocks}
+        label="Read code blocks aloud"
+        description="They are skipped by default."
+        onChange={(checked) => update({ readCodeBlocks: checked })}
+      />
 
       <div className="ai-settings__row">
         <label className="voice-settings__label" htmlFor="voice-push-to-talk">
@@ -305,7 +297,7 @@ export function VoiceSettingsPanel({
         <span className="ai-settings__off">seconds</span>
       </div>
 
-      <div className="ai-settings__row">
+      <div className="voice-settings__actions">
         <Button
           size="sm"
           className="ai-settings__action"

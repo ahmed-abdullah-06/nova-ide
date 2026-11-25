@@ -2864,6 +2864,65 @@ async function main() {
     );
     check('the voice settings are rendered', voicePanel === true);
 
+    // LF8-4: the voice booleans use the shared primitives, Voice and Speed
+    // share the settings grid, and the Save action has normal form spacing.
+    const voiceForm = await session.evaluate(
+      `(() => {
+        const section = document.querySelector('.voice-settings');
+        if (section === null) return null;
+        const themeRow = document.querySelector(
+          '#settings-appearance .ui-field-row--horizontal');
+        const themeStyle = themeRow === null ? null : getComputedStyle(themeRow);
+        const rows = [...section.querySelectorAll('.ui-field-row--horizontal')]
+          .filter((row) => {
+            const label = row.querySelector('.ui-field-row__label');
+            return label !== null &&
+              ['Voice', 'Speed'].includes(label.textContent.trim());
+          });
+        const rowDetails = rows.map((row) => {
+          const label = row.querySelector('.ui-field-row__label');
+          const style = getComputedStyle(row);
+          return {
+            label: label.textContent.trim(),
+            display: style.display,
+            columns: style.gridTemplateColumns,
+          };
+        });
+        const toggle = section.querySelector(
+          'button[role="switch"][aria-label="Voice assistant"]');
+        const checkbox = section.querySelector('.ui-checkbox input[type="checkbox"]');
+        const checkboxLabel = checkbox === null ? null :
+          checkbox.closest('.ui-checkbox').textContent.trim();
+        const save = [...section.querySelectorAll('button')].find((node) =>
+          node.textContent.includes('Save voice settings'));
+        const actions = save === undefined ? null :
+          save.closest('.voice-settings__actions');
+        const actionStyle = actions === null ? null : getComputedStyle(actions);
+        return {
+          toggle: toggle !== null && toggle.getAttribute('aria-checked') !== null,
+          checkbox: checkbox !== null &&
+            checkboxLabel !== null && checkboxLabel.includes('Read code blocks aloud'),
+          rows: rowDetails,
+          sameGrid: themeStyle !== null && rowDetails.length === 2 &&
+            rowDetails.every((row) => row.display === 'grid' &&
+              row.columns === themeStyle.gridTemplateColumns),
+          saveSpacing: actionStyle !== null &&
+            parseFloat(actionStyle.marginTop) > 0 &&
+            parseFloat(actionStyle.paddingTop) > 0 &&
+            actionStyle.borderTopStyle === 'solid',
+        };
+      })()`,
+    );
+    check(
+      'the voice form uses shared primitives, one grid and spaced Save action',
+      voiceForm !== null &&
+        voiceForm.toggle === true &&
+        voiceForm.checkbox === true &&
+        voiceForm.sameGrid === true &&
+        voiceForm.saveSpacing === true,
+      JSON.stringify(voiceForm),
+    );
+
     const micWhileOff = await clickWithMouse(
       session,
       '.ai-panel__mic-button',

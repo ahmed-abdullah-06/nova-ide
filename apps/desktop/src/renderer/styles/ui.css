@@ -397,6 +397,41 @@
   accent-color: var(--accent);
 }
 
+/* ---------- Checkbox ---------- */
+
+.ui-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.ui-checkbox__input {
+  flex: none;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.ui-checkbox__input:disabled {
+  cursor: default;
+}
+
+.ui-checkbox__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ui-checkbox__label {
+  color: var(--text);
+  font-size: var(--font-size-base);
+}
+
+.ui-checkbox__description {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
 /* ---------- Toggle ---------- */
 
 .ui-toggle {

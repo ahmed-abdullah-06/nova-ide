@@ -989,6 +989,30 @@
   flex: none;
 }
 
+.voice-settings__speed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.voice-settings__speed .ui-input[type='range'] {
+  flex: 1;
+}
+
+.voice-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.voice-settings__actions .ai-settings__message {
+  margin: 0;
+}
+
 .voice-settings__advanced summary {
   cursor: pointer;
   color: var(--color-muted);
