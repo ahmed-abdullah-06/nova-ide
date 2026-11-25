@@ -22,6 +22,7 @@
  *   node tools/verify/runtime.mjs --keep-open    # leave the app running
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import {
   existsSync,
@@ -50,6 +51,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 const DESKTOP = path.join(REPO, 'apps', 'desktop');
 const DEVTOOLS_PORT = 9333;
+const require = createRequire(import.meta.url);
 
 const options = {
   dev: process.argv.includes('--dev'),
@@ -637,7 +639,12 @@ function createFixture() {
   // The fixture is a real git repository with one commit and one untracked
   // file, so the source control panel is verified against real git output.
   const git = (...args) =>
-    spawnSync('git', args, { cwd: root, stdio: 'ignore', shell: false });
+    spawnSync('git', args, {
+      cwd: root,
+      stdio: 'ignore',
+      shell: false,
+      windowsHide: true,
+    });
   git('init', '--initial-branch=main');
   git('config', 'user.email', 'verify@example.com');
   git('config', 'user.name', 'NOVA Verify');
@@ -680,20 +687,35 @@ function createFixture() {
 function startApp(profileDir) {
   const profileArgument = userDataArgument(profileDir);
   if (options.dev) {
+    // Launch Forge directly: no pnpm/cmd shim, no shell, no helper console.
+    const forgePackage = require.resolve('@electron-forge/cli/package.json');
+    const forgeCli = path.join(
+      path.dirname(forgePackage),
+      'dist',
+      'electron-forge.js',
+    );
+    const guard = path
+      .join(REPO, 'tools', 'dev', 'hide-console.cjs')
+      .replace(/\\/g, '/');
+    const nodeOptions = [
+      process.env.NODE_OPTIONS ?? '',
+      `--require="${guard}"`,
+    ]
+      .filter((value) => value.length > 0)
+      .join(' ');
     return spawn(
-      'pnpm',
-      [
-        'exec',
-        'electron-forge',
-        'start',
-        '--inspect-port=9334',
-        profileArgument,
-      ],
+      process.execPath,
+      [forgeCli, 'start', '--inspect-port=9334', profileArgument],
       {
         cwd: DESKTOP,
         stdio: 'inherit',
-        shell: true,
-        env: { ...process.env, NOVA_VERIFY: '1' },
+        shell: false,
+        windowsHide: true,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: nodeOptions,
+          NOVA_VERIFY: '1',
+        },
       },
     );
   }
@@ -721,7 +743,7 @@ function startApp(profileDir) {
       '--autoplay-policy=no-user-gesture-required',
       profileArgument,
     ],
-    { stdio: 'inherit' },
+    { stdio: 'inherit', windowsHide: true },
   );
 }
 

@@ -64,7 +64,7 @@ function powerShell(script) {
     return execFileSync(
       'powershell.exe',
       ['-NoProfile', '-Command', script],
-      { encoding: 'utf8' },
+      { encoding: 'utf8', windowsHide: true },
     ).trim();
   } catch {
     return null;
@@ -256,7 +256,7 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
     app = spawn(cleanExe, [
       `--remote-debugging-port=${PORT}`,
       `--user-data-dir=${profile.dir}`,
-    ], { stdio: 'ignore' });
+    ], { stdio: 'ignore', windowsHide: true });
     check('launches from a path containing spaces', app.pid !== undefined, cleanExeDir);
 
     session = await connect();
@@ -346,6 +346,7 @@ if ($ok) { Write-Output ("ok|" + ($details -join ';')) } else { Write-Output ("b
         [`--remote-debugging-port=${SURVIVAL_PORT}`],
         {
           stdio: 'ignore',
+          windowsHide: true,
           env: { ...process.env, APPDATA: survivalRoot },
         },
       );

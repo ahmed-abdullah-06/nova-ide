@@ -69,7 +69,7 @@ const app = spawn(
     'A6IDE.exe',
   ),
   [`--remote-debugging-port=${PORT}`, userDataArgument(profile.dir)],
-  { stdio: 'ignore' },
+  { stdio: 'ignore', windowsHide: true },
 );
 
 /** Waits until the DevTools endpoint answers. */

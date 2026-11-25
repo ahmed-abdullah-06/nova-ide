@@ -73,6 +73,7 @@ foreach ($p in $all | Where-Object { $ids -contains $_.ProcessId }) { $bytes += 
     return Number(
       execFileSync('powershell.exe', ['-NoProfile', '-Command', script], {
         encoding: 'utf8',
+        windowsHide: true,
       }).trim(),
     );
   } catch {
@@ -100,7 +101,7 @@ function startApp(profile) {
   return spawn(EXE, [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${profile}`,
-  ], { stdio: 'ignore' });
+  ], { stdio: 'ignore', windowsHide: true });
 }
 
 async function connect() {
