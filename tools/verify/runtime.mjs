@@ -1859,6 +1859,35 @@ async function main() {
       JSON.stringify(settingsStructure),
     );
 
+    // LF8-1: the master switch is session-only, starts off in the main
+    // process and is rendered as a real switch in the Agent section.
+    const allowAllDefault = await waitFor(
+      session,
+      `(async () => {
+        const view = await window.nova.agent.permissionSettings();
+        return view.allowAll === false ? 'off' : false;
+      })()`,
+      10000,
+    );
+    const allowAllControl = await waitFor(
+      session,
+      `(() => {
+        const section = document.querySelector('#settings-agent');
+        const toggle = section?.querySelector(
+          'button[role="switch"][aria-label="Allow all (auto-approve)"]');
+        if (toggle === null || toggle === undefined) return false;
+        return toggle.getAttribute('aria-checked') === 'false' &&
+          section.textContent.includes('resets on restart') &&
+          section.textContent.includes('Forbidden operations') ? true : false;
+      })()`,
+      10000,
+    );
+    check(
+      'Allow all is off by default and shown as a session-only switch',
+      allowAllDefault === 'off' && allowAllControl === true,
+      `view=${String(allowAllDefault)} control=${String(allowAllControl)}`,
+    );
+
     const settingsSearch = await session.evaluate(
       `(() => {
         const input = document.querySelector('input[aria-label="Search settings"]');
@@ -3108,6 +3137,7 @@ async function main() {
           permissionRows: document.querySelectorAll(
             '.agent-panel__permissions-slot, .agent-panel__permissions-summary').length,
           buttons,
+          autoApproveItems: document.querySelectorAll('.status-bar__auto-approve').length,
           oneLine: status !== null &&
             getComputedStyle(status).whiteSpace === 'nowrap' &&
             status.getBoundingClientRect().height <= 32,
@@ -3121,6 +3151,7 @@ async function main() {
         agentHeaderIdle.progress === 0 &&
         agentHeaderIdle.auditButtons === 0 &&
         agentHeaderIdle.permissionRows === 0 &&
+        agentHeaderIdle.autoApproveItems === 0 &&
         agentHeaderIdle.buttons.includes('Agent permissions') &&
         agentHeaderIdle.buttons.includes('Audit history') &&
         agentHeaderIdle.oneLine === true,
@@ -3136,7 +3167,8 @@ async function main() {
           const popover = document.querySelector('.ui-popover[role="dialog"]');
           const text = popover === null ? '' : popover.textContent;
           button.click();
-          resolve(text.includes('Forbidden operations') ? text.slice(0, 120) : false);
+          resolve(text.includes('Forbidden operations') && text.includes('Allow all')
+            ? text.slice(0, 120) : false);
         }, 250);
       })`,
     );

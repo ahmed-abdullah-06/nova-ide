@@ -639,6 +639,17 @@ button.status-bar__item:hover {
   color: var(--accent-text);
 }
 
+/* LF8-1: a visible warning while the session-wide master switch is on. */
+.status-bar__auto-approve {
+  color: var(--color-warning, var(--warning));
+  font-weight: 600;
+}
+
+.status-bar__auto-approve:hover {
+  background: var(--surface-hover);
+  color: var(--color-warning, var(--warning));
+}
+
 /* ---------- Shared placeholder view ---------- */
 
 .placeholder-view {

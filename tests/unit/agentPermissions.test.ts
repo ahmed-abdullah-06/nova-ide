@@ -9,13 +9,16 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkPathPermission,
   checkToolPermission,
   isForbiddenCommand,
   validateToolArguments,
+  type AgentPermissionSettings,
 } from '../../apps/desktop/src/main/agent/permissions';
+import { ToolExecutor } from '../../apps/desktop/src/main/agent/toolExecutor';
+import { checkPrivacyGate } from '../../apps/desktop/src/main/providers/privacy';
 import { AGENT_TOOLS } from '../../apps/desktop/src/main/agent/tools';
 import type { AgentToolSchema } from '../../apps/desktop/src/shared/agent-types';
 
@@ -40,20 +43,21 @@ afterEach(async () => {
   await rm(outside, { recursive: true, force: true });
 });
 
-describe('the permission of a tool', () => {
-  /** The tool with the given name. */
-  const tool = (name: string): AgentToolSchema => {
-    const found = AGENT_TOOLS.find((entry) => entry.name === name);
-    if (found === undefined) {
-      throw new Error(`unknown tool ${name}`);
-    }
-    return found;
-  };
+/** The tool with the given name. */
+function tool(name: string): AgentToolSchema {
+  const found = AGENT_TOOLS.find((entry) => entry.name === name);
+  if (found === undefined) {
+    throw new Error(`unknown tool ${name}`);
+  }
+  return found;
+}
 
+describe('the permission of a tool', () => {
   it('allows a read only tool', () => {
     const outcome = checkToolPermission(tool('read_file'), {
       allowedLevels: ['read'],
       allowCloudContext: false,
+      allowAll: false,
     });
     expect(outcome.decision).toBe('allow');
   });
@@ -62,6 +66,7 @@ describe('the permission of a tool', () => {
     const outcome = checkToolPermission(tool('write_file'), {
       allowedLevels: ['read'],
       allowCloudContext: false,
+      allowAll: false,
     });
     expect(outcome.decision).toBe('ask');
   });
@@ -70,6 +75,7 @@ describe('the permission of a tool', () => {
     const outcome = checkToolPermission(tool('run_command'), {
       allowedLevels: ['read'],
       allowCloudContext: false,
+      allowAll: false,
     });
     expect(outcome.decision).toBe('ask');
   });
@@ -78,6 +84,7 @@ describe('the permission of a tool', () => {
     const outcome = checkToolPermission(tool('write_file'), {
       allowedLevels: ['read', 'workspace'],
       allowCloudContext: false,
+      allowAll: false,
     });
     expect(outcome.decision).toBe('allow');
   });
@@ -86,6 +93,7 @@ describe('the permission of a tool', () => {
     const outcome = checkToolPermission(tool('read_file'), {
       allowedLevels: [],
       allowCloudContext: false,
+      allowAll: false,
     });
     expect(outcome.decision).toBe('ask');
   });
@@ -96,6 +104,7 @@ describe('the permission of a tool', () => {
       {
         allowedLevels: ['read', 'workspace', 'command'],
         allowCloudContext: true,
+        allowAll: false,
       },
     );
     expect(outcome.decision).toBe('deny');
@@ -107,9 +116,103 @@ describe('the permission of a tool', () => {
       {
         allowedLevels: ['read', 'workspace', 'command', 'system'],
         allowCloudContext: true,
+        allowAll: false,
       },
     );
     expect(outcome.decision).toBe('deny');
+  });
+});
+
+describe('Allow all for one session', () => {
+  const settings: AgentPermissionSettings = {
+    allowedLevels: ['read'],
+    allowCloudContext: false,
+    allowAll: true,
+  };
+
+  /** An executor with no real services: forbidden calls stop before them. */
+  function executor(): ToolExecutor {
+    return new ToolExecutor({
+      files: {} as never,
+      search: {} as never,
+      git: {} as never,
+      tasks: {} as never,
+    });
+  }
+
+  function context(requestApproval: () => Promise<boolean>) {
+    return {
+      runId: 'run-1',
+      root,
+      signal: new AbortController().signal,
+      settings,
+      requestApproval,
+      createProposal: () => {
+        throw new Error('a forbidden call must not create a proposal');
+      },
+      commands: [],
+      inspected: [],
+    };
+  }
+
+  it('allows reading, changing files and running commands without asking', () => {
+    expect(checkToolPermission(tool('read_file'), settings).decision).toBe(
+      'allow',
+    );
+    expect(checkToolPermission(tool('write_file'), settings).decision).toBe(
+      'allow',
+    );
+    expect(checkToolPermission(tool('run_command'), settings).decision).toBe(
+      'allow',
+    );
+  });
+
+  it('still refuses forbidden tools and the system level', () => {
+    expect(
+      checkToolPermission(
+        { ...tool('read_file'), name: 'delete_file' },
+        settings,
+      ).decision,
+    ).toBe('deny');
+    expect(
+      checkToolPermission(
+        { ...tool('read_file'), level: 'system' },
+        settings,
+      ).decision,
+    ).toBe('deny');
+  });
+
+  it('still refuses a forbidden command without asking', async () => {
+    const approval = vi.fn(async () => false);
+    const outcome = await executor().execute(
+      tool('run_command'),
+      { argv: ['npm', 'install'] },
+      context(approval) as never,
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('forbidden');
+    expect(approval).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a path outside the workspace', async () => {
+    const approval = vi.fn(async () => false);
+    const outcome = await executor().execute(
+      tool('write_file'),
+      { path: path.join(outside, 'escape.txt'), content: 'no' },
+      context(approval) as never,
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('outside the workspace');
+    expect(approval).not.toHaveBeenCalled();
+  });
+
+  it('does not change the privacy gate or Local-only mode', () => {
+    // Allow all has no field for cloud context; the privacy gate keeps its
+    // own independent decision, including the Local-only refusal.
+    expect(settings.allowCloudContext).toBe(false);
+    expect(
+      checkPrivacyGate('cloud', true, true, true, true, true)?.code,
+    ).toBe('disabled');
   });
 });
 

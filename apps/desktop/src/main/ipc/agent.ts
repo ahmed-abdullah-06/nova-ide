@@ -28,6 +28,7 @@ export interface AgentHandlers {
   audit: Handler<'agent:audit'>;
   permissionSettings: Handler<'agent:permission-settings'>;
   updatePermission: Handler<'agent:permission-update'>;
+  setAllowAll: Handler<'agent:allow-all'>;
 }
 
 export function createAgentHandlers(
@@ -141,6 +142,14 @@ export function createAgentHandlers(
         return { ok: false, code: 'CANCELLED', message: result.message };
       }
       agent.recordPermissionChange(category, allowed);
+      return { ok: true, value: result.view };
+    },
+    setAllowAll: async (enabled) => {
+      const result = await permissions.setAllowAll(enabled);
+      if (!result.ok) {
+        return { ok: false, code: 'CANCELLED', message: result.message };
+      }
+      agent.recordAllowAllChange(enabled);
       return { ok: true, value: result.view };
     },
   };

@@ -7,8 +7,16 @@
  * privacy rule by itself. A section list scrolls the editor to one section
  * and the search field filters sections by their labels.
  */
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { FieldRow, Input, Select, Toggle } from '../../components/ui';
+import { useUi } from '../../stores/ui';
 import type { Theme } from '../../hooks/useTheme';
 import { useAiContext } from '../ai/AiContext';
 import { LocalModels } from '../ai/LocalModels';
@@ -42,6 +50,7 @@ export interface SettingsViewProps {
 export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): ReactNode {
   const ai = useAiContext();
   const voiceSettings = useVoiceSettingsContext();
+  const ui = useUi();
   const [modelsRevision, setModelsRevision] = useState(0);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState<SectionId>('appearance');
@@ -67,6 +76,18 @@ export function SettingsView({ theme, onToggleTheme }: SettingsViewProps): React
       .getElementById(`settings-${id}`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // A status-bar or popover action can open Settings directly at a section.
+  // The signal lets a repeated request scroll to the same section again.
+  useEffect(() => {
+    const section = ui.settingsSection;
+    if (section === null) {
+      return;
+    }
+    setQuery('');
+    setActive(section);
+    window.requestAnimationFrame(() => goToSection(section));
+  }, [ui.settingsSection, ui.settingsSectionSignal]);
 
   const handleNavKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,

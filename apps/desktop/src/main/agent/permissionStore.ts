@@ -67,6 +67,8 @@ export class PermissionSettingsStore {
       current: { ...this.current },
       defaults: { ...DEFAULT_AGENT_PERMISSION_CONFIG },
       allowCloudContext: this.allowCloudContext,
+      // The master switch is session-only and never read from this file.
+      allowAll: false,
     };
   }
 

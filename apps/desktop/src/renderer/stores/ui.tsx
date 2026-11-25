@@ -23,6 +23,15 @@ export interface WindowState {
   fullScreen: boolean;
 }
 
+/** The Settings sections a caller may jump to directly. */
+export type SettingsSectionId =
+  | 'appearance'
+  | 'providers'
+  | 'models'
+  | 'agent'
+  | 'voice'
+  | 'privacy';
+
 /** Renderer-local size persistence, mirroring the existing theme preference. */
 const LAYOUT_STORAGE_PREFIX = 'nova.layout.';
 
@@ -87,6 +96,11 @@ interface UiContextValue {
   requestNewFile: () => void;
   /** Shows the terminal tab and asks its panel to create a new session. */
   requestNewTerminal: () => void;
+  /** Section the Settings view should scroll to when it is opened. */
+  settingsSection: SettingsSectionId | null;
+  /** Bumped on every request so the same section can be requested twice. */
+  settingsSectionSignal: number;
+  requestSettingsSection: (section: SettingsSectionId) => void;
 }
 
 const UiContext = createContext<UiContextValue | null>(null);
@@ -107,6 +121,10 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
   const [createFileSignal, setCreateFileSignal] = useState(0);
   const [terminalCreateSignal, setTerminalCreateSignal] = useState(0);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(
+    null,
+  );
+  const [settingsSectionSignal, setSettingsSectionSignal] = useState(0);
   const [windowState, setWindowState] = useState<WindowState>({
     maximized: false,
     fullScreen: false,
@@ -274,6 +292,14 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
     bumpLayout();
   }, [bumpLayout]);
 
+  const requestSettingsSection = useCallback(
+    (section: SettingsSectionId) => {
+      setSettingsSection(section);
+      setSettingsSectionSignal((signal) => signal + 1);
+    },
+    [],
+  );
+
   const value = useMemo<UiContextValue>(
     () => ({
       activity,
@@ -306,6 +332,9 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       toggleAiPanel,
       requestNewFile,
       requestNewTerminal,
+      settingsSection,
+      settingsSectionSignal,
+      requestSettingsSection,
     }),
     [
       activity,
@@ -321,7 +350,10 @@ export function UiProvider({ children }: { children: ReactNode }): ReactNode {
       layoutSignal,
       requestNewFile,
       requestNewTerminal,
+      requestSettingsSection,
       searchFocusSignal,
+      settingsSection,
+      settingsSectionSignal,
       setActivity,
       setAiPanelWidth,
       setBottomPanelHeight,

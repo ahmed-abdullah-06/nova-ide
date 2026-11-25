@@ -72,6 +72,14 @@ export interface ToolContext {
     expectedMtimeMs: number | null;
     created: boolean;
   }) => AgentProposal;
+  /**
+   * Applies a prepared change immediately (the main-process allow-all flow).
+   *
+   * Optional so existing tool contexts keep the normal "wait for the user"
+   * behaviour. The agent service supplies it only in main, and it reuses the
+   * same checkpoint/write/conflict path as an accepted proposal.
+   */
+  autoApplyProposal?: (proposal: AgentProposal) => Promise<boolean>;
   /** The commands that ran (for the summary of the run). */
   commands: AgentCommandRecord[];
   /** The files the agent looked at. */
@@ -381,6 +389,27 @@ export class ToolExecutor {
     };
   }
 
+  /** Applies a prepared change when the main process enabled allow-all. */
+  private async autoApply(
+    context: ToolContext,
+    proposal: AgentProposal,
+  ): Promise<{ ok: boolean; applied: boolean; message?: string }> {
+    if (
+      context.autoApplyProposal === undefined ||
+      context.settings.allowAll !== true
+    ) {
+      return { ok: true, applied: false };
+    }
+    const applied = await context.autoApplyProposal(proposal);
+    return applied
+      ? { ok: true, applied: true }
+      : {
+          ok: false,
+          applied: false,
+          message: `The change of "${proposal.relativePath}" could not be applied.`,
+        };
+  }
+
   /** Proposes the content of a file (nothing is written). */
   private async writeFile(
     args: Record<string, unknown>,
@@ -404,7 +433,7 @@ export class ToolExecutor {
     const expectedMtimeMs = existing.ok ? existing.value.mtimeMs : null;
     const created = !existing.ok;
 
-    context.createProposal({
+    const proposal = context.createProposal({
       path: absolute,
       relativePath: relative,
       before,
@@ -412,11 +441,20 @@ export class ToolExecutor {
       expectedMtimeMs,
       created,
     });
+    const applied = await this.autoApply(context, proposal);
+    if (!applied.ok) {
+      return {
+        ok: false,
+        content: applied.message ?? 'The change could not be applied.',
+        error: 'the change could not be applied',
+      };
+    }
     return {
       ok: true,
-      content:
-        `The change of "${relative}" was prepared. ` +
-        'The user has to accept it before it is written.',
+      content: applied.applied
+        ? `The change of "${relative}" was applied by Allow all.`
+        : `The change of "${relative}" was prepared. ` +
+          'The user has to accept it before it is written.',
       inspected: [relative],
     };
   }
@@ -458,7 +496,7 @@ export class ToolExecutor {
       };
     }
     const after = existing.value.content.replace(search, replace);
-    context.createProposal({
+    const proposal = context.createProposal({
       path: path.resolve(context.root, relative),
       relativePath: relative,
       before: existing.value.content,
@@ -466,11 +504,20 @@ export class ToolExecutor {
       expectedMtimeMs: existing.value.mtimeMs,
       created: false,
     });
+    const applied = await this.autoApply(context, proposal);
+    if (!applied.ok) {
+      return {
+        ok: false,
+        content: applied.message ?? 'The change could not be applied.',
+        error: 'the change could not be applied',
+      };
+    }
     return {
       ok: true,
-      content:
-        `The change of "${relative}" was prepared. ` +
-        'The user has to accept it before it is written.',
+      content: applied.applied
+        ? `The change of "${relative}" was applied by Allow all.`
+        : `The change of "${relative}" was prepared. ` +
+          'The user has to accept it before it is written.',
       inspected: [relative],
     };
   }

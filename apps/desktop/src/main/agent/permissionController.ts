@@ -21,6 +21,8 @@ export interface PermissionControllerOptions {
   settings: AgentPermissionSettings;
   /** Asks the user to confirm a widening (a native dialog in the app). */
   confirmWidening: (category: AgentPermissionCategory) => Promise<boolean>;
+  /** Asks the user to confirm the session-wide master switch in main. */
+  confirmAllowAll: () => Promise<boolean>;
 }
 
 /** The outcome of a change. */
@@ -44,10 +46,37 @@ export class PermissionController {
     await this.readyPromise;
   }
 
-  /** The settings in force. */
+  /** The settings in force, including the session-only master switch. */
   async view(): Promise<AgentPermissionView> {
     await this.ready();
-    return this.options.store.currentView();
+    return {
+      ...this.options.store.currentView(),
+      allowAll: this.options.settings.allowAll,
+    };
+  }
+
+  /**
+   * Turns the session-wide master switch on or off.
+   *
+   * Enabling always asks the main process to show the confirmation dialog;
+   * the renderer cannot send a "confirmed" flag. Disabling is immediate and
+   * restores the stored categories. Nothing here is written to disk, so a
+   * restart returns to the narrow defaults.
+   */
+  async setAllowAll(enabled: boolean): Promise<PermissionUpdateResult> {
+    await this.ready();
+    if (enabled && !this.options.settings.allowAll) {
+      const confirmed = await this.options.confirmAllowAll();
+      if (!confirmed) {
+        return {
+          ok: false,
+          cancelled: true,
+          message: 'Allow all was not enabled.',
+        };
+      }
+    }
+    this.options.settings.allowAll = enabled;
+    return { ok: true, view: await this.view() };
   }
 
   /**
@@ -73,7 +102,7 @@ export class PermissionController {
     }
     await this.options.store.setCategory(category, allowed);
     this.options.store.applyTo(this.options.settings);
-    return { ok: true, view: this.options.store.currentView() };
+    return { ok: true, view: await this.view() };
   }
 
   /** Loads the file and copies the policy into the shared settings. */

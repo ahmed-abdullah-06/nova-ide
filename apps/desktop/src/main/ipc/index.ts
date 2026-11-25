@@ -33,6 +33,7 @@ import { createWindowHandlers } from './window';
 import { createEditHandlers } from './edit';
 import { CloseFlow } from '../closeFlow';
 import {
+  assertAllowAll,
   assertNoArgs,
   assertOneString,
   assertOptionalCwd,
@@ -174,6 +175,38 @@ async function confirmPermissionWidening(
       'operations (delete, install, git commit/push, shells and anything ' +
       'outside the workspace) stay blocked.',
     buttons: ['Allow', 'Keep the current setting'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const result =
+    window === undefined
+      ? await dialog.showMessageBox(options)
+      : await dialog.showMessageBox(window, options);
+  return result.response === 0;
+}
+
+/**
+ * Asks the user to turn on the session-wide master switch (LF8-1).
+ *
+ * Cancel is the default and the cancel action, so a dismissed dialog never
+ * widens the policy. The renderer cannot pass a "confirmed" flag through
+ * IPC; this dialog is the only confirmation.
+ */
+async function confirmAllowAll(): Promise<boolean> {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  const options = {
+    type: 'warning' as const,
+    title: 'Turn on Allow all?',
+    message:
+      'Allow the agent to read, prepare file changes and run commands ' +
+      'without asking for the rest of this session?',
+    detail:
+      'File changes will be applied automatically, but they still get a ' +
+      'checkpoint and stay revertible. Forbidden operations, path ' +
+      'containment, the privacy gate and Local-only mode stay enforced. ' +
+      'The switch resets when the application restarts.',
+    buttons: ['Allow all for this session', 'Cancel'],
     defaultId: 1,
     cancelId: 1,
     noLink: true,
@@ -360,11 +393,14 @@ export function registerIpcHandlers(
   const permissionSettings: AgentPermissionSettings = {
     allowedLevels: [...DEFAULT_PERMISSION_SETTINGS.allowedLevels],
     allowCloudContext: DEFAULT_PERMISSION_SETTINGS.allowCloudContext,
+    // Session-only: a new process starts with Allow all off.
+    allowAll: DEFAULT_PERMISSION_SETTINGS.allowAll,
   };
   const permissionController = new PermissionController({
     store: permissionStore,
     settings: permissionSettings,
     confirmWidening: confirmPermissionWidening,
+    confirmAllowAll,
   });
   const agentService = new AgentService({
     providers: providerService,
@@ -811,6 +847,11 @@ export function registerIpcHandlers(
     IpcChannels.agentPermissionUpdate,
     assertPermissionUpdate,
     agentHandlers.updatePermission,
+  );
+  registerChannel(
+    IpcChannels.agentAllowAll,
+    assertAllowAll,
+    agentHandlers.setAllowAll,
   );
 
   // AI providers

@@ -32,6 +32,7 @@ import type {
   AgentPlan,
   AgentPlanDecision,
   AgentPlanEdit,
+  AgentProposal,
   AgentRevertPreview,
   AgentRevertResult,
   AgentRunState,
@@ -209,6 +210,15 @@ export class AgentService {
       'permission',
       `the "${category}" permission was ${allowed ? 'allowed' : 'not allowed'}`,
       { decision: allowed ? 'allow' : 'deny' },
+    );
+  }
+
+  /** Records the session-wide master switch (metadata only). */
+  recordAllowAllChange(enabled: boolean): void {
+    this.log(
+      'permission',
+      `Allow all was ${enabled ? 'enabled' : 'disabled'} for this session`,
+      { decision: enabled ? 'allow' : 'deny' },
     );
   }
 
@@ -403,6 +413,18 @@ export class AgentService {
     if (proposal === undefined) {
       return { ok: false, message: 'The change does not exist.' };
     }
+    return this.applyProposal(proposal);
+  }
+
+  /**
+   * Writes a proposal through the same path for a user acceptance and for
+   * an automatic apply under allow-all. The checkpoint, the changed-file
+   * list and the revert metadata are identical in both cases.
+   */
+  private async applyProposal(
+    proposal: AgentProposal,
+    automatic = false,
+  ): Promise<{ ok: boolean; message?: string }> {
     const { writeProposal } = await import('./writeProposal');
     const result = await writeProposal(
       proposal,
@@ -412,20 +434,25 @@ export class AgentService {
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
-    this.proposals.remove(runId, proposalId);
+    this.proposals.remove(proposal.runId, proposal.id);
     // The content before the change is kept, so the user can revert the
     // whole run later.
-    await this.proposals.addToCheckpoint(runId, {
+    await this.proposals.addToCheckpoint(proposal.runId, {
       path: proposal.path,
       content: proposal.created ? null : proposal.before,
       after: proposal.after,
     });
-    this.revertibleRunId = runId;
+    this.revertibleRunId = proposal.runId;
     if (!this.changedFiles.includes(proposal.relativePath)) {
       this.changedFiles.push(proposal.relativePath);
     }
     this.lastChangeAt = Date.now();
-    this.log('proposal', `the change of ${proposal.relativePath} was accepted`);
+    this.log(
+      'proposal',
+      automatic
+        ? `the change of ${proposal.relativePath} was applied by Allow all`
+        : `the change of ${proposal.relativePath} was accepted`,
+    );
     this.options.onFileChanged(proposal.path);
     this.publish();
     return { ok: true };
@@ -804,6 +831,17 @@ export class AgentService {
         this.log('proposal', `a change of ${input.relativePath} was prepared`);
         this.publish();
         return proposal;
+      },
+      autoApplyProposal: async (proposal) => {
+        // The policy object is owned by main. The model and the renderer
+        // cannot set it; only the confirmed IPC flow can.
+        if (!this.options.permissions.allowAll) {
+          return false;
+        }
+        if (this.currentRunId !== proposal.runId) {
+          return false;
+        }
+        return (await this.applyProposal(proposal, true)).ok;
       },
       commands: this.commands,
       inspected: this.inspected,

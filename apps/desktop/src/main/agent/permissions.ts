@@ -49,12 +49,22 @@ export interface AgentPermissionSettings {
   allowedLevels: AgentPermissionLevel[];
   /** True when the user allows the agent to send content to a cloud provider. */
   allowCloudContext: boolean;
+  /**
+   * True while the session-wide "Allow all" master switch is on.
+   *
+   * It adds the three configurable levels to the effective policy, but it
+   * is never a way around the checks below: forbidden tools, the system
+   * level, path containment, the privacy gate and Local-only mode are
+   * evaluated independently. It is not persisted by the settings store.
+   */
+  allowAll: boolean;
 }
 
 /** The default settings: everything that changes something needs a user. */
 export const DEFAULT_PERMISSION_SETTINGS: AgentPermissionSettings = {
   allowedLevels: ['read'],
   allowCloudContext: false,
+  allowAll: false,
 };
 
 /** The categories a user can configure (system is never one of them). */
@@ -100,10 +110,12 @@ export function permissionConfig(
 export function settingsFromConfig(
   config: AgentPermissionConfig,
   allowCloudContext = false,
+  allowAll = false,
 ): AgentPermissionSettings {
   return {
     allowedLevels: permissionLevels(config),
     allowCloudContext,
+    allowAll,
   };
 }
 
@@ -250,6 +262,16 @@ export function checkToolPermission(
       decision: 'deny',
       level: tool.level,
       reason: 'This operation would change something outside the workspace.',
+    };
+  }
+  if (settings.allowAll) {
+    // The master switch only lifts the three categories the user can
+    // configure. It is checked after the deny cases and never reaches a
+    // path, privacy or Local-only check.
+    return {
+      decision: 'allow',
+      level: tool.level,
+      reason: 'Allow all is on for this session.',
     };
   }
   if (settings.allowedLevels.includes(tool.level)) {

@@ -28,6 +28,10 @@ interface StatusBarProps {
   workspaceRoot: string | null;
   /** Real local-only state from the shared AI controller. */
   localOnly: boolean;
+  /** True while the session-only Allow-all switch is on (LF8-1). */
+  allowAll: boolean;
+  /** Opens Settings with the Agent section selected. */
+  onOpenAgentSettings: () => void;
   /** Real git branch/change summary; null when no repository is open. */
   gitSummary: GitStatusSummary | null;
   /** Diagnostics of the open files. */
@@ -57,6 +61,8 @@ export function StatusBar({
   workspaceName,
   workspaceRoot,
   localOnly,
+  allowAll,
+  onOpenAgentSettings,
   gitSummary,
   errorCount,
   warningCount,
@@ -137,6 +143,18 @@ export function StatusBar({
         <Icon name="shield" size={13} />
         {localOnly ? 'Local-only: on' : 'Local-only: off'}
       </span>
+
+      {allowAll ? (
+        <button
+          type="button"
+          className="status-bar__item status-bar__auto-approve"
+          onClick={onOpenAgentSettings}
+          title="Allow all is on for this session. Open Settings > Agent."
+        >
+          <Icon name="warning" size={13} />
+          Agent: auto-approve
+        </button>
+      ) : null}
 
       <span className="status-bar__spacer" />
 

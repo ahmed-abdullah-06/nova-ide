@@ -172,6 +172,7 @@ const novaApi: NovaApi = {
     permissionSettings: () => invoke(IpcChannels.agentPermissionSettings),
     updatePermission: (category, allowed) =>
       invoke(IpcChannels.agentPermissionUpdate, category, allowed),
+    setAllowAll: (enabled) => invoke(IpcChannels.agentAllowAll, enabled),
     onEvent: (listener) =>
       subscribe<{ runId: string; event: AgentEvent }>(
         IpcPushChannels.agentEvent,

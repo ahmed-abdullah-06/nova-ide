@@ -9,8 +9,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentService } from '../../apps/desktop/src/main/agent/agentService';
 import { diffLines, unifiedDiff } from '../../apps/desktop/src/main/agent/diff';
 import { ProposalStore } from '../../apps/desktop/src/main/agent/proposalStore';
+import type { AgentProposal } from '../../apps/desktop/src/shared/agent-types';
 import {
   applyRevert,
   previewRevert,
@@ -183,6 +185,71 @@ describe('the checkpoint of a run', () => {
       },
     };
   }
+
+  it('checkpoints and records an automatically applied change', async () => {
+    const files = checkpointFiles();
+    const service = new AgentService({
+      providers: {
+        resolve: async () => null,
+        settingsOf: async () => ({ enabled: true }),
+      } as never,
+      credentials: {} as never,
+      files: files as never,
+      executor: {} as never,
+      getRoot: () => root,
+      permissions: {
+        allowedLevels: ['read', 'workspace', 'command'],
+        allowCloudContext: false,
+        allowAll: true,
+      },
+      audit: {
+        append: () => undefined,
+        list: () => [],
+        flush: async () => undefined,
+      } as never,
+      onEvent: () => undefined,
+      onState: () => undefined,
+      onFileChanged: () => undefined,
+    });
+    // The private apply path is the one both acceptance and Allow all use.
+    const internal = service as unknown as {
+      currentRunId: string;
+      changedFiles: string[];
+      proposals: ProposalStore;
+      applyProposal: (
+        proposal: AgentProposal,
+        automatic?: boolean,
+      ) => Promise<{ ok: boolean }>;
+    };
+    internal.currentRunId = 'run-auto';
+
+    const file = path.join(root, 'src', 'app.ts');
+    const before = await readFile(file, 'utf8');
+    const { stat } = await import('node:fs/promises');
+    const info = await stat(file);
+    const proposal = internal.proposals.create('run-auto', {
+      path: file,
+      relativePath: 'src/app.ts',
+      before,
+      after: 'const a = 3;\n',
+      expectedMtimeMs: info.mtimeMs,
+      created: false,
+    });
+
+    const applied = await internal.applyProposal(proposal, true);
+    expect(applied.ok).toBe(true);
+    expect(await readFile(file, 'utf8')).toBe('const a = 3;\n');
+    expect(internal.proposals.list('run-auto')).toHaveLength(0);
+    expect(service.getState().revertibleRunId).toBe('run-auto');
+    expect(internal.changedFiles).toEqual(['src/app.ts']);
+
+    const checkpoint = internal.proposals.checkpointOf('run-auto');
+    expect(checkpoint).toBeDefined();
+    if (checkpoint !== undefined) {
+      const preview = await previewRevert(checkpoint, root, [], files as never);
+      expect(preview.files[0]?.conflict).toBeNull();
+    }
+  });
 
   it('restores a file that was not changed after the run', async () => {
     const store = new ProposalStore();

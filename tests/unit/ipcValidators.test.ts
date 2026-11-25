@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertAllowAll,
   assertAgentTask,
   assertApprovalAnswer,
   assertChatRequest,
@@ -391,6 +392,16 @@ describe('IPC argument validators', () => {
     // `system` is not a category the renderer may configure.
     expect(() => assertPermissionUpdate(['system', true])).toThrow();
     expect(() => assertPermissionUpdate(['read', true, false])).toThrow();
+  });
+
+  it('validates Allow all and accepts no confirmation flag', () => {
+    expect(() => assertAllowAll([true])).not.toThrow();
+    expect(() => assertAllowAll([false])).not.toThrow();
+    expect(() => assertAllowAll([])).toThrow();
+    expect(() => assertAllowAll(['yes'])).toThrow();
+    expect(() => assertAllowAll([true, true])).toThrow();
+    expect(() => assertAllowAll([undefined])).toThrow();
+    expect(isAllowedChannel(IpcChannels.agentAllowAll)).toBe(true);
   });
 
   it('validates a plan answer and only accepts description edits', () => {

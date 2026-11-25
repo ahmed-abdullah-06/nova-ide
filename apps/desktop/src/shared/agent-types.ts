@@ -108,6 +108,14 @@ export interface AgentPermissionView {
   defaults: AgentPermissionConfig;
   /** True when the user allows a cloud provider to receive content. */
   allowCloudContext: boolean;
+  /**
+   * True while the session-wide "Allow all" master switch is on.
+   *
+   * This value is deliberately not persisted: a restart returns to the
+   * narrow defaults. The main process owns the switch; the renderer only
+   * displays and requests it.
+   */
+  allowAll: boolean;
 }
 
 /**

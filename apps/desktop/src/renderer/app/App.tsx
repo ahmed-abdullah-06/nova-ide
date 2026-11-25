@@ -30,6 +30,10 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { EditorArea } from '../features/editor/EditorArea';
 import { TerminalPanel } from '../features/terminal/TerminalPanel';
 import { VoiceSettingsProvider } from '../features/voice/VoiceSettingsContext';
+import {
+  AgentPermissionsProvider,
+  useAgentPermissions,
+} from '../features/agent/AgentPermissionContext';
 import { ProblemsPanel } from '../features/problems/ProblemsPanel';
 import { TaskOutputPanel } from '../features/tasks/TaskOutputPanel';
 import { useTasks } from '../features/tasks/useTasks';
@@ -61,6 +65,7 @@ function Workspace(): ReactNode {
   const ui = useUi();
   const commands = useCommands();
   const ai = useAiContext();
+  const permissions = useAgentPermissions();
   const [cursor, setCursor] = useState<CursorPosition>({ line: 1, column: 1 });
   const [selection, setSelection] = useState<{
     startLine: number;
@@ -121,6 +126,13 @@ function Workspace(): ReactNode {
   /** One entry point for the gear and Ctrl+,: open the Settings tab. */
   const handleOpenSettings = (): void => {
     ui.showActivity('settings');
+    openSettings();
+  };
+
+  /** Opens Settings at Agent, used by the auto-approve status item. */
+  const handleOpenAgentSettings = (): void => {
+    ui.showActivity('settings');
+    ui.requestSettingsSection('agent');
     openSettings();
   };
 
@@ -324,6 +336,8 @@ function Workspace(): ReactNode {
         workspaceName={workspaceState.workspace?.name ?? null}
         workspaceRoot={workspaceState.workspace?.rootPath ?? null}
         localOnly={ai.localOnly}
+        allowAll={permissions.view?.allowAll === true}
+        onOpenAgentSettings={handleOpenAgentSettings}
         gitSummary={gitSummary}
         errorCount={problems.errorCount}
         warningCount={problems.warningCount}
@@ -344,11 +358,13 @@ export function App(): ReactNode {
         <UiProvider>
           <AiProvider>
             <VoiceSettingsProvider>
-              <ConfirmProvider>
-                <CommandProvider>
-                  <Workspace />
-                </CommandProvider>
-              </ConfirmProvider>
+              <AgentPermissionsProvider>
+                <ConfirmProvider>
+                  <CommandProvider>
+                    <Workspace />
+                  </CommandProvider>
+                </ConfirmProvider>
+              </AgentPermissionsProvider>
             </VoiceSettingsProvider>
           </AiProvider>
         </UiProvider>

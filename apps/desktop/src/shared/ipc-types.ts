@@ -139,6 +139,7 @@ export const IpcChannels = {
   agentAudit: 'agent:audit',
   agentPermissionSettings: 'agent:permission-settings',
   agentPermissionUpdate: 'agent:permission-update',
+  agentAllowAll: 'agent:allow-all',
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];
@@ -894,6 +895,16 @@ export interface IpcInvokeMap {
     args: [category: AgentPermissionCategory, allowed: boolean];
     result: FsResult<AgentPermissionView>;
   };
+  /**
+   * Turns the session-wide "Allow all" switch on or off.
+   *
+   * There is deliberately no "confirmed" argument: enabling always shows a
+   * dialog in the main process. The renderer only asks for the state.
+   */
+  'agent:allow-all': {
+    args: [enabled: boolean];
+    result: FsResult<AgentPermissionView>;
+  };
 }
 
 /**
@@ -1117,6 +1128,11 @@ export interface NovaAgentApi {
     category: AgentPermissionCategory,
     allowed: boolean,
   ): Promise<FsResult<AgentPermissionView>>;
+  /**
+   * Requests the session-wide Allow-all switch. Enabling always opens the
+   * main-process confirmation dialog; no confirmation flag is accepted.
+   */
+  setAllowAll(enabled: boolean): Promise<FsResult<AgentPermissionView>>;
   /** Subscribes to the events of the agent. */
   onEvent(
     listener: (payload: { runId: string; event: AgentEvent }) => void,

@@ -694,6 +694,20 @@ export function assertPermissionUpdate(
 }
 
 /**
+ * The session-wide Allow-all switch.
+ *
+ * Only the requested state is accepted. In particular the renderer cannot
+ * send a "confirmed" flag: enabling always shows the main-process dialog.
+ */
+export function assertAllowAll(
+  args: unknown[],
+): asserts args is [enabled: boolean] {
+  if (args.length !== 1 || typeof args[0] !== 'boolean') {
+    throw new Error('Expected the state of Allow all');
+  }
+}
+
+/**
  * The state of the local-only mode.
  *
  * The switch is the only way to change the rule; the renderer cannot

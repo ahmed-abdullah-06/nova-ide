@@ -42,7 +42,7 @@ afterEach(async () => {
 
 /** The settings object the agent service holds. */
 function sharedSettings(): AgentPermissionSettings {
-  return { allowedLevels: ['read'], allowCloudContext: false };
+  return { allowedLevels: ['read'], allowCloudContext: false, allowAll: false };
 }
 
 describe('the defaults of the permissions', () => {
@@ -55,6 +55,7 @@ describe('the defaults of the permissions', () => {
       command: false,
     });
     expect(view.current).toEqual(view.defaults);
+    expect(view.allowAll).toBe(false);
   });
 
   it('never makes the system level configurable', () => {
@@ -72,6 +73,7 @@ describe('narrowing a permission', () => {
       store: new PermissionSettingsStore(),
       settings,
       confirmWidening: confirm,
+      confirmAllowAll: async () => false,
     });
 
     const result = await controller.update('read', false);
@@ -86,6 +88,7 @@ describe('narrowing a permission', () => {
       store: new PermissionSettingsStore(),
       settings,
       confirmWidening: async () => true,
+      confirmAllowAll: async () => false,
     });
     const reference = settings.allowedLevels;
 
@@ -104,6 +107,7 @@ describe('widening a permission', () => {
       store: new PermissionSettingsStore(),
       settings,
       confirmWidening: confirm,
+      confirmAllowAll: async () => false,
     });
 
     const result = await controller.update('command', true);
@@ -120,6 +124,7 @@ describe('widening a permission', () => {
       store,
       settings,
       confirmWidening: confirm,
+      confirmAllowAll: async () => false,
     });
 
     const result = await controller.update('workspace', true);
@@ -135,11 +140,110 @@ describe('widening a permission', () => {
       store: new PermissionSettingsStore(),
       settings,
       confirmWidening: confirm,
+      confirmAllowAll: async () => false,
     });
 
     const result = await controller.update('read', true);
     expect(result.ok).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('the session-wide Allow-all switch', () => {
+  it('is enabled only after the main process confirms it', async () => {
+    const confirm = vi.fn(async () => true);
+    const settings = sharedSettings();
+    const controller = new PermissionController({
+      store: new PermissionSettingsStore(),
+      settings,
+      confirmWidening: async () => false,
+      confirmAllowAll: confirm,
+    });
+
+    const result = await controller.setAllowAll(true);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+    expect(settings.allowAll).toBe(true);
+    expect((await controller.view()).allowAll).toBe(true);
+  });
+
+  it('changes nothing when the confirmation is cancelled', async () => {
+    const confirm = vi.fn(async () => false);
+    const settings = sharedSettings();
+    const controller = new PermissionController({
+      store: new PermissionSettingsStore(),
+      settings,
+      confirmWidening: async () => false,
+      confirmAllowAll: confirm,
+    });
+
+    const result = await controller.setAllowAll(true);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(false);
+    expect(settings.allowAll).toBe(false);
+  });
+
+  it('turns off immediately without another confirmation', async () => {
+    const confirm = vi.fn(async () => true);
+    const settings = sharedSettings();
+    const controller = new PermissionController({
+      store: new PermissionSettingsStore(),
+      settings,
+      confirmWidening: async () => false,
+      confirmAllowAll: confirm,
+    });
+
+    await controller.setAllowAll(true);
+    confirm.mockClear();
+    const result = await controller.setAllowAll(false);
+    expect(result.ok).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(settings.allowAll).toBe(false);
+  });
+
+  it('resets on restart and is never read from the settings file', async () => {
+    const store = new PermissionSettingsStore();
+    const settings = sharedSettings();
+    const controller = new PermissionController({
+      store,
+      settings,
+      confirmWidening: async () => false,
+      confirmAllowAll: async () => true,
+    });
+
+    await controller.setAllowAll(true);
+    expect(settings.allowAll).toBe(true);
+
+    // A new process gets a fresh policy object and a fresh controller; the
+    // stored categories survive, the master switch does not.
+    const restarted = sharedSettings();
+    const restartedController = new PermissionController({
+      store,
+      settings: restarted,
+      confirmWidening: async () => false,
+      confirmAllowAll: async () => true,
+    });
+    await restartedController.ready();
+    expect(restarted.allowAll).toBe(false);
+    expect((await restartedController.view()).allowAll).toBe(false);
+  });
+
+  it('ignores an allowAll value that was hand-edited into the file', async () => {
+    await writeFile(
+      path.join(userData, 'agent-permissions.json'),
+      JSON.stringify({
+        read: true,
+        workspace: true,
+        command: true,
+        allowCloudContext: true,
+        allowAll: true,
+      }),
+      'utf8',
+    );
+    const view = await new PermissionSettingsStore().view();
+    expect(view.allowAll).toBe(false);
+    expect(view.current.workspace).toBe(true);
+    expect(view.allowCloudContext).toBe(true);
   });
 });
 
@@ -188,6 +292,18 @@ describe('the stored preferences', () => {
     ).toEqual({
       allowedLevels: ['workspace', 'command'],
       allowCloudContext: false,
+      allowAll: false,
+    });
+    expect(
+      settingsFromConfig(
+        { read: false, workspace: true, command: true },
+        true,
+        true,
+      ),
+    ).toEqual({
+      allowedLevels: ['workspace', 'command'],
+      allowCloudContext: true,
+      allowAll: true,
     });
   });
 
