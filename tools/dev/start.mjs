@@ -4,11 +4,11 @@
  * The old `npm run dev` chain went through the pnpm shim and let Electron
  * Forge spawn Vite watchers and pnpm config helpers with visible consoles.
  * This launcher starts the same Forge `start` command directly, from the
- * desktop package, with no shell. A dev-only preload forces `windowsHide` on
- * every child process Forge creates. Standard output and error are inherited,
- * so the terminal that runs `npm run dev` still shows all logs.
+ * desktop package, with no shell. It loads the dev-only console guard here and
+ * injects it into Forge, forcing `windowsHide` on every child process call.
+ * Standard output and error are inherited, so the terminal that runs
+ * `npm run dev` still shows all logs.
  */
-import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,11 @@ const desktop = path.join(repo, 'apps', 'desktop');
 const forgePackage = require.resolve('@electron-forge/cli/package.json');
 const forgeCli = path.join(path.dirname(forgePackage), 'dist', 'electron-forge.js');
 const guard = path.join(here, 'hide-console.cjs').replace(/\\/g, '/');
+
+// Load the guard in this process too, then take the patched spawn. Descendants
+// get the same guard through NODE_OPTIONS below.
+require(guard);
+const { spawn } = require('node:child_process');
 
 const nodeOptions = [
   process.env.NODE_OPTIONS ?? '',

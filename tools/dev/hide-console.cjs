@@ -7,7 +7,8 @@
  * `child_process`; on Windows those helper processes can flash a console
  * window before the IDE appears. This preload is injected only into the
  * development launcher, never into the packaged app or the Electron main
- * process, and forces `windowsHide` on every child process call.
+ * process, and forces `windowsHide` on every child process call, including
+ * `fork`.
  *
  * Set A6_DEV_HIDE_CONSOLE_DEBUG=1 to log each guarded call during a dev run.
  */
@@ -102,6 +103,7 @@ const atOne = () => 1;
 
 childProcess.spawn = wrap(childProcess.spawn, 'spawn', atOptions);
 childProcess.spawnSync = wrap(childProcess.spawnSync, 'spawnSync', atOptions);
+childProcess.fork = wrap(childProcess.fork, 'fork', atOptions);
 childProcess.exec = wrap(childProcess.exec, 'exec', atOne);
 childProcess.execSync = wrap(childProcess.execSync, 'execSync', atOne);
 childProcess.execFile = wrap(childProcess.execFile, 'execFile', atOptions);
